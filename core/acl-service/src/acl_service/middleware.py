@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 
 from fastapi import Request
-from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.infrastructure.persistence.db_session import (
@@ -13,6 +12,7 @@ from api.infrastructure.persistence.db_session import (
     reset_db_session,
     set_db_session,
 )
+from api.infrastructure.persistence.tenant_guc import set_current_tenant_id_guc
 
 
 class AclServiceDbMiddleware(BaseHTTPMiddleware):
@@ -21,9 +21,7 @@ class AclServiceDbMiddleware(BaseHTTPMiddleware):
         async with maker() as session:
             token = set_db_session(session)
             try:
-                await session.execute(
-                    text("SELECT set_config('app.current_tenant_id', '', true)")
-                )
+                await set_current_tenant_id_guc(session, None)
                 raw = request.headers.get("X-Tenant-ID")
                 if raw:
                     try:
@@ -35,10 +33,7 @@ class AclServiceDbMiddleware(BaseHTTPMiddleware):
                             status_code=400,
                             content={"error": "Invalid X-Tenant-ID"},
                         )
-                    await session.execute(
-                        text("SELECT set_config('app.current_tenant_id', :tid, true)"),
-                        {"tid": str(tid)},
-                    )
+                    await set_current_tenant_id_guc(session, tid)
                     request.state.tenant_id = tid
                 else:
                     request.state.tenant_id = None
