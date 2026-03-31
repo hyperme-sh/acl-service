@@ -98,7 +98,7 @@ def seed(migrated_sync_url: str) -> Seed:
     return Seed(ta, tb)
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _clean_acl_policies_tenant_a(migrated_sync_url: str, seed: Seed) -> None:
     """Clear tenant-A Casbin rows so RBAC (3-field ``p``) and ABAC (4-field ``p``) never mix in one load."""
     eng = create_engine(migrated_sync_url)

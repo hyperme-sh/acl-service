@@ -13,6 +13,8 @@ from api.common.event_types import (
     SOCIACL_SHARE_RESOLVED_V1,
 )
 
+pytestmark = pytest.mark.usefixtures("_clean_acl_policies_tenant_a")
+
 
 @pytest.mark.asyncio
 async def test_sociacl_create_resolve_and_events(http_client, tenant_headers, event_sink):

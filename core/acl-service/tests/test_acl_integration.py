@@ -7,6 +7,8 @@ from api.common.event_types import ACL_POLICY_UPDATED_V1
 from auth_service.deps import get_current_tenant, get_current_user
 from auth_service.schemas import AuthMeResponse
 
+pytestmark = pytest.mark.usefixtures("_clean_acl_policies_tenant_a")
+
 
 @pytest.mark.asyncio
 async def test_rbac_enforce_allow(http_client, tenant_headers, seed, app):
