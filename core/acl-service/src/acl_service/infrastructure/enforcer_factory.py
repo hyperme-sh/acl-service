@@ -30,3 +30,16 @@ def enforce_rbac(
 ) -> bool:
     e = make_enforcer(sync_engine, tenant_id, model_file="model_rbac.conf")
     return bool(e.enforce(sub, obj, act))
+
+
+def enforce_abac(
+    sync_engine,
+    tenant_id: uuid.UUID,
+    sub: str,
+    obj: str,
+    act: str,
+    extra: str,
+) -> bool:
+    """ABAC enforce: extra maps to Casbin request field ``pol`` (policy row ``pol_req``)."""
+    e = make_enforcer(sync_engine, tenant_id, model_file="model_abac.conf")
+    return bool(e.enforce(sub, obj, act, extra))
