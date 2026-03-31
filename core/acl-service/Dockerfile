@@ -7,6 +7,7 @@ COPY core/models ./core/models
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
 COPY core/auth-service ./core/auth-service
 COPY core/acl-service ./core/acl-service
+COPY core/tests ./core/tests
 RUN uv sync --frozen --no-dev --package acl-service
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/core/auth-service/src:/app/core/acl-service/src
 WORKDIR /app/core/acl-service
