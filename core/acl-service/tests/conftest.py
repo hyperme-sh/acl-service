@@ -57,6 +57,32 @@ def migrated_sync_url(postgres_sync_url: str) -> str:
 
 
 @pytest.fixture(scope="session")
+def sociacl_rls_role_ready(migrated_sync_url: str) -> None:
+    """Create a role without BYPASSRLS so row-level security is enforced.
+
+    The default Testcontainers ``test`` user is often a superuser, which bypasses
+    RLS even when ``FORCE ROW LEVEL SECURITY`` is enabled. Tests that assert RLS
+    must ``SET ROLE`` to this role after granting it ``SELECT`` on tenant tables.
+    """
+    eng = create_engine(migrated_sync_url)
+    role = "sociacl_rls_tester"
+    with eng.begin() as cx:
+        cx.execute(
+            text(
+                f"""
+                DO $$ BEGIN
+                    CREATE ROLE {role} NOINHERIT NOBYPASSRLS;
+                EXCEPTION WHEN duplicate_object THEN
+                    NULL;
+                END $$;
+                """
+            )
+        )
+        cx.execute(text(f"GRANT SELECT ON sociacl_share_links TO {role}"))
+        cx.execute(text(f"GRANT {role} TO CURRENT_USER"))
+
+
+@pytest.fixture(scope="session")
 def seed(migrated_sync_url: str) -> Seed:
     ta, tb = uuid.uuid4(), uuid.uuid4()
     eng = create_engine(migrated_sync_url)
@@ -79,6 +105,14 @@ def _clean_acl_policies_tenant_a(migrated_sync_url: str, seed: Seed) -> None:
     with eng.begin() as cx:
         cx.execute(
             text("DELETE FROM acl_casbin_rules WHERE tenant_id = :tid"),
+            {"tid": seed.ta},
+        )
+        cx.execute(
+            text("DELETE FROM sociacl_share_links WHERE tenant_id = :tid"),
+            {"tid": seed.ta},
+        )
+        cx.execute(
+            text("DELETE FROM sociacl_recovery_sessions WHERE tenant_id = :tid"),
             {"tid": seed.ta},
         )
 

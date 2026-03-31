@@ -23,6 +23,7 @@ from controlplane_events import AioKafkaEventProducer
 
 from acl_service.infrastructure.db_url import sync_database_url
 from acl_service.interfaces.api.routes import router as acl_router
+from acl_service.interfaces.api.sociacl_routes import router as sociacl_router
 from acl_service.middleware import AclServiceDbMiddleware
 
 logger = get_logger(__name__)
@@ -134,6 +135,7 @@ def create_app(*, test_event_sink: list | None = None) -> FastAPI:
     app.add_middleware(AclServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(acl_router, prefix="/api/v1")
+    app.include_router(sociacl_router, prefix="/api/v1")
     logger.info("ACL service: middleware + /api/v1 routes")
     return app
 

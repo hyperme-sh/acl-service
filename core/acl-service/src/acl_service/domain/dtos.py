@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import uuid
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+from panopticon_models.sociacl import SociACLShareLinkPublic
 
 
 class PolicyRuleCreate(BaseModel):
@@ -42,3 +45,11 @@ class EnforceRequest(BaseModel):
 
 class EnforceResponse(BaseModel):
     allow: bool
+
+
+class SociaclShareCreatedResponse(BaseModel):
+    """Returned once from POST /acl/sociacl/shares; includes raw token."""
+
+    share_id: uuid.UUID
+    token: str = Field(..., min_length=16, max_length=512)
+    public: SociACLShareLinkPublic
