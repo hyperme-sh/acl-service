@@ -4,7 +4,7 @@ import asyncio
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from api.common.event_types import ACL_POLICY_UPDATED_V1
 from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
@@ -143,8 +143,14 @@ async def enforce_check(
     body: EnforceRequest,
     request: Request,
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
-    _me: AuthMeResponse = Depends(get_current_user),
+    me: AuthMeResponse = Depends(get_current_user),
 ):
+    lim = getattr(request.app.state, "rate_limiter", None)
+    if lim is not None and not lim.allow(tenant_id, str(me.sub)):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="ACL enforce rate limit exceeded for this tenant and user",
+        )
     eng = request.app.state.sync_engine
     model_file = "model_rbac.conf" if body.model == "rbac" else "model_abac.conf"
 

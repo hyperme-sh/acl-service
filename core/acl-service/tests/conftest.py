@@ -130,6 +130,7 @@ def app(event_sink: list, migrated_sync_url: str, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(api_config.settings, "database_url", db_url)
     monkeypatch.setattr(api_config.settings, "kafka_bootstrap_servers", None)
     monkeypatch.setattr(api_config.settings, "service_name", "acl-service-test")
+    monkeypatch.setattr(api_config.settings, "acl_rate_limit_per_minute", 50_000)
 
     from acl_service.app import create_app
 
