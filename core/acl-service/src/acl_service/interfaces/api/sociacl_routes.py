@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from collections import defaultdict, deque
@@ -26,8 +27,11 @@ from panopticon_models.sociacl import (
     RecoverySessionCreate,
     RecoverySessionResponse,
     SociACLEvaluateRequest,
+    SociACLPredicate,
     SociACLShareLinkCreate,
+    SociACLShareLinkOwnerView,
     SociACLShareLinkPublic,
+    SociACLDecision,
     SociACLDecisionKind,
     SociACLResourceKind,
     SociACLShareMode,
@@ -41,6 +45,7 @@ from acl_service.infrastructure.share_repo import (
     create_share,
     decrement_uses,
     hash_share_token,
+    list_shares,
     lookup_share_by_token_hash,
 )
 
@@ -96,6 +101,30 @@ def _public_payload(link) -> SociACLShareLinkPublic:
     )
 
 
+def _owner_payload(link) -> SociACLShareLinkOwnerView:
+    pub = _public_payload(link)
+    try:
+        pred = SociACLPredicate.model_validate(link.predicate_json)
+    except Exception:
+        pred = SociACLPredicate()
+    created = link.created_at.isoformat() if link.created_at else None
+    return SociACLShareLinkOwnerView(
+        share_id=pub.share_id,
+        token_prefix=link.token_prefix,
+        mode=pub.mode,
+        active=pub.active,
+        resource_kind=pub.resource_kind,
+        resource_descriptor=link.resource_descriptor or {},
+        predicate=pred,
+        expires_at=pub.expires_at,
+        uses_remaining=pub.uses_remaining,
+        owner_user_id=link.owner_user_id,
+        group_id=link.group_id,
+        created_by=link.created_by,
+        created_at=created,
+    )
+
+
 @router.post(
     "/shares",
     response_model=SociaclShareCreatedResponse,
@@ -144,6 +173,25 @@ async def sociacl_create_share(
 
 
 @router.get(
+    "/shares",
+    response_model=list[SociACLShareLinkOwnerView],
+    openapi_extra={"security": [{"BearerAuth": []}]},
+)
+async def sociacl_list_shares(
+    request: Request,
+    tenant_id: uuid.UUID = Depends(require_matched_tenant),
+    _me: AuthMeResponse = Depends(get_current_user),
+):
+    eng = request.app.state.sync_engine
+
+    def _run():
+        return list_shares(eng, tenant_id)
+
+    rows = await asyncio.to_thread(_run)
+    return [_owner_payload(r) for r in rows]
+
+
+@router.get(
     "/shares/by-token/{token}",
     response_model=SociACLShareLinkPublic,
 )
@@ -172,7 +220,7 @@ async def sociacl_resolve_share(token: str, request: Request):
     return pub
 
 
-@router.post("/evaluate")
+@router.post("/evaluate", response_model=SociACLDecision)
 async def sociacl_evaluate(body: SociACLEvaluateRequest, request: Request):
     ip = _client_ip(request)
     if not _public_rl.allow(f"eval:{ip}"):

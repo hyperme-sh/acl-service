@@ -5,7 +5,7 @@ import secrets
 import uuid
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import SociaclShareLink
@@ -76,6 +76,19 @@ def create_share(
         session.commit()
         session.refresh(row)
         return row, raw
+
+
+def list_shares(sync_engine, tenant_id: uuid.UUID) -> list[SociaclShareLink]:
+    """Tenant-scoped share metadata. Token hash is never returned to callers."""
+    with Session(sync_engine) as session:
+        _set_guc(session, tenant_id)
+        return list(
+            session.scalars(
+                select(SociaclShareLink)
+                .where(SociaclShareLink.tenant_id == tenant_id)
+                .order_by(SociaclShareLink.created_at.desc())
+            ).all()
+        )
 
 
 def decrement_uses(

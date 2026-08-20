@@ -47,6 +47,32 @@ async def test_sociacl_create_resolve_and_events(http_client, tenant_headers, ev
 
 
 @pytest.mark.asyncio
+async def test_sociacl_list_shares_omits_raw_token(http_client, tenant_headers):
+    cr = await http_client.post(
+        "/api/v1/acl/sociacl/shares",
+        headers=tenant_headers,
+        json={
+            "resource_kind": "attribute_bundle",
+            "resource_descriptor": {"label": "orientation"},
+            "predicate": {"min_verification_level": 2, "max_distance_km": 16.1},
+            "mode": "release_if_match",
+        },
+    )
+    assert cr.status_code == 201, cr.text
+    token = cr.json()["token"]
+    listed = await http_client.get("/api/v1/acl/sociacl/shares", headers=tenant_headers)
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()
+    assert len(rows) == 1
+    assert "token" not in rows[0]
+    assert "token_hash" not in rows[0]
+    assert rows[0]["token_prefix"]
+    assert rows[0]["resource_kind"] == "attribute_bundle"
+    assert rows[0]["predicate"]["min_verification_level"] == 2
+    assert token not in listed.text
+
+
+@pytest.mark.asyncio
 async def test_sociacl_evaluate_vouch_negative(http_client, tenant_headers):
     cr = await http_client.post(
         "/api/v1/acl/sociacl/shares",
