@@ -31,9 +31,10 @@ def build_user_created_consumer(sync_engine: Engine, database_url: str):
         def _add() -> bool:
             return add_rule_if_absent(sync_engine, tid, "p", rule)
 
-        created = await asyncio.to_thread(_add)
-        if not created:
-            return
+        # The rule may already exist from an earlier path that never published
+        # acl.policy.updated. Emit the event either way. The rule insert itself
+        # stays idempotent.
+        await asyncio.to_thread(_add)
 
         preview = ",".join(["p", *rule])[:512]
         await get_tenant_event_publisher().publish(

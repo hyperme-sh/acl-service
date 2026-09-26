@@ -39,12 +39,17 @@ def _rule_match(ptype: str, rule: list[str]) -> list:
     return conds
 
 
-def _find_rule(session: Session, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> AclCasbinRule | None:
+def _find_rule(
+    session: Session, tenant_id: uuid.UUID, ptype: str, rule: list[str]
+) -> AclCasbinRule | None:
+    """Lowest id if duplicates remain. ``one_or_none`` raises on more than one row."""
+
     return session.scalars(
-        select(AclCasbinRule).where(
-            and_(AclCasbinRule.tenant_id == tenant_id, *_rule_match(ptype, rule))
-        )
-    ).one_or_none()
+        select(AclCasbinRule)
+        .where(and_(AclCasbinRule.tenant_id == tenant_id, *_rule_match(ptype, rule)))
+        .order_by(AclCasbinRule.id)
+        .limit(1)
+    ).first()
 
 
 def add_rule_if_absent(
@@ -101,7 +106,9 @@ def delete_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) 
         conds.append(getattr(AclCasbinRule, f"v{i}") == v)
     with Session(sync_engine) as session:
         _set_guc(session, tenant_id)
-        obj = session.scalars(select(AclCasbinRule).where(and_(*conds))).one_or_none()
+        obj = session.scalars(
+            select(AclCasbinRule).where(and_(*conds)).order_by(AclCasbinRule.id).limit(1)
+        ).first()
         if obj is None:
             return False
         session.delete(obj)

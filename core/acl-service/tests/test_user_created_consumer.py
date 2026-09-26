@@ -122,7 +122,7 @@ async def test_routing_ignores_other_event_types():
 
 
 @pytest.mark.asyncio
-async def test_user_created_redelivery_does_not_emit_again():
+async def test_user_created_existing_rule_still_emits():
     tid = uuid.uuid4()
     uid = uuid.uuid4()
     sync_eng = MagicMock()
@@ -152,4 +152,5 @@ async def test_user_created_redelivery_does_not_emit_again():
             headers={},
         )
 
-    mock_publish.assert_not_awaited()
+    mock_publish.assert_awaited_once()
+    assert mock_publish.await_args.kwargs["event_type"] == ACL_POLICY_UPDATED_V1
