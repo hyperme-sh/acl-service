@@ -12,15 +12,14 @@ from api.common.logging import configure_logging
 from api.common.utils import get_logger
 from api.core.config import settings
 from api.infrastructure.messaging.tenant_event_publisher import (
-    KafkaTenantEventPublisher,
-    NoOpTenantEventPublisher,
+    install_tenant_event_publisher,
     set_tenant_event_publisher,
+    shutdown_tenant_event_publisher,
 )
 from api.infrastructure.persistence.db_session import configure_session_maker
 from api.infrastructure.service_cors import add_optional_service_cors
 from api.interfaces.api_controllers.health_endpoint import router as health_router
 from controlplane_db.session import normalize_database_url
-from controlplane_events import AioKafkaEventProducer
 
 from api.infrastructure.tenant_user_rate_limiter import TenantUserRateLimiter
 
@@ -74,39 +73,18 @@ def create_app(
                     )
 
             set_tenant_event_publisher(_ListSink())
-        elif settings.kafka_bootstrap_servers:
-            kafka_producer = AioKafkaEventProducer(
-                settings.kafka_bootstrap_servers,
-                client_id=f"{svc_name}-acl-events",
-            )
-            await kafka_producer.start()
-            set_tenant_event_publisher(
-                KafkaTenantEventPublisher(
-                    kafka_producer,
-                    settings.kafka_events_topic,
-                    svc_name,
-                )
-            )
-            app.state.kafka_producer = kafka_producer
-            user_consumer = build_user_created_consumer(
-                sync_eng,
-                settings.kafka_bootstrap_servers,
-                settings.kafka_events_topic,
-            )
-            await user_consumer.start()
-            app.state.kafka_user_consumer = user_consumer
         else:
-            set_tenant_event_publisher(NoOpTenantEventPublisher())
+            await install_tenant_event_publisher(service_name=svc_name)
+            user_consumer = build_user_created_consumer(sync_eng, settings.database_url)
+            await user_consumer.start()
+            app.state.event_consumer = user_consumer
 
         yield
 
-        k_cons = getattr(app.state, "kafka_user_consumer", None)
-        if k_cons is not None:
-            await k_cons.stop()
-        set_tenant_event_publisher(None)
-        kp = getattr(app.state, "kafka_producer", None)
-        if kp is not None:
-            await kp.stop()
+        event_consumer = getattr(app.state, "event_consumer", None)
+        if event_consumer is not None:
+            await event_consumer.stop()
+        await shutdown_tenant_event_publisher()
         sync_eng.dispose()
         await engine.dispose()
 
