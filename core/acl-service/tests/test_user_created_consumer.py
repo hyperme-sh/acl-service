@@ -28,7 +28,8 @@ async def test_user_created_adds_policy_and_emits():
     )
 
     with patch(
-        "acl_service.infrastructure.user_created_consumer.add_rule"
+        "acl_service.infrastructure.user_created_consumer.add_rule_if_absent",
+        return_value=True,
     ) as add_rule, patch(
         "acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher",
         return_value=MagicMock(publish=mock_publish),
@@ -68,7 +69,8 @@ async def test_user_created_skips_without_tenant_envelope():
     consumer = build_user_created_consumer(sync_eng, "postgresql://localhost/controlplane")
 
     with patch(
-        "acl_service.infrastructure.user_created_consumer.add_rule"
+        "acl_service.infrastructure.user_created_consumer.add_rule_if_absent",
+        return_value=True,
     ) as add_rule, patch(
         "acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher",
         return_value=MagicMock(publish=mock_publish),
@@ -99,7 +101,7 @@ async def test_routing_ignores_other_event_types():
     sync_eng = MagicMock()
     consumer = build_user_created_consumer(sync_eng, "postgresql://localhost/controlplane")
 
-    with patch("acl_service.infrastructure.user_created_consumer.add_rule") as add_rule:
+    with patch("acl_service.infrastructure.user_created_consumer.add_rule_if_absent") as add_rule:
         tid = uuid.uuid4()
         env = ControlPlaneEventEnvelope(
             event_type="payment.succeeded.v1",
@@ -117,3 +119,37 @@ async def test_routing_ignores_other_event_types():
         )
 
     add_rule.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_user_created_redelivery_does_not_emit_again():
+    tid = uuid.uuid4()
+    uid = uuid.uuid4()
+    sync_eng = MagicMock()
+    mock_publish = AsyncMock()
+    consumer = build_user_created_consumer(sync_eng, "postgresql://localhost/controlplane")
+
+    with patch(
+        "acl_service.infrastructure.user_created_consumer.add_rule_if_absent",
+        return_value=False,
+    ), patch(
+        "acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher",
+        return_value=MagicMock(publish=mock_publish),
+    ):
+        env = ControlPlaneEventEnvelope(
+            event_type=USER_CREATED_V1,
+            service="user-service",
+            tenant_id=tid,
+            payload=UserCreatedEvent(
+                user_id=uid,
+                email="u@example.com",
+                tenant_id=str(tid),
+            ).to_envelope_payload(),
+        )
+        await consumer.handle_message(
+            key=None,
+            value=env.model_dump_json().encode("utf-8"),
+            headers={},
+        )
+
+    mock_publish.assert_not_awaited()

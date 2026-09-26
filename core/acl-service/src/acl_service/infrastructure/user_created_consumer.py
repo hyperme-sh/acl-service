@@ -14,7 +14,7 @@ from api.infrastructure.messaging.tenant_event_publisher import (
 )
 from controlplane_events.payloads import AclPolicyUpdatedPayload
 from controlplane_events.payloads.user_created import UserCreatedEvent
-from acl_service.infrastructure.policy_repo import add_rule
+from acl_service.infrastructure.policy_repo import add_rule_if_absent
 
 ACL_USER_CREATED_GROUP = "acl-service-controlplane-events"
 
@@ -28,10 +28,12 @@ def build_user_created_consumer(sync_engine: Engine, database_url: str):
         uid = payload.user_id
         rule = [str(uid), "user_profile", "read"]
 
-        def _add() -> None:
-            add_rule(sync_engine, tid, "p", rule)
+        def _add() -> bool:
+            return add_rule_if_absent(sync_engine, tid, "p", rule)
 
-        await asyncio.to_thread(_add)
+        created = await asyncio.to_thread(_add)
+        if not created:
+            return
 
         preview = ",".join(["p", *rule])[:512]
         await get_tenant_event_publisher().publish(
@@ -52,5 +54,4 @@ def build_user_created_consumer(sync_engine: Engine, database_url: str):
         routes={USER_CREATED_V1: (UserCreatedEvent, on_user_created)},
         client_id="acl-service-user-events",
         service_bus_connection_string=settings.azure_service_bus_connection_string,
-        service_bus_subscription=settings.azure_service_bus_subscription,
     )
