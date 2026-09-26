@@ -16,7 +16,9 @@ COPY core/lib/controlplane-core ./core/lib/controlplane-core
 COPY core/auth-service ./core/auth-service
 COPY core/acl-service ./core/acl-service
 COPY core/tests ./core/tests
-RUN uv sync --frozen --no-dev --package acl-service
+ARG CONTROLPLANE_SERVICEBUS=0
+RUN uv sync --frozen --no-dev --package acl-service \
+ && if [ "$CONTROLPLANE_SERVICEBUS" = "1" ]; then uv pip install --python /app/.venv 'azure-servicebus>=7.12.0'; fi
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/core/auth-service/src:/app/core/acl-service/src
 WORKDIR /app/core/acl-service
 CMD ["uv", "run", "--project", "/app/core/acl-service", "python", "-m", "acl_service.main"]

@@ -161,7 +161,7 @@ async def test_require_permission_403_then_allow(http_client, tenant_headers, au
 
 
 @pytest.mark.asyncio
-async def test_policy_create_emits_kafka_event(http_client, tenant_headers, event_sink):
+async def test_policy_create_emits_event(http_client, tenant_headers, event_sink):
     event_sink.clear()
     r = await http_client.post(
         "/api/v1/acl/policies",

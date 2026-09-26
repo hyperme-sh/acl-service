@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import and_, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import AclCasbinRule
@@ -27,14 +28,71 @@ def list_rules(sync_engine, tenant_id: uuid.UUID) -> list[AclCasbinRule]:
         )
 
 
+def _rule_match(ptype: str, rule: list[str]) -> list:
+    conds = [AclCasbinRule.ptype == ptype]
+    for i in range(6):
+        column = getattr(AclCasbinRule, f"v{i}")
+        if i < len(rule):
+            conds.append(column == rule[i])
+        else:
+            conds.append(column.is_(None))
+    return conds
+
+
+def _find_rule(
+    session: Session, tenant_id: uuid.UUID, ptype: str, rule: list[str]
+) -> AclCasbinRule | None:
+    """Lowest id if duplicates remain. ``one_or_none`` raises on more than one row."""
+
+    return session.scalars(
+        select(AclCasbinRule)
+        .where(and_(AclCasbinRule.tenant_id == tenant_id, *_rule_match(ptype, rule)))
+        .order_by(AclCasbinRule.id)
+        .limit(1)
+    ).first()
+
+
+def add_rule_if_absent(
+    sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]
+) -> bool:
+    """Insert the rule once. False means it already existed (redelivery)."""
+
+    row = AclCasbinRule(tenant_id=tenant_id, ptype=ptype)
+    for i, value in enumerate(rule):
+        setattr(row, f"v{i}", value)
+    with Session(sync_engine) as session:
+        _set_guc(session, tenant_id)
+        existing = _find_rule(session, tenant_id, ptype, rule)
+        if existing is not None:
+            return False
+        session.add(row)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            return False
+        return True
+
+
 def add_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> AclCasbinRule:
     row = AclCasbinRule(tenant_id=tenant_id, ptype=ptype)
     for i, v in enumerate(rule):
         setattr(row, f"v{i}", v)
     with Session(sync_engine) as session:
         _set_guc(session, tenant_id)
+        existing = _find_rule(session, tenant_id, ptype, rule)
+        if existing is not None:
+            return existing
         session.add(row)
-        session.commit()
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            _set_guc(session, tenant_id)
+            found = _find_rule(session, tenant_id, ptype, rule)
+            if found is None:
+                raise
+            return found
         session.refresh(row)
         return row
 
@@ -48,7 +106,9 @@ def delete_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) 
         conds.append(getattr(AclCasbinRule, f"v{i}") == v)
     with Session(sync_engine) as session:
         _set_guc(session, tenant_id)
-        obj = session.scalars(select(AclCasbinRule).where(and_(*conds))).one_or_none()
+        obj = session.scalars(
+            select(AclCasbinRule).where(and_(*conds)).order_by(AclCasbinRule.id).limit(1)
+        ).first()
         if obj is None:
             return False
         session.delete(obj)
