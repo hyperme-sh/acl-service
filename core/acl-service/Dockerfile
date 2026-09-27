@@ -20,5 +20,12 @@ ARG CONTROLPLANE_SERVICEBUS=0
 RUN uv sync --frozen --no-dev --package acl-service \
  && if [ "$CONTROLPLANE_SERVICEBUS" = "1" ]; then uv pip install --python /app/.venv 'azure-servicebus>=7.12.0'; fi
 ENV PYTHONPATH=/app/core/lib/controlplane-core/src:/app/core/lib/controlplane-db/src:/app/core/events/src:/app/core/auth-service/src:/app/core/acl-service/src
+# GIT_SHA and BUILT_AT identify this image. Below the venv layer so a new
+# commit does not reinstall dependencies. imagetools carry keeps these
+# values. /version reports this build, not the deploy tag.
+ARG GIT_SHA=
+ARG BUILT_AT=
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILT_AT=${BUILT_AT}
 WORKDIR /app/core/acl-service
 CMD ["uv", "run", "--project", "/app/core/acl-service", "python", "-m", "acl_service.main"]
