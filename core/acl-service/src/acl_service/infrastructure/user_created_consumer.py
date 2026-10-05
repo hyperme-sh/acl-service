@@ -6,8 +6,8 @@ import asyncio
 
 from sqlalchemy.engine import Engine
 
-from api.common.event_types import ACL_POLICY_UPDATED_V1, USER_CREATED_V1
-from api.core.config import settings
+from controlplane_api.event_types import ACL_POLICY_UPDATED_V1, USER_CREATED_V1
+from controlplane_api.config import settings
 from api.infrastructure.messaging.tenant_event_publisher import (
     build_routing_consumer,
     get_tenant_event_publisher,

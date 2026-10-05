@@ -7,6 +7,7 @@ name = "acl-service"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "controlplane-api",
     "auth-service",
     "casbin>=1.36.0",
     "casbin-sqlalchemy-adapter>=1.4.0",
@@ -27,6 +28,7 @@ dev = [
 ]
 
 [tool.uv.sources]
+controlplane-api = { workspace = true }
 auth-service = { workspace = true }
 controlplane-core = { workspace = true }
 controlplane-db = { workspace = true }

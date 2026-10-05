@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from api.common.event_types import ACL_POLICY_UPDATED_V1
+from controlplane_api.event_types import ACL_POLICY_UPDATED_V1
 from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
 from auth_service.schemas import AuthMeResponse
 from controlplane_events.payloads import AclPolicyUpdatedPayload

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from api.common.event_types import (
+from controlplane_api.event_types import (
     SOCIACL_ACCESS_DECIDED_V1,
     SOCIACL_RECOVERY_SESSION_STARTED_V1,
     SOCIACL_SHARE_CREATED_V1,
