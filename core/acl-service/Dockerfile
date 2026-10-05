@@ -31,4 +31,4 @@ ARG BUILT_AT=
 ENV GIT_SHA=${GIT_SHA}
 ENV BUILT_AT=${BUILT_AT}
 WORKDIR /app/core/acl-service
-CMD ["uv", "run", "--project", "/app/core/acl-service", "python", "-m", "acl_service.main"]
+CMD ["/app/.venv/bin/python", "-m", "acl_service.main"]
