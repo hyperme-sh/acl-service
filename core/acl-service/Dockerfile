@@ -13,6 +13,8 @@ LABEL com.fyberlabs.alembic-head="${ALEMBIC_HEAD}"
 COPY core/events ./core/events
 COPY core/models ./core/models
 COPY core/lib/controlplane-core ./core/lib/controlplane-core
+COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
+COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
 COPY core/auth-service ./core/auth-service
 COPY core/acl-service ./core/acl-service
 COPY core/tests ./core/tests
