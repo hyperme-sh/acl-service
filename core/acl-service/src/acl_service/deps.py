@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import Depends, HTTPException, Request, status
 
-from api.common.exceptions import ForbiddenException
+from controlplane_api.exceptions import ForbiddenException
 from auth_service.deps import get_current_tenant as get_current_tenant_from_token
 from auth_service.deps import get_current_user
 from auth_service.schemas import AuthMeResponse
