@@ -177,3 +177,16 @@ def tenant_headers(seed: Seed) -> dict[str, str]:
         "Authorization": "Bearer test-token",
         "X-Tenant-ID": str(seed.ta),
     }
+
+
+@pytest.fixture(autouse=True)
+def _published_payloads_follow_wire_contracts(monkeypatch):
+    """Validate actual application publications without enabling a live transport."""
+    from api.infrastructure.messaging.tenant_event_publisher import NoOpTenantEventPublisher
+    from controlplane_events.contracts import validate_event_envelope
+    from controlplane_events.envelope import ControlPlaneEventEnvelope
+    original = NoOpTenantEventPublisher.publish
+    async def checked(self, **kwargs):
+        validate_event_envelope(ControlPlaneEventEnvelope(service='contract-test', **kwargs))
+        return await original(self, **kwargs)
+    monkeypatch.setattr(NoOpTenantEventPublisher, 'publish', checked)
