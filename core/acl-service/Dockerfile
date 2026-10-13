@@ -20,6 +20,9 @@ COPY core/user-service/contracts ./core/user-service/contracts
 COPY core/lib/controlplane-identity ./core/lib/controlplane-identity
 COPY core/lib/controlplane-tenancy ./core/lib/controlplane-tenancy
 COPY core/auth-service ./core/auth-service
+# uv validates the product workspace metadata; only its owner contract is installed.
+COPY products/hypermesh/pyproject.toml ./products/hypermesh/pyproject.toml
+COPY products/hypermesh/contracts ./products/hypermesh/contracts
 COPY core/acl-service ./core/acl-service
 COPY core/tests ./core/tests
 ARG CONTROLPLANE_SERVICEBUS=0
