@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 from copy import deepcopy
 from dataclasses import dataclass
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import select
@@ -37,7 +37,8 @@ def read_policy(engine) -> PolicySnapshot | None:
         return _snapshot(row) if row else None
 
 
-def install_verified_policy(engine, revision: int, keys: Sequence[WitnessKey]) -> PolicySnapshot:
+def install_verified_policy(engine, revision: int, keys: Sequence[WitnessKey],
+                            *, check_authorization: Callable[[], None] | None = None) -> PolicySnapshot:
     """Atomically install trusted policy, preserving all retired/removed identities.
 
     Identical same-revision retries are idempotent. Different same-revision
@@ -51,6 +52,8 @@ def install_verified_policy(engine, revision: int, keys: Sequence[WitnessKey]) -
     with Session(engine) as session, session.begin():
         session.execute(insert(SociaclWitnessPolicy).values(id=1).on_conflict_do_nothing(index_elements=["id"]))
         row = session.scalars(select(SociaclWitnessPolicy).where(SociaclWitnessPolicy.id == 1).with_for_update()).one()
+        if check_authorization is not None:
+            check_authorization()
         if revision < row.revision or (revision == row.revision and jwks != row.jwks):
             raise WitnessRejected()
         if revision == row.revision:
