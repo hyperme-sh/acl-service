@@ -8,6 +8,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from sqlalchemy import create_engine
 
 from acl_service.infrastructure.db_url import sync_database_url
+from acl_service.infrastructure.witness_policy_export import export_signed_policy
 from acl_service.infrastructure.witness_policy_ingest import MAX_POLICY_BYTES, install_signed_policy, verify_policy
 
 
@@ -25,7 +26,9 @@ def main(argv=None):
     parser.add_argument("--signature", required=True, help="64-byte compact ES256 signature file")
     parser.add_argument("--root-key", required=True, help="independently provisioned public PEM")
     parser.add_argument("--audience", required=True, help="trusted deployment audience")
-    parser.add_argument("--check", action="store_true", help="verify only; do not connect to the database")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--export", action="store_true", help="export a verified bundle matching installed policy")
+    mode.add_argument("--check", action="store_true", help="verify only; do not connect to the database")
     args = parser.parse_args(argv)
     engine = None
     try:
@@ -37,6 +40,9 @@ def main(argv=None):
             print(json.dumps({"verifiedRevision": verified.revision, "installed": False}))
             return 0
         engine = create_engine(sync_database_url(os.environ["DATABASE_URL"]))
+        if args.export:
+            print(json.dumps(export_signed_policy(engine, payload, signature, root, args.audience)))
+            return 0
         installed = install_signed_policy(engine, payload, signature, root, args.audience)
         print(json.dumps({"installedRevision": installed.revision, "installed": True}))
         return 0
