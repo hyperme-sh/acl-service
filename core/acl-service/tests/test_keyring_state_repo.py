@@ -124,6 +124,9 @@ def test_both_stores_share_lock_without_lost_updates(state_engine):
 
 
 def test_committed_state_survives_database_restart(require_docker):
+    from acl_service.infrastructure.witness_policy_repo import install_verified_policy, read_policy
+    from acl_service.infrastructure.witness_signer import WitnessKey, WitnessRejected
+    from cryptography.hazmat.primitives.asymmetric import ec
     import time
     from sqlalchemy.exc import OperationalError
     from testcontainers.postgres import PostgresContainer
@@ -135,6 +138,9 @@ def test_committed_state_survives_database_restart(require_docker):
             db.execute(text("CREATE ROLE controlplane; CREATE ROLE controlplane_app NOBYPASSRLS"))
         migrations.upgrade(str(engine.url.render_as_string(hide_password=False)), chains=["platform"])
         before = cas(engine, P, head=7, kind="recovery", expected_generation=0, payload=b"durable")
+        retired = WitnessKey("restart-test", 1000, 2000, ec.derive_private_key(7, ec.SECP256R1()).public_key())
+        install_verified_policy(engine, 1, [retired])
+        policy = install_verified_policy(engine, 2, [])
         engine.dispose()
         pg.get_wrapped_container().restart(timeout=5)
         # Docker may allocate a different published port on restart.
@@ -145,6 +151,9 @@ def test_committed_state_survives_database_restart(require_docker):
             while True:
                 try:
                     assert read_state(engine, P) == before
+                    assert read_policy(engine) == policy
+                    with pytest.raises(WitnessRejected):
+                        install_verified_policy(engine, 3, [retired])
                     break
                 except OperationalError:
                     if time.monotonic() >= deadline:
