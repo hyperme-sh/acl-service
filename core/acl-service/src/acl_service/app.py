@@ -29,6 +29,8 @@ from acl_service.infrastructure.user_created_consumer import build_user_created_
 from acl_service.interfaces.api.routes import router as acl_router
 from acl_service.interfaces.api.sociacl_routes import router as sociacl_router
 from acl_service.middleware import AclServiceDbMiddleware
+from acl_service.infrastructure.witness_policy_publication import load_publication
+from acl_service.interfaces.api.witness_policy_routes import router as witness_policy_router
 
 logger = get_logger(__name__)
 
@@ -43,6 +45,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         configure_logging()
+        app.state.witness_policy_publication = load_publication()
         engine = create_async_engine(normalize_database_url(settings.database_url))
         maker = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
         configure_session_maker(maker)
@@ -139,6 +142,7 @@ def create_app(
     app.include_router(version_router)
     app.include_router(acl_router, prefix="/api/v1")
     app.include_router(sociacl_router, prefix="/api/v1")
+    app.include_router(witness_policy_router)
     add_optional_service_cors(app, env_var="ACL_SERVICE_CORS_ORIGINS")
     logger.info("ACL service: middleware + /api/v1 routes + optional CORS")
     from controlplane_api.metrics import install_http_metrics

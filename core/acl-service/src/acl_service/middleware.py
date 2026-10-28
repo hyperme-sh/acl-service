@@ -15,8 +15,15 @@ from api.infrastructure.persistence.db_session import (
 from api.infrastructure.persistence.tenant_guc import set_current_tenant_id_guc
 
 
+from acl_service.infrastructure.witness_policy_publication import PUBLIC_POLICY_PATH
+
+
 class AclServiceDbMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        # This global public registry uses its own shared policy lock and no tenant
+        # session. Keep the exception exact: all existing tenant routes are unchanged.
+        if request.method == "GET" and request.url.path == PUBLIC_POLICY_PATH:
+            return await call_next(request)
         maker = get_session_maker()
         async with maker() as session:
             token = set_db_session(session)
