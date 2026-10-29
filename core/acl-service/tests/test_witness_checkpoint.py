@@ -56,7 +56,7 @@ def test_binds_complete_history_and_earlier_policy_expiry(ready):
 
 @pytest.mark.parametrize('field,value',[('client',''),('client','x'*1025),('client','\ud800'),('audience','x'*1025),
     ('challenge',CHALLENGE+'='),('challenge','!'*43),('challenge','A'*42+'B'),('lifetime',0),('lifetime',301),
-    ('lifetime',True),('lifetime',1.5),('management_private_key',None),('management_private_key',ec.generate_private_key(ec.SECP384R1()))])
+    ('lifetime',True),('lifetime',1.5),('expires_at_limit',True),('expires_at_limit',-1),('expires_at_limit',9007199254740992),('management_private_key',None),('management_private_key',ec.generate_private_key(ec.SECP384R1()))])
 def test_invalid_inputs_before_database(ready,field,value):
     ready.update(engine=object());ready[field]=value
     with pytest.raises(WitnessRejected): issuer.sign_checkpoint_for_verified_refresh(**ready)

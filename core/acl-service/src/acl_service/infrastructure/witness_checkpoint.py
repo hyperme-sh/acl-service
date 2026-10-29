@@ -70,8 +70,12 @@ def sign_checkpoint_for_verified_refresh(
         engine, policy_payload: bytes, policy_signature: bytes, policy_root, audience: str,
         *, management_private_key, continuity: CheckpointContinuity, client: str,
         challenge: str, lifetime: int = 300, clock: Callable[[], int] = _clock,
-        monotonic: Callable[[], float] = time.monotonic) -> str:
+        monotonic: Callable[[], float] = time.monotonic,
+        expires_at_limit: int = MAX_INTEGER) -> str:
     """Return the v1 response JSON only after locked signing and expiry checks.
+
+    expires_at_limit can only shorten the policy/request lease, for example to
+    the expiry of independently authenticated continuity evidence.
 
     The caller must authorize the enrollment/client and consume its request once
     under management continuity serialization before calling. Account login alone
@@ -84,6 +88,7 @@ def sign_checkpoint_for_verified_refresh(
                 or not isinstance(continuity, CheckpointContinuity)
                 or type(continuity.root_epoch) is not int or not 1 <= continuity.root_epoch <= MAX_INTEGER
                 or type(continuity.state_sha256) is not bytes or len(continuity.state_sha256) != 32
+                or type(expires_at_limit) is not int or not 0 <= expires_at_limit <= MAX_INTEGER
                 or type(lifetime) is not int or not 1 <= lifetime <= 300
                 or any(not isinstance(label, str) or not 1 <= len(label.encode('utf-8')) <= 1024
                        for label in (audience, client))
@@ -102,7 +107,7 @@ def sign_checkpoint_for_verified_refresh(
             issued, started = _sample(clock, monotonic)
             if issued < initial_time or started < initial_elapsed:
                 raise WitnessRejected()
-            expires = min(issued + lifetime, snapshot.expires_at, MAX_INTEGER)
+            expires = min(issued + lifetime, snapshot.expires_at, expires_at_limit, MAX_INTEGER)
             if expires <= issued:
                 raise WitnessRejected()
             payload = _json({'type': 'sociacl-witness-checkpoint-v1', 'audience': audience,
