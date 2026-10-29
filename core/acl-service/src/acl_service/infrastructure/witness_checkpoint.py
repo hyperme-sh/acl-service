@@ -71,11 +71,14 @@ def sign_checkpoint_for_verified_refresh(
         *, management_private_key, continuity: CheckpointContinuity, client: str,
         challenge: str, lifetime: int = 300, clock: Callable[[], int] = _clock,
         monotonic: Callable[[], float] = time.monotonic,
-        expires_at_limit: int = MAX_INTEGER) -> str:
+        expires_at_limit: int = MAX_INTEGER,
+        validate_before_return: Callable[[], None] | None = None) -> str:
     """Return the v1 response JSON only after locked signing and expiry checks.
 
     expires_at_limit can only shorten the policy/request lease, for example to
-    the expiry of independently authenticated continuity evidence.
+    the expiry of independently authenticated continuity evidence. The trusted
+    validate_before_return hook rechecks source evidence before the final lease
+    checks; it must raise on failure and must not publish the response.
 
     The caller must authorize the enrollment/client and consume its request once
     under management continuity serialization before calling. Account login alone
@@ -123,8 +126,12 @@ def sign_checkpoint_for_verified_refresh(
                 'checkpoint': envelope.decode('utf-8'), 'policy': snapshot.policy_json})
             if len(response) > MAX_RESPONSE_BYTES:
                 raise WitnessRejected()
-        # Includes context exit/transaction completion. A stalled UTC clock cannot
-        # extend signing past the lease; backward observations also fail closed.
+        # Trusted source validation may perform I/O. Include it in the actual
+        # checkpoint lease, not merely the source document lifetime.
+        if validate_before_return is not None:
+            validate_before_return()
+        # Includes transaction completion and final source validation. A stalled
+        # UTC clock cannot extend the lease; backward observations fail closed.
         finished, elapsed = _sample(clock, monotonic)
         if not issued <= finished < expires or not started <= elapsed < started + expires - issued:
             raise WitnessRejected()

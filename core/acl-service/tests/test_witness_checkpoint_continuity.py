@@ -135,3 +135,28 @@ def test_delay_before_signer_does_not_extend_source_lease(pinned, ready, monkeyp
     result = verify_response(config.sign_for_verified_refresh(**args, clock=lambda: now[0]))
     assert result['issuedAt'] == FIXTURE['now'] + 20
     assert result['expiresAt'] == FIXTURE['now'] + 30
+
+
+@pytest.mark.parametrize('lease', ['request', 'policy'])
+@pytest.mark.parametrize('clock_kind', ['utc', 'monotonic'])
+def test_final_read_cannot_outlive_shorter_checkpoint(pinned, ready, monkeypatch, lease, clock_kind):
+    doc, config, save = pinned
+    # The policy fixture expires in 120s; make the source longer than that.
+    doc['expiresAt'] = FIXTURE['now'] + 300
+    config = save(doc)
+    now, elapsed, calls = [FIXTURE['now']], [0], [0]
+    original = source.read_regular_file
+    def slow_read(*args):
+        raw = original(*args)
+        calls[0] += 1
+        if calls[0] == 2:
+            delay = 2 if lease == 'request' else 120
+            if clock_kind == 'utc': now[0] += delay
+            else: elapsed[0] += delay
+        return raw
+    monkeypatch.setattr(source, 'read_regular_file', slow_read)
+    args = {k: v for k, v in ready.items() if k != 'continuity'}
+    with pytest.raises(WitnessRejected):
+        config.sign_for_verified_refresh(**args, lifetime=1 if lease == 'request' else 300,
+            clock=lambda: now[0], monotonic=lambda: elapsed[0])
+    assert calls[0] == 2

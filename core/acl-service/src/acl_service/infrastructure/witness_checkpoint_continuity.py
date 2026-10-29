@@ -92,13 +92,14 @@ class PinnedCheckpointContinuity:
             if not now <= current < expires or not started <= elapsed < started + expires - now:
                 raise WitnessRejected()
             return current
-        response = issuer.sign_checkpoint_for_verified_refresh(
+        def validate_source():
+            # Recheck withdrawal inside the signer's final UTC/monotonic boundary,
+            # including a policy/request lease shorter than this document's lease.
+            self._read(audience=audience, policy_root=policy_root, management_key=key, now=bounded_clock())
+            bounded_clock()
+        return issuer.sign_checkpoint_for_verified_refresh(
             engine, policy_payload, policy_signature, policy_root, audience,
             management_private_key=management_private_key, continuity=continuity,
             client=client, challenge=challenge, lifetime=lifetime,
-            clock=bounded_clock, monotonic=monotonic, expires_at_limit=expires)
-        # Fail closed on loss/replacement during signing. Do not serve a cached
-        # last-good document when an operator withdraws this authorization.
-        self._read(audience=audience, policy_root=policy_root, management_key=key, now=bounded_clock())
-        bounded_clock()  # Includes final file I/O, not just signature generation.
-        return response
+            clock=bounded_clock, monotonic=monotonic, expires_at_limit=expires,
+            validate_before_return=validate_source)
