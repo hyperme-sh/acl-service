@@ -1,0 +1,71 @@
+{
+  "source": {
+    "repository": "FyberLabs/SociACL",
+    "commit": "c965a64f24095a70f3407322db42f40db5e1a9a0",
+    "path": "vectors/ids/witness-checkpoint.json",
+    "case": "complete-history-tombstones"
+  },
+  "now": 1700000000,
+  "root": "R3dpBMDxzDqcCYS2b3UwGl-mhnjw1kr4uhq840c4pz4.qgBe5rW5VyhiMYVld2SOg4GygEQo1XM_MveH_3Hx_Nw",
+  "policy": "{\"type\":\"sociacl-witness-policy-envelope-v1\",\"payload\":\"eyJ0eXBlIjoic29jaWFjbC13aXRuZXNzLXBvbGljeS12MSIsImF1ZGllbmNlIjoicGFub3B0aWNvbi10ZXN0IiwicmV2aXNpb24iOjgsImlzc3VlZEF0IjoxNjk5OTk5OTk5LCJleHBpcmVzQXQiOjE3MDAwMDAxMjAsImp3a3MiOnsia2V5cyI6W3sia2lkIjoia2V5LTIwIiwia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsImFsZyI6IkVTMjU2IiwidXNlIjoic2lnIiwia2V5X29wcyI6WyJ2ZXJpZnkiXSwieCI6Imc2QWFrM2c1VzZ1YnpXb0swRHpGYlZibXNaSlFSbHFVb2pUY1RHc28ycG8iLCJ5IjoiZHVTYmJlTDNNalN1YWw2NTFoSzNYSjhpQXJ0cElfVlAtQ1FLcW9iMlFMZyIsIm5vdEJlZm9yZSI6MTY5OTk5OTAwMCwibm90QWZ0ZXIiOjE3MDAwMDEwMDB9XX19\",\"signature\":\"2Ur7rpUP6d2W5vLZtI6Mn2CVUvzNXnTtJyP3vnjvwsJL2zlMVA2n6leMYx2YSmsOCfVZYayZLRaj5ZYuX183qQ\"}",
+  "state": {
+    "type": "sociacl-witness-policy-state-v1",
+    "root": "R3dpBMDxzDqcCYS2b3UwGl-mhnjw1kr4uhq840c4pz4.qgBe5rW5VyhiMYVld2SOg4GygEQo1XM_MveH_3Hx_Nw",
+    "audience": "panopticon-test",
+    "revision": 8,
+    "jwks": {
+      "keys": [
+        {
+          "kid": "key-20",
+          "kty": "EC",
+          "crv": "P-256",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ],
+          "x": "g6Aak3g5W6ubzWoK0DzFbVbmsZJQRlqUojTcTGso2po",
+          "y": "duSbbeL3MjSual651hK3XJ8iArtpI_VP-CQKqob2QLg",
+          "notBefore": 1699999000,
+          "notAfter": 1700001000
+        }
+      ]
+    },
+    "history": [
+      {
+        "jwk": {
+          "kid": "key-19",
+          "kty": "EC",
+          "crv": "P-256",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ],
+          "x": "y20oYRAsDCXOObfBcQjFB3gsRSJXiEiVwfx7dKsD7YM",
+          "y": "WNdhSyTZ71FcNecQDW1s5KSWcW4w-j4D45FQdSvOzao",
+          "notBefore": 1699999000,
+          "notAfter": 1700001000
+        },
+        "removed": true
+      },
+      {
+        "jwk": {
+          "kid": "key-20",
+          "kty": "EC",
+          "crv": "P-256",
+          "alg": "ES256",
+          "use": "sig",
+          "key_ops": [
+            "verify"
+          ],
+          "x": "g6Aak3g5W6ubzWoK0DzFbVbmsZJQRlqUojTcTGso2po",
+          "y": "duSbbeL3MjSual651hK3XJ8iArtpI_VP-CQKqob2QLg",
+          "notBefore": 1699999000,
+          "notAfter": 1700001000
+        },
+        "removed": false
+      }
+    ]
+  }
+}

@@ -80,26 +80,31 @@ def verify_policy(payload: bytes, signature: bytes, root_key, audience: str) -> 
                 or not _integer(document["issuedAt"]) or not _integer(document["expiresAt"])
                 or not 0 < document["expiresAt"] - document["issuedAt"] <= MAX_UPDATE_LIFETIME):
             raise WitnessRejected()
-        jwks = document["jwks"]
-        if not isinstance(jwks, dict) or set(jwks) != {"keys"} or not isinstance(jwks["keys"], list):
-            raise WitnessRejected()
-        keys = []
-        for jwk in jwks["keys"]:
-            if (not isinstance(jwk, dict)
-                    or set(jwk) != {"kid", "kty", "crv", "alg", "use", "key_ops", "x", "y", "notBefore", "notAfter"}
-                    or jwk["kty"] != "EC" or jwk["crv"] != "P-256" or jwk["alg"] != "ES256"
-                    or jwk["use"] != "sig" or jwk["key_ops"] != ["verify"]):
-                raise WitnessRejected()
-            public = ec.EllipticCurvePublicNumbers(_coordinate(jwk["x"]), _coordinate(jwk["y"]), ec.SECP256R1()).public_key()
-            if public.public_numbers() == root_key.public_numbers():
-                raise WitnessRejected()  # Administrative and online witness keys are separate.
-            keys.append(WitnessKey(jwk["kid"], jwk["notBefore"], jwk["notAfter"], public))
-        public_jwks(keys)  # Reject duplicate identifiers and public key material.
+        keys = _parse_jwks(document["jwks"], root_key)
         verified = VerifiedPolicy(document["revision"], tuple(keys), document["issuedAt"], document["expiresAt"])
         verified.check_current()
         return verified
     except (InvalidSignature, ValueError, TypeError, KeyError, UnicodeError, RecursionError):
         raise WitnessRejected() from None
+
+
+def _parse_jwks(jwks, root_key) -> tuple[WitnessKey, ...]:
+    """Validate public policy/history keys against the independently pinned root."""
+    if not isinstance(jwks, dict) or set(jwks) != {"keys"} or not isinstance(jwks["keys"], list):
+        raise WitnessRejected()
+    keys = []
+    for jwk in jwks["keys"]:
+        if (not isinstance(jwk, dict)
+                or set(jwk) != {"kid", "kty", "crv", "alg", "use", "key_ops", "x", "y", "notBefore", "notAfter"}
+                or jwk["kty"] != "EC" or jwk["crv"] != "P-256" or jwk["alg"] != "ES256"
+                or jwk["use"] != "sig" or jwk["key_ops"] != ["verify"]):
+            raise WitnessRejected()
+        public = ec.EllipticCurvePublicNumbers(_coordinate(jwk["x"]), _coordinate(jwk["y"]), ec.SECP256R1()).public_key()
+        if public.public_numbers() == root_key.public_numbers():
+            raise WitnessRejected()  # Administrative and online witness keys are separate.
+        keys.append(WitnessKey(jwk["kid"], jwk["notBefore"], jwk["notAfter"], public))
+    public_jwks(keys)  # Reject duplicate identifiers and public key material.
+    return tuple(keys)
 
 
 def install_signed_policy(engine, payload: bytes, signature: bytes, root_key, audience: str):
