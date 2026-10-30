@@ -1,0 +1,16 @@
+{
+  "repository": "FyberLabs/acl-service",
+  "source_repository": "FyberLabs/panopticon",
+  "source_revision": "2d92d13f38d491c298631b9b9296979c1fbadd19",
+  "selected_paths": [
+    "core/acl-service"
+  ],
+  "filtered_history_head": "9b179ba6b38aa0554eaa6e54046445f4e8e4dba8",
+  "retained_files": 51,
+  "inventory_sha256": "2852e069c1ebc12446f895eb285df6ee73c8798f794cf99bc0f15215967f0e62",
+  "blob_and_mode_equality_verified": true,
+  "rename_predecessors_followed": false,
+  "standalone_release_verified": false,
+  "cutover_verified": false,
+  "actions_enabled": false
+}
