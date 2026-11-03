@@ -1,19 +1,27 @@
-# acl-service
+# ACL service
 
-Private component extraction from `FyberLabs/panopticon`.
+Tenant authorization, Casbin policies and SociACL witness/keyring interfaces.
+Version 0.1.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
 
-Source commit: `2d92d13f38d491c298631b9b9296979c1fbadd19`.
+## Development
 
-Retained paths:
+Use Python 3.13 and uv 0.11.26 with read access to the nine pinned private
+dependency repositories listed in .github/workflows/package.yml.
 
-- `core/acl-service`
+    uv sync --frozen
+    bash scripts/check-package.sh
 
-The import retains selected-path Git history and verifies every retained blob and
-file mode against that exact source. Rename predecessor paths are not followed.
-Source paths stay in their original layout for review. See `EXTRACTION.json`.
+The standalone suite validates witness signatures and expiry, the interoperability
+fixture, user-created event handling and packaged RBAC/ABAC models. Checks run
+from source, a normal fresh wheel outside this checkout and a rebuilt sdist wheel.
+Wheel runtime and policy resource bytes must match source.
 
-This is a history import, not a standalone release or runtime cutover. Dependency
-closure, workspace/lock configuration, compatibility packages, contract snapshots,
-CI/runner eligibility and destination-specific credentials must be reviewed before
-adoption. Actions remain disabled. No credential, deployment ref or runtime is
-copied or switched; the original monorepo remains intact.
+Original database, checkpoint, policy lifecycle and HTTP integration tests,
+fixtures and Dockerfile remain under core/acl-service as owner integration
+references. That Dockerfile assumes the monorepo layout and is not a standalone
+build. PostgreSQL/RLS, concurrency, container and consumer acceptance remain separate.
+
+The main-only hosted workflow uses pinned actions, read-only contents and exact
+repository credential headers. Actions remains disabled pending approved scoped
+DEPENDENCY_READ_TOKEN access and hosted-worker policy. No live policy, signing
+key, identity, publishing or deployment operation occurs.
