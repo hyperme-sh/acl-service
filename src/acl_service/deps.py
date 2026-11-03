@@ -63,3 +63,13 @@ __all__ = [
     "require_matched_tenant",
     "require_permission",
 ]
+
+
+async def optional_authenticated_user(request: Request) -> AuthMeResponse | None:
+    """Keep public shares anonymous; verify any supplied bearer credential."""
+    if not request.headers.get("Authorization"):
+        return None
+    from auth_service.deps import http_bearer, bearer_access_token, get_access_token_claims
+    credentials = await http_bearer(request)
+    token = await bearer_access_token(credentials)
+    return AuthMeResponse.from_claims(await get_access_token_claims(token))

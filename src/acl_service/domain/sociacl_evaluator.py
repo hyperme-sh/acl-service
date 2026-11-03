@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, select, text
 from sqlalchemy.orm import Session
 
-from controlplane_db.models import SociaclShareLink, UserGroupMembership
+from controlplane_db.models import SociaclShareLink, User, UserGroupMembership
 from panopticon_models.sociacl import (
     SociACLDecision,
     SociACLDecisionKind,
@@ -94,6 +94,7 @@ def evaluate_share_access(
     link: SociaclShareLink,
     ctx: SociACLRequestContext,
     *,
+    authenticated_sub: str | None = None,
     require_casbin_sociacl_gate: bool = False,
     casbin_sub: str | None = None,
 ) -> SociACLDecision:
@@ -142,21 +143,13 @@ def evaluate_share_access(
         )
 
     if pred.member_of_group_id is not None:
-        if not ctx.sub:
+        if not authenticated_sub:
             return SociACLDecision(
                 decision=SociACLDecisionKind.deny,
                 reason_code="sub_required_for_group",
                 matched_predicates=[],
             )
-        try:
-            uid = uuid.UUID(str(ctx.sub))
-        except ValueError:
-            return SociACLDecision(
-                decision=SociACLDecisionKind.deny,
-                reason_code="invalid_sub_uuid",
-                matched_predicates=[],
-            )
-        if not _user_in_group(sync_engine, tenant_id, uid, pred.member_of_group_id):
+        if not _user_in_group(sync_engine, tenant_id, authenticated_sub, pred.member_of_group_id):
             return SociACLDecision(
                 decision=SociACLDecisionKind.deny,
                 reason_code="not_group_member",
@@ -185,7 +178,7 @@ def evaluate_share_access(
 
 
 def _user_in_group(
-    sync_engine, tenant_id: uuid.UUID, user_id: uuid.UUID, group_id: uuid.UUID
+    sync_engine, tenant_id: uuid.UUID, subject: str, group_id: uuid.UUID
 ) -> bool:
     with Session(sync_engine) as session:
         session.execute(
@@ -193,10 +186,13 @@ def _user_in_group(
             {"tid": str(tenant_id)},
         )
         row = session.scalars(
-            select(UserGroupMembership).where(
+            select(UserGroupMembership).join(User, User.id == UserGroupMembership.user_id).where(
                 and_(
                     UserGroupMembership.tenant_id == tenant_id,
-                    UserGroupMembership.user_id == user_id,
+                    User.tenant_id == tenant_id,
+                    User.keycloak_sub == subject,
+                    User.is_active.is_(True),
+                    User.deleted_at.is_(None),
                     UserGroupMembership.group_id == group_id,
                 )
             )

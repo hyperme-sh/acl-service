@@ -37,7 +37,7 @@ from panopticon_models.sociacl import (
     SociACLShareMode,
 )
 
-from acl_service.deps import get_current_user, require_matched_tenant
+from acl_service.deps import get_current_user, require_matched_tenant, optional_authenticated_user
 from acl_service.domain.dtos import SociaclShareCreatedResponse
 from acl_service.domain.sociacl_evaluator import _share_active, evaluate_share_access
 from acl_service.infrastructure.recovery_repo import create_or_get_session, transition_state
@@ -221,7 +221,10 @@ async def sociacl_resolve_share(token: str, request: Request):
 
 
 @router.post("/evaluate", response_model=SociACLDecision)
-async def sociacl_evaluate(body: SociACLEvaluateRequest, request: Request):
+async def sociacl_evaluate(
+    body: SociACLEvaluateRequest, request: Request,
+    me: AuthMeResponse | None = Depends(optional_authenticated_user),
+):
     ip = _client_ip(request)
     if not _public_rl.allow(f"eval:{ip}"):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limited")
@@ -235,6 +238,7 @@ async def sociacl_evaluate(body: SociACLEvaluateRequest, request: Request):
         link.tenant_id,
         link,
         body.context,
+        authenticated_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None,
     )
     await get_tenant_event_publisher().publish(
         tenant_id=link.tenant_id,
@@ -244,7 +248,7 @@ async def sociacl_evaluate(body: SociACLEvaluateRequest, request: Request):
             share_id=link.id,
             decision=decision.decision.value,
             reason_code=decision.reason_code,
-            actor_sub=body.context.sub,
+            actor_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None,
         ).to_envelope_payload(),
     )
     if decision.decision in (

@@ -74,6 +74,7 @@ def create_share(
         _set_guc(session, tenant_id)
         session.add(row)
         session.commit()
+        _set_guc(session, tenant_id)
         session.refresh(row)
         return row, raw
 

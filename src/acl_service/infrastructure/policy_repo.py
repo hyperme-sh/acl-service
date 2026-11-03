@@ -93,6 +93,7 @@ def add_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> 
             if found is None:
                 raise
             return found
+        _set_guc(session, tenant_id)
         session.refresh(row)
         return row
 

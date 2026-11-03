@@ -42,13 +42,27 @@ class TenantCasbinAdapter(Adapter):
     def _filter_tenant(self, query):
         return query.filter(self._db_class.tenant_id == self._tenant_uuid)
 
+    @staticmethod
+    def _matches_model(line, model):
+        ptype = line.ptype
+        assertion = model.model.get(ptype[:1], {}).get(ptype)
+        if assertion is None:
+            return False
+        count = len(assertion.tokens)
+        return all(
+            (getattr(line, f"v{i}") is not None) if i < count
+            else (getattr(line, f"v{i}") is None)
+            for i in range(6)
+        )
+
     def load_policy(self, model):
         with self._session_scope() as session:
             query = session.query(self._db_class)
             query = self._filter_tenant(query)
             query = self._softdelete_query(query)
             for line in query.order_by(self._db_class.id).all():
-                persist.load_policy_line(str(line), model)
+                if self._matches_model(line, model):
+                    persist.load_policy_line(str(line), model)
 
     def load_filtered_policy(self, model, filter) -> None:
         with self._session_scope() as session:
@@ -57,7 +71,8 @@ class TenantCasbinAdapter(Adapter):
             query = self._softdelete_query(query)
             query = self.filter_query(query, filter)
             for line in query.all():
-                persist.load_policy_line(str(line), model)
+                if self._matches_model(line, model):
+                    persist.load_policy_line(str(line), model)
             self._filtered = True
 
     def _save_policy_line(self, ptype, rule, session=None):
