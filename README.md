@@ -36,3 +36,8 @@ path; ordinary tenant membership cannot grant this permission through the API.
 Shares requiring verification level or vouch count deny access until a trusted,
 same-tenant attribute or attestation resolver is implemented. Caller context and
 authentication alone do not establish these attributes, including zero thresholds.
+
+Distance, political-tolerance and handle allow/block restrictions also deny until
+trusted evidence is available, including omitted handles and explicit empty lists.
+Only unrestricted context predicates and separately verified group membership
+can proceed; caller source labels do not establish provenance.

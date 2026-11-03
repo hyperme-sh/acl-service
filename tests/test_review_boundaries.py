@@ -208,3 +208,33 @@ def test_share_without_identity_attribute_requirements_remains_available():
                            predicate_json={}, mode=mode)
     decision = evaluator.evaluate_share_access(None, uuid.uuid4(), link, SociACLRequestContext())
     assert decision.decision.value == 'allow'
+
+@pytest.mark.parametrize('field', [
+    'max_distance_km', 'required_political_tolerance',
+    'cross_network_handle_allowlist', 'cross_network_handle_blocklist',
+])
+@pytest.mark.parametrize('mode', ['release_if_match', 'notify_only', 'negotiate'])
+@pytest.mark.parametrize('authenticated', [False, True])
+def test_remaining_predicates_require_trusted_evidence(field, mode, authenticated):
+    from panopticon_models.sociacl import PoliticalViewCategory
+    political = next(iter(PoliticalViewCategory))
+    predicates = {'max_distance_km':0,
+                  'required_political_tolerance':political.value,
+                  'cross_network_handle_allowlist':['allowed'],
+                  'cross_network_handle_blocklist':['blocked']}
+    link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
+                           predicate_json={field:predicates[field]}, mode=mode)
+    ctx = SociACLRequestContext(distance_km=0, political_view=political,
+        cross_network_handle=None if field.endswith('blocklist') else 'allowed')
+    decision = evaluator.evaluate_share_access(None,uuid.uuid4(),link,ctx,
+        authenticated_sub='verified' if authenticated else None)
+    assert decision.decision.value == 'deny'
+    assert decision.reason_code == 'verified_predicate_evidence_required'
+
+@pytest.mark.parametrize('field', ['cross_network_handle_allowlist','cross_network_handle_blocklist'])
+def test_explicit_empty_handle_constraints_also_require_evidence(field):
+    from panopticon_models.sociacl import SociACLPredicate
+    ok, reason, matched = evaluator.evaluate_predicates(
+        SociACLPredicate(**{field:[]}), SociACLRequestContext())
+    assert not ok
+    assert reason == 'verified_predicate_evidence_required'

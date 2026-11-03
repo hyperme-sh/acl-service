@@ -55,29 +55,13 @@ def evaluate_predicates(
     if pred.min_verification_level is not None or pred.min_vouch_count is not None:
         return False, "verified_identity_attributes_required", matched
 
-    if pred.max_distance_km is not None:
-        if ctx.distance_km is None:
-            return False, "distance_required", matched
-        if ctx.distance_km > pred.max_distance_km:
-            return False, "distance", matched
-        matched.append("max_distance_km")
-
-    if pred.required_political_tolerance is not None:
-        if ctx.political_view is None:
-            return False, "political_view_required", matched
-        if ctx.political_view != pred.required_political_tolerance:
-            return False, "political_tolerance", matched
-        matched.append("required_political_tolerance")
-
-    if pred.cross_network_handle_blocklist and ctx.cross_network_handle:
-        if ctx.cross_network_handle in pred.cross_network_handle_blocklist:
-            return False, "handle_blocked", matched
-
-    if pred.cross_network_handle_allowlist is not None:
-        h = ctx.cross_network_handle or ""
-        if h not in pred.cross_network_handle_allowlist:
-            return False, "handle_not_allowed", matched
-        matched.append("cross_network_handle_allowlist")
+    if (
+        pred.max_distance_km is not None
+        or pred.required_political_tolerance is not None
+        or pred.cross_network_handle_allowlist is not None
+        or pred.cross_network_handle_blocklist is not None
+    ):
+        return False, "verified_predicate_evidence_required", matched
 
     return True, "ok", matched
 
