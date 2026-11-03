@@ -45,6 +45,7 @@ def create_or_get_session(
         )
         session.add(row)
         session.commit()
+        _set_guc(session, tenant_id)
         session.refresh(row)
         return row
 
@@ -62,5 +63,6 @@ def transition_state(
             return None
         row.state = new_state
         session.commit()
+        _set_guc(session, tenant_id)
         session.refresh(row)
         return row

@@ -87,6 +87,7 @@ async def create_policy(
     request: Request,
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     me: AuthMeResponse = Depends(get_current_user),
+    _management: None = Depends(require_permission("/acl/policies", "manage")),
 ):
     eng = request.app.state.sync_engine
 
@@ -118,6 +119,7 @@ async def remove_policy(
     request: Request,
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     me: AuthMeResponse = Depends(get_current_user),
+    _management: None = Depends(require_permission("/acl/policies", "manage")),
 ):
     eng = request.app.state.sync_engine
 

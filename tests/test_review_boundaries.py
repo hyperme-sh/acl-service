@@ -118,3 +118,69 @@ async def test_share_route_never_uses_payload_identity(monkeypatch, identity):
     expected = 'verified' if identity == 'matched' else None
     assert seen == [expected]
     assert publish.await_args.kwargs['payload']['actor_sub'] == expected
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method', ['POST', 'DELETE'])
+@pytest.mark.parametrize('allowed', [False, True])
+async def test_policy_mutations_require_preexisting_management_grant(monkeypatch, method, allowed):
+    from fastapi import FastAPI, HTTPException
+    import httpx
+    from unittest.mock import Mock
+    from auth_service.schemas import AuthMeResponse
+    from acl_service import deps
+    from acl_service.interfaces.api import routes
+    from acl_service.infrastructure import enforcer_factory
+    tid = uuid.uuid4()
+    app = FastAPI()
+    app.state.sync_engine = object()
+    app.include_router(routes.router)
+    app.dependency_overrides[deps.require_matched_tenant] = lambda: tid
+    app.dependency_overrides[deps.get_current_user] = lambda: AuthMeResponse(sub='caller')
+    checks = []
+    def enforce(engine, tenant, subject, resource, action):
+        checks.append((tenant, subject, resource, action))
+        return allowed
+    monkeypatch.setattr(enforcer_factory, 'enforce_rbac', enforce)
+    row = SimpleNamespace(id=1,ptype='p',v0='user:caller',v1='resource',v2='read',v3=None,v4=None,v5=None)
+    add = Mock(return_value=row)
+    remove = Mock(return_value=True)
+    monkeypatch.setattr(routes, 'add_rule', add)
+    monkeypatch.setattr(routes, 'delete_rule', remove)
+    monkeypatch.setattr(routes, '_emit_policy_updated', AsyncMock())
+    # Match the application's domain exception handler.
+    from controlplane_api.exceptions import ForbiddenException
+    from fastapi.responses import JSONResponse
+    app.add_exception_handler(ForbiddenException, lambda request, exc: JSONResponse(status_code=403, content={'detail':'denied'}))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
+        response = await client.request(method, '/acl/policies', json={'ptype':'p','rule':['user:caller','resource','read']})
+    assert response.status_code == ((201 if method == 'POST' else 204) if allowed else 403), response.text
+    assert checks == [(tid, 'user:caller', '/acl/policies', 'manage')]
+    assert add.call_count == int(allowed and method == 'POST')
+    assert remove.call_count == int(allowed and method == 'DELETE')
+
+@pytest.mark.parametrize('operation', ['create', 'transition'])
+def test_recovery_refresh_restores_tenant_context(monkeypatch, operation):
+    from acl_service.infrastructure import recovery_repo
+    tid = uuid.uuid4()
+    row = SimpleNamespace(state='pending')
+    class Session:
+        tenant = None
+        refreshed = False
+        def __enter__(self): return self
+        def __exit__(self,*args): pass
+        def execute(self, stmt, params): self.tenant = params['tid']
+        def scalars(self, stmt): return SimpleNamespace(first=lambda:None)
+        def get(self,*args): return row
+        def add(self,row): pass
+        def commit(self): self.tenant = None
+        def refresh(self,row):
+            assert self.tenant == str(tid)
+            self.refreshed = True
+    session = Session()
+    monkeypatch.setattr(recovery_repo, 'Session', lambda engine:session)
+    if operation == 'create':
+        recovery_repo.create_or_get_session(None,tid,idempotency_key='test',metadata={})
+    else:
+        recovery_repo.transition_state(None,tid,uuid.uuid4(),'approved')
+        assert row.state == 'approved'
+    assert session.refreshed

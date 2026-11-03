@@ -25,3 +25,10 @@ The main-only hosted workflow uses pinned actions, read-only contents and exact
 repository credential headers. Actions remains disabled pending approved scoped
 DEPENDENCY_READ_TOKEN access and hosted-worker policy. No live policy, signing
 key, identity, publishing or deployment operation occurs.
+
+## Policy administration
+
+Creating or deleting policies requires a preexisting tenant RBAC grant for
+`user:<authenticated-subject>`, resource `/acl/policies`, action `manage`.
+Provision the initial administrator through a trusted owner-controlled bootstrap
+path; ordinary tenant membership cannot grant this permission through the API.
