@@ -50,16 +50,10 @@ def evaluate_predicates(
     """Returns (ok, reason_code, matched_rule_names)."""
     matched: list[str] = []
 
-    if pred.min_verification_level is not None:
-        if ctx.verification_level is None or ctx.verification_level < pred.min_verification_level:
-            return False, "verification_level", matched
-        matched.append("min_verification_level")
-
-    if pred.min_vouch_count is not None:
-        vc = ctx.vouch_count or 0
-        if vc < pred.min_vouch_count:
-            return False, "vouch_count", matched
-        matched.append("min_vouch_count")
+    # Request context is self-asserted, even for authenticated callers.
+    # No trusted same-tenant attribute/attestation resolver is wired here yet.
+    if pred.min_verification_level is not None or pred.min_vouch_count is not None:
+        return False, "verified_identity_attributes_required", matched
 
     if pred.max_distance_km is not None:
         if ctx.distance_km is None:

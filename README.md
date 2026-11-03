@@ -32,3 +32,7 @@ Creating or deleting policies requires a preexisting tenant RBAC grant for
 `user:<authenticated-subject>`, resource `/acl/policies`, action `manage`.
 Provision the initial administrator through a trusted owner-controlled bootstrap
 path; ordinary tenant membership cannot grant this permission through the API.
+
+Shares requiring verification level or vouch count deny access until a trusted,
+same-tenant attribute or attestation resolver is implemented. Caller context and
+authentication alone do not establish these attributes, including zero thresholds.

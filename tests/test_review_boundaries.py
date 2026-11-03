@@ -184,3 +184,27 @@ def test_recovery_refresh_restores_tenant_context(monkeypatch, operation):
         recovery_repo.transition_state(None,tid,uuid.uuid4(),'approved')
         assert row.state == 'approved'
     assert session.refreshed
+
+@pytest.mark.parametrize('predicate', [
+    {'min_verification_level': 1}, {'min_vouch_count': 4},
+    {'min_verification_level': 0}, {'min_vouch_count': 0},
+])
+@pytest.mark.parametrize('authenticated', [False, True])
+def test_self_asserted_identity_attributes_cannot_release_share(predicate, authenticated):
+    from panopticon_models.sociacl import SociACLShareMode
+    mode = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
+    link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
+                           predicate_json=predicate, mode=mode)
+    decision = evaluator.evaluate_share_access(None, uuid.uuid4(), link,
+        SociACLRequestContext(verification_level=4, vouch_count=100),
+        authenticated_sub='verified-subject' if authenticated else None)
+    assert decision.decision.value == 'deny'
+    assert decision.reason_code == 'verified_identity_attributes_required'
+
+def test_share_without_identity_attribute_requirements_remains_available():
+    from panopticon_models.sociacl import SociACLShareMode
+    mode = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
+    link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
+                           predicate_json={}, mode=mode)
+    decision = evaluator.evaluate_share_access(None, uuid.uuid4(), link, SociACLRequestContext())
+    assert decision.decision.value == 'allow'
