@@ -1,0 +1,57 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "acl-service"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "controlplane-api",
+    "auth-service",
+    "casbin>=1.36.0",
+    "casbin-sqlalchemy-adapter>=1.4.0",
+    "controlplane-core",
+    "controlplane-db",
+    "controlplane-events",
+    "cryptography>=46.0.0",
+    "panopticon-models",
+]
+
+[dependency-groups]
+dev = [
+    "asgi-lifespan>=2.1.0",
+    "httpx>=0.28.0",
+    "panopticon-tests",
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.2.0",
+    "testcontainers>=4.9.0",
+]
+
+[tool.uv.sources]
+controlplane-api = { workspace = true }
+auth-service = { workspace = true }
+controlplane-core = { workspace = true }
+controlplane-db = { workspace = true }
+controlplane-events = { workspace = true }
+panopticon-models = { workspace = true }
+panopticon-tests = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src/acl_service"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/acl_service"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = [
+    "src",
+    "../lib/controlplane-core/src",
+    "../lib/controlplane-db/src",
+    "../events/src",
+    "../auth-service/src",
+    "../tests/src",
+]
+testpaths = ["tests"]

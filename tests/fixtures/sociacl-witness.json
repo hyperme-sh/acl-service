@@ -1,0 +1,33 @@
+{
+  "description": "Panopticon internal signer interoperability sample; public test key from scalar 7, never production. Verify as of issuance after key retirement; exp intentionally exceeds notAfter.",
+  "jwks": {
+    "keys": [
+      {
+        "kid": "panopticon-test-only",
+        "kty": "EC",
+        "crv": "P-256",
+        "alg": "ES256",
+        "use": "sig",
+        "key_ops": [
+          "verify"
+        ],
+        "x": "jlM7b6C_e0YluzBmfAH7YH75-LioD-9bMAYocDGHsqM",
+        "y": "c-sdveAzGDZtBp-DpvWQAFPHNjPLBBshxV4ahsH0ALQ",
+        "notBefore": 1000,
+        "notAfter": 1001
+      }
+    ]
+  },
+  "input": {
+    "jws": "eyJhbGciOiJFUzI1NiIsImtpZCI6InBhbm9wdGljb24tdGVzdC1vbmx5IiwidHlwIjoiSldUIn0.eyJleHAiOjE5MDAsImlhdCI6MTAwMCwicHJpbmNpcGFsIjoiamxNN2I2Q19lMFlsdXpCbWZBSDdZSDc1LUxpb0QtOWJNQVlvY0RHSHNxTS5jLXNkdmVBekdEWnRCcC1EcHZXUUFGUEhOalBMQkJzaHhWNGFoc0gwQUxRIiwicmVjb3JkSWQiOiI3MDAxY2ZiMTQ0NWM3ZmZlNDQ4MTk4MzI1NmYyNDljZDViNjA3ODNlNTk3YWYzMDY0YWZhYTQ5YWJlZjM5YWE0IiwidHlwIjoic29jaWFjbC1hY2wtYXR0ZXN0LXYxIn0.jIdi7ipxW8I0MqCei5oMmUaNlVQcFBxVKTAOJd19fYxPuoq-aDHDqxJrChCK7mQnw1qDlpHv3okp_FccRy4Grg",
+    "issuedAt": 1000,
+    "bytes": "7769746e657373207075626c697368657220636f6e7472616374"
+  },
+  "canonical": {
+    "typ": "sociacl-acl-attest-v1",
+    "principal": "jlM7b6C_e0YluzBmfAH7YH75-LioD-9bMAYocDGHsqM.c-sdveAzGDZtBp-DpvWQAFPHNjPLBBshxV4ahsH0ALQ",
+    "recordId": "7001cfb1445c7ffe4481983256f249cd5b60783e597af3064afaa49abef39aa4",
+    "iat": 1000,
+    "exp": 1900
+  }
+}
