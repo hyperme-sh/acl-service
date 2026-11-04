@@ -17,7 +17,7 @@ P = "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7
 @pytest.fixture(scope="module")
 def state_url(require_docker):
     from testcontainers.postgres import PostgresContainer
-    from panopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
+    from spanopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
     with PostgresContainer("postgres:16-alpine") as pg:
         yield normalize_sync_sqlalchemy_url(pg.get_connection_url())
 
@@ -130,7 +130,7 @@ def test_committed_state_survives_database_restart(require_docker):
     import time
     from sqlalchemy.exc import OperationalError
     from testcontainers.postgres import PostgresContainer
-    from panopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
+    from spanopticon_tests.fixtures.postgres import normalize_sync_sqlalchemy_url
     # A dedicated container avoids invalidating another test's cached host port.
     with PostgresContainer("postgres:16-alpine") as pg:
         engine = create_engine(normalize_sync_sqlalchemy_url(pg.get_connection_url()))

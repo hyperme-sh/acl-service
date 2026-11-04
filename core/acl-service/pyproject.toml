@@ -22,7 +22,7 @@ dependencies = [
 dev = [
     "asgi-lifespan>=2.1.0",
     "httpx>=0.28.0",
-    "panopticon-tests",
+    "spanopticon-tests",
     "pytest>=8.4.0",
     "pytest-asyncio>=1.2.0",
     "testcontainers>=4.9.0",
@@ -35,7 +35,7 @@ controlplane-core = { workspace = true }
 controlplane-db = { workspace = true }
 controlplane-events = { workspace = true }
 spanopticon-models = { workspace = true }
-panopticon-tests = { workspace = true }
+spanopticon-tests = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/acl_service"]
