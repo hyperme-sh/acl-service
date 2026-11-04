@@ -94,7 +94,7 @@ def create_app(
 
     app = FastAPI(
         lifespan=lifespan,
-        title="(s)panopticon ACL Service",
+        title="spanopticon ACL Service",
         description="Casbin policies with tenant isolation (RLS) and SociACL-oriented ABAC.",
         version="0.1.0",
     )
