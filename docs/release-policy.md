@@ -33,3 +33,10 @@ Missing baselines fail closed. This workflow neither publishes nor deploys and
 does not enable repository Actions, grant private dependency access, or prove
 that a declared artifact exists. See the [Spanopticon release policy](https://github.com/hyperme-sh/spanopticon/blob/main/docs/releases.md)
 for the manifest format and compatibility rules.
+
+The package publisher calls the same pinned admission workflow as a prerequisite
+job for stable tag events, passing the trusted baseline and exact requested tag.
+A failed or skipped admission prevents the contents-write publication job from
+running. The reusable workflow checks the triggering commit and requested version;
+a configuration-only PR result cannot substitute for tag admission. Main test
+snapshots remain separate and do not establish stable release compatibility.

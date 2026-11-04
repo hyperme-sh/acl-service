@@ -2,13 +2,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 unset PYTHONPATH UV_NO_SYNC
-uv lock --check
-uv sync --frozen
-uv run --frozen pytest
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-uv build --out-dir "$scratch/dist"
-uv run --frozen python scripts/verify_wheel.py "$scratch/dist"
+if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
+  # This is a disposable copy of the immutable Actions artifact, never an upload source.
+  mkdir -p "$scratch/dist"
+  cp "$RELEASE_CANDIDATE_DIR"/*.whl "$RELEASE_CANDIDATE_DIR"/*.tar.gz "$scratch/dist/"
+else
+  uv lock --check
+  uv sync --frozen
+  uv run --frozen pytest
+  uv build --out-dir "$scratch/dist"
+fi
+# Validate the fresh candidate before running any source tests or installing code.
+distribution_hashes=$(cd "$scratch/dist" && sha256sum -- *.whl *.tar.gz)
+python3 scripts/verify_wheel.py "$scratch/dist"
+uv lock --check
+uv sync --frozen
 uv export --frozen --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
@@ -27,3 +37,6 @@ uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 uv run --frozen python scripts/verify_wheel.py "$scratch/rebuilt"
 uv pip install --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
+
+# Installed tests may inspect these files, but must not replace validated bytes.
+(cd "$scratch/dist" && sha256sum --check <<< "$distribution_hashes")
