@@ -59,9 +59,11 @@ enabled. See the [shared release contract](https://github.com/hyperme-sh/.github
 
 ### Immutable release candidate validation
 
-The candidate job builds and uploads `tested-dist` before running test or package
-code. A separate job downloads that exact artifact ID and runs source, fresh-wheel
-and rebuilt-sdist checks against a disposable copy. Tests cannot replace the
+The candidate job builds and uploads `tested-dist` immediately after the build, before running repository validators or tests. Source tests run in their own job. Only after they pass does a separate job
+download that exact artifact ID and run fresh-wheel and rebuilt-sdist checks
+against a disposable copy. Expected hashes remain in the invoking shell and
+are rechecked after validation; neither downloaded nor staged distributions
+may be replaced by tests. Tests cannot replace the
 already uploaded candidate through a post-test staging step: validation never
 uploads artifacts. The publisher requires the entire main-push workflow to
 succeed and promotes only the immutable candidate. Failed validation leaves an
