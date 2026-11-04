@@ -7,7 +7,13 @@ uv sync --frozen
 uv run --frozen pytest
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-uv build --out-dir "$scratch/dist"
+if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
+  # This is a disposable copy of the immutable Actions artifact, never an upload source.
+  mkdir -p "$scratch/dist"
+  cp "$RELEASE_CANDIDATE_DIR"/*.whl "$RELEASE_CANDIDATE_DIR"/*.tar.gz "$scratch/dist/"
+else
+  uv build --out-dir "$scratch/dist"
+fi
 uv run --frozen python scripts/verify_wheel.py "$scratch/dist"
 uv export --frozen --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
 uv venv --python 3.13 "$scratch/venv"
@@ -27,9 +33,3 @@ uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 uv run --frozen python scripts/verify_wheel.py "$scratch/rebuilt"
 uv pip install --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
-
-# Retain the exact validated bytes for the release channel; never rebuild them.
-if [[ -n "${RELEASE_ARTIFACT_DIR:-}" ]]; then
-  mkdir -p "$RELEASE_ARTIFACT_DIR"
-  cp "$scratch/dist"/* "$RELEASE_ARTIFACT_DIR/"
-fi

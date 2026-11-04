@@ -56,3 +56,19 @@ organization policy may shorten it). Expired evidence fails closed: validate a
 new main revision. The publisher verifies the run, source, workflow and artifact
 digest independently of release metadata. Repository immutable releases must be
 enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
+
+### Immutable release candidate validation
+
+The candidate job builds and uploads `tested-dist` before running test or package
+code. A separate job downloads that exact artifact ID and runs source, fresh-wheel
+and rebuilt-sdist checks against a disposable copy. Tests cannot replace the
+already uploaded candidate through a post-test staging step: validation never
+uploads artifacts. The publisher requires the entire main-push workflow to
+succeed and promotes only the immutable candidate. Failed validation leaves an
+unpublished candidate, not a successful release. Both jobs keep the existing
+shared-runner policy; this is artifact immutability, not host isolation.
+
+To validate a previously built candidate locally, set `RELEASE_CANDIDATE_DIR` to
+a directory containing exactly its wheel and source distribution when invoking
+`scripts/check-package.sh`. With no candidate directory, the ordinary local
+build-and-test path is unchanged.
