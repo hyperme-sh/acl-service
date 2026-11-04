@@ -21,9 +21,9 @@ fixtures and Dockerfile remain under core/acl-service as owner integration
 references. That Dockerfile assumes the monorepo layout and is not a standalone
 build. PostgreSQL/RLS, concurrency, container and consumer acceptance remain separate.
 
-The main-only hosted workflow uses pinned actions, read-only contents and exact
+The main-only shared-runner workflow uses pinned actions, read-only contents and exact
 repository credential headers. Actions remains disabled pending approved scoped
-DEPENDENCY_READ_TOKEN access and hosted-worker policy. No live policy, signing
+DEPENDENCY_READ_TOKEN access and shared-runner qualification. No live policy, signing
 key, identity, publishing or deployment operation occurs.
 
 ## Policy administration
