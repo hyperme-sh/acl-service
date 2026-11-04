@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "repository": "hyperme-sh/acl-service",
+  "component": "acl-service",
+  "line": "0.24",
+  "version_files": [
+    "pyproject.toml"
+  ]
+}
