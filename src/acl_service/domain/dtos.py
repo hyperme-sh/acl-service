@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from panopticon_models.sociacl import SociACLShareLinkPublic
+from spanopticon_models.sociacl import SociACLShareLinkPublic
 
 
 class PolicyRuleCreate(BaseModel):

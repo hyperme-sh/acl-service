@@ -7,7 +7,7 @@ import pytest
 from importlib.resources import files
 from starlette.requests import Request
 from controlplane_db.models import AclCasbinRule
-from panopticon_models.sociacl import SociACLRequestContext
+from spanopticon_models.sociacl import SociACLRequestContext
 from acl_service.domain import sociacl_evaluator as evaluator
 from acl_service.infrastructure import share_repo, policy_repo
 from acl_service.infrastructure.casbin_adapter import TenantCasbinAdapter
@@ -19,7 +19,7 @@ def test_group_predicate_ignores_caller_subject(monkeypatch, trusted):
     link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
         predicate_json={'member_of_group_id': str(uuid.uuid4())}, mode='auto')
     # Use the actual supported release mode from the schema.
-    from panopticon_models.sociacl import SociACLShareMode
+    from spanopticon_models.sociacl import SociACLShareMode
     link.mode = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
     seen = []
     monkeypatch.setattr(evaluator, '_user_in_group', lambda eng, tenant, sub, group: seen.append(sub) or True)
@@ -98,7 +98,7 @@ def test_refresh_restores_transaction_local_tenant_after_commit(monkeypatch, mod
 async def test_share_route_never_uses_payload_identity(monkeypatch, identity):
     from acl_service.interfaces.api import sociacl_routes as routes
     from auth_service.schemas import AuthMeResponse
-    from panopticon_models.sociacl import SociACLEvaluateRequest, SociACLDecision
+    from spanopticon_models.sociacl import SociACLEvaluateRequest, SociACLDecision
     tid = uuid.uuid4()
     link = SimpleNamespace(id=uuid.uuid4(), tenant_id=tid)
     monkeypatch.setattr(routes, 'lookup_share_by_token_hash', lambda *args:link)
@@ -191,7 +191,7 @@ def test_recovery_refresh_restores_tenant_context(monkeypatch, operation):
 ])
 @pytest.mark.parametrize('authenticated', [False, True])
 def test_self_asserted_identity_attributes_cannot_release_share(predicate, authenticated):
-    from panopticon_models.sociacl import SociACLShareMode
+    from spanopticon_models.sociacl import SociACLShareMode
     mode = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
     link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
                            predicate_json=predicate, mode=mode)
@@ -202,7 +202,7 @@ def test_self_asserted_identity_attributes_cannot_release_share(predicate, authe
     assert decision.reason_code == 'verified_identity_attributes_required'
 
 def test_share_without_identity_attribute_requirements_remains_available():
-    from panopticon_models.sociacl import SociACLShareMode
+    from spanopticon_models.sociacl import SociACLShareMode
     mode = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
     link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
                            predicate_json={}, mode=mode)
@@ -216,7 +216,7 @@ def test_share_without_identity_attribute_requirements_remains_available():
 @pytest.mark.parametrize('mode', ['release_if_match', 'notify_only', 'negotiate'])
 @pytest.mark.parametrize('authenticated', [False, True])
 def test_remaining_predicates_require_trusted_evidence(field, mode, authenticated):
-    from panopticon_models.sociacl import PoliticalViewCategory
+    from spanopticon_models.sociacl import PoliticalViewCategory
     political = next(iter(PoliticalViewCategory))
     predicates = {'max_distance_km':0,
                   'required_political_tolerance':political.value,
@@ -233,7 +233,7 @@ def test_remaining_predicates_require_trusted_evidence(field, mode, authenticate
 
 @pytest.mark.parametrize('field', ['cross_network_handle_allowlist','cross_network_handle_blocklist'])
 def test_explicit_empty_handle_constraints_also_require_evidence(field):
-    from panopticon_models.sociacl import SociACLPredicate
+    from spanopticon_models.sociacl import SociACLPredicate
     ok, reason, matched = evaluator.evaluate_predicates(
         SociACLPredicate(**{field:[]}), SociACLRequestContext())
     assert not ok

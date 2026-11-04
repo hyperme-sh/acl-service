@@ -133,7 +133,7 @@ def test_oversize_token_and_expiry_during_signing_rejected():
 def test_committed_interop_sample_matches_publisher_contract():
     from pathlib import Path
     fixture = json.loads((Path(__file__).parent / "fixtures/sociacl-witness.json").read_text())
-    public, private = key("panopticon-test-only", end=1001)
+    public, private = key(fixture["jwks"]["keys"][0]["kid"], end=1001)
     assert fixture["jwks"] == public_jwks([public])
     for token in [fixture["input"]["jws"], WitnessSigner(public, private, lambda: 1000).sign_verified(claims(), issued_at=1000)]:
         header, payload, signature = token.split(".")
