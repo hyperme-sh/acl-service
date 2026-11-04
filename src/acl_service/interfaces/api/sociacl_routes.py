@@ -22,7 +22,7 @@ from controlplane_events.payloads import (
     SociaclShareCreatedPayload,
     SociaclShareResolvedPayload,
 )
-from panopticon_models.sociacl import (
+from spanopticon_models.sociacl import (
     RecoveryProofRequest,
     RecoverySessionCreate,
     RecoverySessionResponse,

@@ -15,7 +15,7 @@ from test_witness_policy_repo import engine, key  # noqa: F401
 from test_keyring_state_repo import state_url, state_engine  # noqa: F401
 
 ROOT_KEY = ec.derive_private_key(17, ec.SECP256R1())
-AUDIENCE = "panopticon-test"
+AUDIENCE = "spanopticon-test"
 
 
 def document():

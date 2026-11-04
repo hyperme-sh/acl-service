@@ -9,7 +9,7 @@ from sqlalchemy import and_, select, text
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import SociaclShareLink, UserGroupMembership
-from panopticon_models.sociacl import (
+from spanopticon_models.sociacl import (
     SociACLDecision,
     SociACLDecisionKind,
     SociACLRequestContext,

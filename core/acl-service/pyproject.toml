@@ -15,7 +15,7 @@ dependencies = [
     "controlplane-db",
     "controlplane-events",
     "cryptography>=46.0.0",
-    "panopticon-models",
+    "spanopticon-models",
 ]
 
 [dependency-groups]
@@ -34,7 +34,7 @@ auth-service = { workspace = true }
 controlplane-core = { workspace = true }
 controlplane-db = { workspace = true }
 controlplane-events = { workspace = true }
-panopticon-models = { workspace = true }
+spanopticon-models = { workspace = true }
 panopticon-tests = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
