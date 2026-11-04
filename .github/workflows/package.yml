@@ -39,6 +39,7 @@ jobs:
           retention-days: 90
           compression-level: 0
   source:
+    needs: candidate
     if: github.ref == 'refs/heads/main'
     runs-on:
       group: shared-local
