@@ -5,12 +5,10 @@ install_verified_policy. All workers must use this same deployment-wide row.
 """
 from __future__ import annotations
 
-import base64
 from copy import deepcopy
 from contextlib import contextmanager
 from collections.abc import Callable, Sequence
 
-from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -18,7 +16,7 @@ from sqlalchemy.orm import Session
 from controlplane_db.models import SociaclWitnessPolicy
 from acl_service.domain.witness_policy_reader import PolicySnapshot, PolicyHistorySnapshot
 from acl_service.infrastructure.witness_signer import (
-    MAX_INTEGER, WitnessKey, WitnessRejected, WitnessSigner, public_jwks,
+    MAX_INTEGER, WitnessKey, WitnessRejected, public_jwks,
 )
 
 
@@ -32,6 +30,20 @@ class PostgresWitnessPolicyReader:
             row = session.scalars(select(SociaclWitnessPolicy)
                                   .where(SociaclWitnessPolicy.id == 1)
                                   .with_for_update(read=True)).one_or_none()
+            yield _snapshot(row) if row is not None else None
+
+
+class PostgresWitnessSigningPolicyReader:
+    """Preserve exclusive signing serialization against all policy operations."""
+    def __init__(self, engine):
+        self._engine = engine
+
+    @contextmanager
+    def locked_policy(self):
+        with Session(self._engine) as session, session.begin():
+            row = session.scalars(select(SociaclWitnessPolicy)
+                                  .where(SociaclWitnessPolicy.id == 1)
+                                  .with_for_update()).one_or_none()
             yield _snapshot(row) if row is not None else None
 
 
@@ -115,21 +127,7 @@ def install_verified_policy(engine, revision: int, keys: Sequence[WitnessKey],
 
 
 def sign_with_policy(engine, kid: str, private_key, claims, *, issued_at: int, lifetime: int = 900) -> str:
-    """Sign verified claims under current durable policy, serialized with updates.
-
-    Same authorization obligations as WitnessSigner.sign_verified. No policy/key
-    metadata may be cached across calls. Returning a token does not grant access.
-    """
-    with Session(engine) as session, session.begin():
-        row = session.scalars(select(SociaclWitnessPolicy).where(SociaclWitnessPolicy.id == 1).with_for_update()).one_or_none()
-        if row is None:
-            raise WitnessRejected()
-        jwk = next((key for key in row.jwks["keys"] if key["kid"] == kid), None)
-        if jwk is None:
-            raise WitnessRejected()
-        def coordinate(value):
-            return int.from_bytes(base64.urlsafe_b64decode(value + "=" * (-len(value) % 4)), "big")
-        public = ec.EllipticCurvePublicNumbers(coordinate(jwk["x"]), coordinate(jwk["y"]), ec.SECP256R1()).public_key()
-        key = WitnessKey(kid, jwk["notBefore"], jwk["notAfter"], public)
-        token = WitnessSigner(key, private_key).sign_verified(claims, issued_at=issued_at, lifetime=lifetime)
-    return token
+    """Compatibility entry point; new callers inject a signing policy reader."""
+    from acl_service.infrastructure.witness_policy_signing import sign_with_policy as sign
+    return sign(PostgresWitnessSigningPolicyReader(engine), kid, private_key, claims,
+                issued_at=issued_at, lifetime=lifetime)

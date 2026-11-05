@@ -10,10 +10,15 @@ from sqlalchemy import event, text
 
 from acl_service.infrastructure.witness_signer import WitnessKey, WitnessRejected
 from acl_service.infrastructure.witness_policy_repo import (
-    PostgresWitnessPolicyWriter, read_policy, sign_with_policy,
+    PostgresWitnessPolicyWriter, PostgresWitnessSigningPolicyReader, read_policy,
 )
 from controlplane_db import migrations
 from test_keyring_state_repo import state_url, state_engine  # noqa: F401
+
+
+def sign_with_policy(engine, *args, **kwargs):
+    from acl_service.infrastructure.witness_policy_signing import sign_with_policy as sign
+    return sign(PostgresWitnessSigningPolicyReader(engine), *args, **kwargs)
 
 
 def install(engine, revision, keys):
@@ -135,7 +140,7 @@ def test_downgrade_refuses_even_an_empty_trusted_policy(engine):
 def test_policy_removal_waits_for_in_flight_signing(engine, monkeypatch):
     from concurrent.futures import TimeoutError
     from threading import Event
-    from acl_service.infrastructure import witness_policy_repo as repo
+    from acl_service.infrastructure import witness_policy_signing as repo
     first, private = key()
     install(engine, 1, [first])
     signing, release, update_started = Event(), Event(), Event()

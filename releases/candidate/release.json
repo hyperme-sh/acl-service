@@ -5,11 +5,11 @@
     "acl-service": {
       "version": "0.1.0",
       "contract": "contract.json",
-      "contract_sha256": "8f555db80649e59f243a26271521462e14284cdebe67d37e840702b85ebc8536",
+      "contract_sha256": "a18e379d475bd69f12e9bff5d8fb54df8520be3049a4f5412845b2e771a58038",
       "artifact": {
         "kind": "package",
-        "sha256": "b52ca80846152fb4d96545914ab5a241dd90c5dff3e0932c4d4ca03d60a26309",
-        "uri": "urn:sha256:b52ca80846152fb4d96545914ab5a241dd90c5dff3e0932c4d4ca03d60a26309"
+        "sha256": "3e5f4c62db10eba099431eda5c672c67021160c806ada653d050869d55959d39",
+        "uri": "urn:sha256:3e5f4c62db10eba099431eda5c672c67021160c806ada653d050869d55959d39"
       }
     }
   }

@@ -6,12 +6,17 @@ import pytest
 from sqlalchemy import event, text
 from sqlalchemy.exc import OperationalError
 
-from acl_service.infrastructure.witness_checkpoint_replay import sign_refresh_once
+from acl_service.infrastructure.witness_checkpoint_replay import sign_refresh_once as sign_with_store
+from acl_service.infrastructure.checkpoint_replay_repo import PostgresCheckpointReplayStore
 from acl_service.infrastructure.witness_checkpoint_authorization import RefreshEnrollment
 from acl_service.infrastructure.witness_signer import WitnessRejected
 from test_witness_checkpoint_authorization import ENROLLMENT, BODY, HEADER, NOW
 from test_witness_checkpoint_continuity import pinned  # noqa: F401
 from test_witness_checkpoint import ready, engine, state_engine, state_url, verify_response  # noqa: F401
+
+
+def sign_refresh_once(enrollment, engine, *args, **kwargs):
+    return sign_with_store(enrollment, PostgresCheckpointReplayStore(engine), *args, **kwargs)
 
 
 @pytest.fixture
