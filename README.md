@@ -258,3 +258,26 @@ storage commit. Advisory locking protects writers using this adapter; direct SQL
 writers must not bypass it. Existing duplicate historical rows are not repaired
 by this change. Share/keyring/witness repositories and session middleware remain
 separate conversion work before PostgreSQL can become optional for the full app.
+
+### Verified keyring storage API
+
+`domain.keyring_store.KeyringStore` defines the storage boundary for verified
+keyring ciphertext operations. `PostgresKeyringStore` owns its engine and delegates
+to the existing transactional adapter. State records, rejection errors and numeric
+limits are backend-neutral; existing engine-taking functions remain compatibility
+helpers within the PostgreSQL adapter.
+
+Every backend must serialize both ciphertext stores and their history floor per
+principal. Successful writes are committed before returning. A stale generation
+rejects the ciphertext change but still commits a newly verified floor; stale
+heads change nothing. Deletion keeps the generation/floor tombstones. Ambiguous
+commits require re-reading and re-verifying/re-signing, never blind retries.
+Shared memory/PostgreSQL contract tests exercise these rules and concurrent
+writes/observations; the memory implementation is only a test adapter.
+
+This API assumes a trusted caller has already verified the canonical principal,
+complete fresh history, signatures and envelope semantics. It does not implement
+that verifier, create an HTTP endpoint, authorize recovery, or activate deployment.
+Existing PostgreSQL durability/security tests remain. Share/witness repositories
+and session middleware still need conversion before the complete runtime can run
+without PostgreSQL.

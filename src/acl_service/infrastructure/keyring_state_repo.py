@@ -7,31 +7,17 @@ One PostgreSQL row lock serializes both stores for a principal across processes.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
-
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import SociaclKeyringState
 
-MAX_GENERATION = 9_007_199_254_740_991
-StoreKind = Literal["recovery", "wraps"]
-
-
-class StoreRejected(ValueError):
-    def __init__(self) -> None:
-        super().__init__("store-rejected")
-
-
-@dataclass(frozen=True)
-class KeyringState:
-    head_floor: int
-    recovery_generation: int
-    wrap_generation: int
-    recovery: bytes
-    wraps: bytes
+# Re-export these names for existing storage callers; their definitions are now
+# backend neutral. Engine-taking functions below are adapter compatibility helpers.
+from acl_service.domain.keyring_store import (
+    MAX_GENERATION, StoreKind, StoreRejected, KeyringState,
+)
 
 
 def _snapshot(row: SociaclKeyringState) -> KeyringState:
@@ -105,3 +91,27 @@ def compare_and_swap_verified(
     if rejected:
         raise StoreRejected()
     return result
+
+
+class PostgresKeyringStore:
+    """PostgreSQL implementation of the verified keyring storage API.
+
+    The engine never crosses the storage boundary. All three methods preserve
+    the existing transaction and per-principal row-lock behavior.
+    """
+
+    def __init__(self, engine):
+        self._engine = engine
+
+    def read_state(self, principal: str) -> KeyringState | None:
+        return read_state(self._engine, principal)
+
+    def observe_verified_head(self, principal: str, head: int) -> KeyringState:
+        return observe_verified_head(self._engine, principal, head)
+
+    def compare_and_swap_verified(
+        self, principal: str, *, head: int, kind: StoreKind,
+        expected_generation: int, payload: bytes,
+    ) -> KeyringState:
+        return compare_and_swap_verified(self._engine, principal, head=head,
+            kind=kind, expected_generation=expected_generation, payload=payload)
