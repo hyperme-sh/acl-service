@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import and_, select, text
 from sqlalchemy.orm import Session
 
-from controlplane_db.models import SociaclShareLink, User, UserGroupMembership
+from controlplane_db.models import Group, SociaclShareLink, User, UserGroupMembership
 from spanopticon_models.sociacl import (
     SociACLDecision,
     SociACLDecisionKind,
@@ -164,10 +164,13 @@ def _user_in_group(
             {"tid": str(tenant_id)},
         )
         row = session.scalars(
-            select(UserGroupMembership).join(User, User.id == UserGroupMembership.user_id).where(
+            select(UserGroupMembership).join(User, User.id == UserGroupMembership.user_id).join(
+                Group, Group.id == UserGroupMembership.group_id
+            ).where(
                 and_(
                     UserGroupMembership.tenant_id == tenant_id,
                     User.tenant_id == tenant_id,
+                    Group.tenant_id == tenant_id,
                     User.keycloak_sub == subject,
                     User.is_active.is_(True),
                     User.deleted_at.is_(None),

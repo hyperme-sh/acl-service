@@ -162,4 +162,5 @@ jobs:
           # Keep expected digests in this shell, not a test-writable manifest.
           candidate_hashes=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
           bash scripts/check-package.sh
+          bash scripts/check-postgres.sh
           (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$candidate_hashes")
