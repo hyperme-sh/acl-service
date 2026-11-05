@@ -13,10 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Iterator
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
-from controlplane_db.models import SociaclWitnessPolicy
+from acl_service.domain.witness_policy_reader import WitnessPolicyHistoryReader
 from acl_service.infrastructure.witness_policy_ingest import _parse_jwks, verify_policy
 from acl_service.infrastructure.witness_signer import WitnessRejected, public_jwks
 
@@ -79,7 +76,7 @@ def _state(row, root_key, audience, verified) -> str:
 
 
 @contextmanager
-def locked_complete_policy_snapshot(engine, payload: bytes, signature: bytes, root_key,
+def locked_complete_policy_snapshot(reader: WitnessPolicyHistoryReader, payload: bytes, signature: bytes, root_key,
                                     audience: str) -> Iterator[CompletePolicySnapshot]:
     """Pair exact live signed policy with complete history under one shared lock.
 
@@ -90,10 +87,7 @@ def locked_complete_policy_snapshot(engine, payload: bytes, signature: bytes, ro
     independent management authority. It must not publish before context exit.
     """
     verified = verify_policy(payload, signature, root_key, audience)
-    with Session(engine) as session, session.begin():
-        row = session.scalars(select(SociaclWitnessPolicy)
-                              .where(SociaclWitnessPolicy.id == 1)
-                              .with_for_update(read=True)).one_or_none()
+    with reader.locked_history() as row:
         verified.check_current()
         if row is None:
             raise WitnessRejected()

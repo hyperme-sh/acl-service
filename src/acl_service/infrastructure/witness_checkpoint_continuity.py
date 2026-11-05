@@ -71,7 +71,7 @@ class PinnedCheckpointContinuity:
         except (OSError, ValueError, TypeError, KeyError, UnicodeError, RecursionError):
             raise WitnessRejected() from None
 
-    def sign_for_verified_refresh(self, engine, policy_payload, policy_signature, policy_root, audience,
+    def sign_for_verified_refresh(self, policy_reader, policy_payload, policy_signature, policy_root, audience,
                                   *, management_private_key, client, challenge, lifetime=300,
                                   clock=issuer._clock, monotonic=time.monotonic,
                                   expires_at_limit=MAX_INTEGER, validate_before_return=None):
@@ -102,7 +102,7 @@ class PinnedCheckpointContinuity:
             if validate_before_return is not None:
                 validate_before_return()
         return issuer.sign_checkpoint_for_verified_refresh(
-            engine, policy_payload, policy_signature, policy_root, audience,
+            policy_reader, policy_payload, policy_signature, policy_root, audience,
             management_private_key=management_private_key, continuity=continuity,
             client=client, challenge=challenge, lifetime=lifetime,
             clock=bounded_clock, monotonic=monotonic, expires_at_limit=min(expires, expires_at_limit),

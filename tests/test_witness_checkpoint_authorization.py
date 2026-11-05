@@ -52,7 +52,7 @@ def test_invalid_or_expired_enrollment(changes):
 
 
 def sign(ready, config, **extra):
-    return ENROLLMENT.sign_refresh(BODY, HEADER, config, ready['engine'], ready['policy_payload'],
+    return ENROLLMENT.sign_refresh(BODY, HEADER, config, ready['policy_reader'], ready['policy_payload'],
         ready['policy_signature'], ready['policy_root'], management_private_key=ready['management_private_key'], **extra)
 
 

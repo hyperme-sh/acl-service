@@ -360,8 +360,16 @@ and writers, including same-revision retries, and atomically preserve retirement
 history. The CLI selects the PostgreSQL adapter; signature and audience checks
 remain outside persistence. No network write endpoint is introduced.
 
-Signing, checkpoint and history operations still require their own storage
-boundaries; no replacement persistence backend is deployed. Publication remains
+Complete checkpoint snapshots now consume `WitnessPolicyHistoryReader` through
+all continuity, authorization and replay callers. The PostgreSQL adapter returns
+detached current policy and complete retirement history under one shared lock,
+held through checkpoint signing and final policy-expiry checks. Missing history
+is rejected, not reconstructed from active keys. A storage exit failure discards
+the response. These records are trusted storage state; current policy signatures
+do not independently authenticate historical completeness.
+
+Timestamp signing and challenge-replay writes still require storage boundaries;
+no replacement persistence backend is deployed. Publication remains
 default-off with its existing configuration. Independent root custody, deployed reader privileges,
 edge controls, consumer freshness and management-authority acceptance in #15
 remain required; package qualification does not establish those results.

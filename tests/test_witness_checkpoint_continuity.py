@@ -46,7 +46,7 @@ def test_pinned_source_bounds_response_lease(pinned, ready):
 def test_even_pinned_invalid_documents_fail_before_database(pinned, ready, field, value):
     doc, _, save = pinned
     doc[field] = value
-    ready['engine'] = object()
+    ready['policy_reader'] = object()
     with pytest.raises(WitnessRejected): sign(save(doc), ready)
 
 

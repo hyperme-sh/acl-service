@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import SociaclWitnessPolicy
-from acl_service.domain.witness_policy_reader import PolicySnapshot
+from acl_service.domain.witness_policy_reader import PolicySnapshot, PolicyHistorySnapshot
 from acl_service.infrastructure.witness_signer import (
     MAX_INTEGER, WitnessKey, WitnessRejected, WitnessSigner, public_jwks,
 )
@@ -33,6 +33,20 @@ class PostgresWitnessPolicyReader:
                                   .where(SociaclWitnessPolicy.id == 1)
                                   .with_for_update(read=True)).one_or_none()
             yield _snapshot(row) if row is not None else None
+
+
+class PostgresWitnessPolicyHistoryReader:
+    def __init__(self, engine):
+        self._engine = engine
+
+    @contextmanager
+    def locked_history(self):
+        with Session(self._engine) as session, session.begin():
+            row = session.scalars(select(SociaclWitnessPolicy)
+                                  .where(SociaclWitnessPolicy.id == 1)
+                                  .with_for_update(read=True)).one_or_none()
+            yield (PolicyHistorySnapshot(row.revision, deepcopy(row.jwks), deepcopy(row.history))
+                   if row is not None else None)
 
 
 class PostgresWitnessPolicyWriter:

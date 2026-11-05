@@ -15,14 +15,13 @@ from test_witness_checkpoint import ready, engine, state_engine, state_url, veri
 
 
 @pytest.fixture
-def replay(ready):
-    engine = ready['engine']
+def replay(ready, engine):
     with engine.begin() as db: db.execute(text('TRUNCATE sociacl_checkpoint_requests'))
     return engine
 
 
 def issue(ready, config, replay, enrollment=ENROLLMENT, header=HEADER, **extra):
-    return sign_refresh_once(enrollment, replay, BODY, header, config, ready['engine'],
+    return sign_refresh_once(enrollment, replay, BODY, header, config, ready['policy_reader'],
         ready['policy_payload'], ready['policy_signature'], ready['policy_root'],
         management_private_key=ready['management_private_key'], clock=lambda:NOW, **extra)
 
@@ -106,7 +105,7 @@ def test_new_challenge_can_follow_consumed_request(pinned, ready, replay):
     _, config, _ = pinned
     issue(ready, config, replay)
     body = json.dumps(dict(REQUEST, challenge='A'*43)).encode()
-    assert sign_refresh_once(ENROLLMENT, replay, body, HEADER, config, ready['engine'],
+    assert sign_refresh_once(ENROLLMENT, replay, body, HEADER, config, ready['policy_reader'],
         ready['policy_payload'], ready['policy_signature'], ready['policy_root'],
         management_private_key=ready['management_private_key'], clock=lambda:NOW)
 
