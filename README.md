@@ -1,386 +1,247 @@
-# ACL service
+# acl-service
 
-## Current version authority
+Tenant authorization for the Hypermesh control plane. This service stores
+per-tenant [Casbin](https://casbin.org/) policies and evaluates them over HTTP,
+and it keeps the SociACL witness, share, recovery, and keyring state those
+decisions depend on. The package is `acl-service` **0.1.0**. The application
+factory is `acl_service.app.create_app`. The process entry point is
+`python -m acl_service.main`.
 
-Current development version: `0.1.0`. The services remain before the unreleased
-0.24.0 milestone. Earlier 0.24/1.0 preparation and publication notes below are
-historical and do not authorize those versions. Existing tags and historical
-artifacts remain untouched. Development uses exact source pins and rebuilt
-artifacts; no prior release is required. Version changes, tags and publication
-require the owner's explicit authorization to the agent.
+## Why
 
-Tenant authorization, Casbin policies and SociACL witness/keyring interfaces.
-First-party code is Apache-2.0 licensed; dependency wheels retain their own licenses.
-Runtime: src/acl_service; factory: acl_service.app.create_app.
+Hosts, renters, and platform admins share a tenant, and each role needs its
+own permissions. Control-plane callers need one fail-closed decision for those
+checks, and a store for signed witness policy, share tokens, and verified
+keyring ciphertext. This service is that decision point. Lease state, ticket
+signing, and the host agent live in their own repositories.
 
-## Development
+## How it works
 
-Use Python 3.13, uv 0.11.26 and Docker. The credential-free qualification lane
-uses verified dependency wheels built from the exact source pins:
+The process is a FastAPI application. On startup it opens the PostgreSQL
+database from `DATABASE_URL` (schema from the pinned
+[`controlplane-db`](https://github.com/hyperme-sh/controlplane-db) migrations),
+builds a `PostgresPolicyStore`, and subscribes to control-plane events.
+Row-level security keeps each tenant's rows in that tenant. Authentication is a
+Keycloak access token, validated through
+[`auth-service`](https://github.com/hyperme-sh/auth-service) and
+[`controlplane-identity`](https://github.com/hyperme-sh/controlplane-identity).
+Every tenant-scoped route requires `X-Tenant-ID`, and that header must equal
+the tenant claim in the token.
 
-    bash scripts/check-package.sh --fixtures
+Casbin models ship in the package:
 
-The active `tests/` suite includes the transferred PostgreSQL/RLS, policy HTTP,
-checkpoint replay, keyring persistence and witness tests. Disposable PostgreSQL
-17 containers run the installed database package's migrations. Required Docker
-or migration failures fail qualification; cases cannot silently skip. Source,
-fresh-wheel and rebuilt-sdist runs must pass the same nonempty case inventory.
-Wheel runtime, policy resources, SPDX metadata and Apache license bytes are checked.
-`tests/panopticon-transfer-provenance.json` records immutable source hashes and
-adaptations to the current owner security boundaries. The archived
-`core/acl-service/tests` tree is historical, not the CI test entry point.
+- RBAC (`model_rbac.conf`): subject, object, action, with `g` role links.
+- ABAC (`model_abac.conf`): subject, object, action, and one extra request
+  attribute (`pol`).
 
-Private CI runs on debrunners. The preparation lane needs no private credentials;
-the normal dependency-build lane uses short-lived GitHub App tokens scoped to the
-listed dependency repositories. Tests use generated keys and disposable data.
-They do not activate a live identity provider, publish policies or deploy services.
+`POST /api/v1/acl/enforce` loads the caller's tenant rules and returns
+`{"allow": true|false}`. Creating or deleting a policy requires an existing
+grant for `user:<authenticated-subject>` on resource `/acl/policies`, action
+`manage`. Seed that first administrator in the database. The HTTP API has no
+route that promotes an ordinary member into this grant.
 
-## Policy administration
+SociACL sits beside those rules:
 
-Creating or deleting policies requires a preexisting tenant RBAC grant for
-`user:<authenticated-subject>`, resource `/acl/policies`, action `manage`.
-Provision the initial administrator through a trusted owner-controlled bootstrap
-path; ordinary tenant membership cannot grant this permission through the API.
+- Share links store a hashed token, a predicate, an expiry, and an optional use
+  count. Evaluation reserves one use before an allow or notify decision.
+  Storage errors and a failed reservation deny.
+- Group membership is read from the user, group, and membership rows for the
+  same tenant. Caller-supplied context cannot establish membership.
+- Predicates that ask for a verification level, a vouch count, a distance, a
+  political tolerance, or a cross-network handle allow/block list are denied
+  until a trusted same-tenant evidence source exists. Unrestricted predicates
+  and a verified group membership can allow.
+- Recovery routes store workflow metadata. `POST .../proof` records
+  `awaiting_proof`. Proof checking and key release stay with the witness
+  verifier.
+- Witness policy is installed offline with
+  `python -m acl_service.witness_policy_cli`. The public
+  `GET /api/v1/acl/sociacl/witness-policy` route serves the signed bundle only
+  when publication is configured, and it fails closed on expiry, signature, or
+  revision mismatch.
+- `KeyringStore` (`PostgresKeyringStore`) holds verified recovery and wrap
+ciphertext for a principal. Callers reach it through `KeyringStore` after
+they have checked the principal, history, and signatures.
 
-Shares requiring verification level or vouch count deny access until a trusted,
-same-tenant attribute or attestation resolver is implemented. Caller context and
-authentication alone do not establish these attributes, including zero thresholds.
+Successful policy, share, and recovery writes publish a control-plane event
+after the database commit. The default bus is the PostgreSQL events table. Set
+`AZURE_SERVICE_BUS_CONNECTION_STRING` to use Azure Service Bus on the same
+`controlplane.events.v1` envelope. A later publication failure retries with an
+idempotent insert. The database commit and the bus publish are separate
+operations.
 
-Distance, political-tolerance and handle allow/block restrictions also deny until
-trusted evidence is available, including omitted handles and explicit empty lists.
-Only unrestricted context predicates and separately verified group membership
-can proceed; caller source labels do not establish provenance.
+| Method | Path | Who calls it |
+| --- | --- | --- |
+| GET | `/api/v1/health/` | Load balancer. Returns `{"status":"Ok"}`. |
+| GET | `/api/v1/acl/policies` | Authenticated tenant member. |
+| POST, DELETE | `/api/v1/acl/policies` | Subject with `/acl/policies` `manage`. |
+| POST | `/api/v1/acl/enforce` | Control-plane services deciding an action. |
+| GET | `/api/v1/acl/protected-ping` | Subject with `/acl/protected-ping` `read`. |
+| POST | `/api/v1/acl/sociacl/shares` | Authenticated creator. Raw token is returned once. |
+| GET | `/api/v1/acl/sociacl/shares` | Creator, or a subject with `/acl/sociacl/shares` `manage` for the whole tenant. |
+| GET | `/api/v1/acl/sociacl/shares/by-token/{token}` | Anyone holding the token. Rate limited. |
+| POST | `/api/v1/acl/sociacl/evaluate` | Share-token caller. A bearer token is checked when present. |
+| POST | `/api/v1/acl/sociacl/recovery/sessions` | Authenticated tenant member. |
+| POST | `/api/v1/acl/sociacl/recovery/sessions/{id}/proof` | Authenticated tenant member. |
+| GET | `/api/v1/acl/sociacl/witness-policy` | Public when publication files are configured. Otherwise 404. |
 
-## Release channels
+OpenAPI is served at `/docs`.
 
-Successful main-push validation retains the validated Python wheel and source
-distribution as Actions artifacts. Push a `vMAJOR.MINOR.PATCH` tag at that tested
-commit to promote the exact files to a stable release,
-without rebuilding. Repository visibility applies to all package assets.
-Main builds create no GitHub release or reserved stable version. Stable assets
-are GitHub distributions, not automatic PyPI publication or service deployment.
+## Practical use
 
-Promotion requires the original Actions artifact (90-day requested retention;
-organization policy may shorten it). Expired evidence fails closed: validate a
-new main revision. The publisher verifies the run, source, workflow and artifact
-digest independently of release metadata. Repository immutable releases must be
-enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
+Requires Python 3.13 and [uv](https://docs.astral.sh/uv/) 0.11.26. Direct
+dependencies are pinned in `pyproject.toml`:
 
-### Immutable release candidate validation
+| Package | Requirement |
+| --- | --- |
+| `acl-service` | 0.1.0 |
+| `casbin` | >=1.36.0 |
+| `casbin-sqlalchemy-adapter` | >=1.4.0 |
+| `cryptography` | >=46.0.0 |
+| `auth-service` | `hyperme-sh/auth-service` @ `47fc18da54f80b821029424eaac02c27b051399d` |
+| `controlplane-api` | `hyperme-sh/controlplane-api` @ `82fc8c2ca21531f1a3f7a695257b3465c4a347da` |
+| `controlplane-core` | `hyperme-sh/controlplane-core` @ `c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8` |
+| `controlplane-db` | `hyperme-sh/controlplane-db` @ `95ef61433374274f4a4fc287e15982be6357e1cc` |
+| `controlplane-events` | `hyperme-sh/controlplane-events` @ `2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87` |
+| `controlplane-identity` | `hyperme-sh/controlplane-identity` @ `127d15fce7c3af8d8f8e239fb306ce88de76f02a` |
+| `spanopticon-models` | `hyperme-sh/controlplane-models` @ `9a9bbb20c2e0cd41febf3233ce7a48fe17a84b04` |
 
-The candidate job builds and uploads `tested-dist` immediately after the build, before running repository validators or tests. Source tests run in their own job. Only after they pass does a separate job
-download that exact artifact ID and run fresh-wheel and rebuilt-sdist checks
-against a disposable copy. Expected hashes remain in the invoking shell and
-are rechecked after validation; neither downloaded nor staged distributions
-may be replaced by tests. Tests cannot replace the
-already uploaded candidate through a post-test staging step: validation never
-uploads artifacts. The publisher requires the entire main-push workflow to
-succeed and promotes only the immutable candidate. Failed validation leaves an
-unpublished candidate, not a successful release. Both jobs keep the existing
-shared-runner policy; this is artifact immutability, not host isolation.
+Git must be able to read those repositories. Apply the `controlplane-db`
+migrations before the first request. The process expects those tables to
+exist when it opens `DATABASE_URL`.
 
-To validate a previously built candidate locally, set `RELEASE_CANDIDATE_DIR` to
-a directory containing exactly its wheel and source distribution when invoking
-`scripts/check-package.sh`. With no candidate directory, the ordinary local
-build-and-test path is unchanged.
+```sh
+uv sync --frozen
+export DATABASE_URL='postgresql+psycopg://controlplane:controlplane123@127.0.0.1:5432/controlplane'
+export SERVICE_NAME=acl-service
+export JWT_SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export REFRESH_TOKEN_SECRET="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+export KEYCLOAK_JWKS_URL='http://127.0.0.1:8081/realms/controlplane/protocol/openid-connect/certs'
+export KEYCLOAK_ISSUER='http://127.0.0.1:8081/realms/controlplane'
+uv run python -m acl_service.main
+```
 
-## Standalone container
+The process listens on `0.0.0.0:8000` (`HOST` and `PORT` override that).
+`ACL_RATE_LIMIT_PER_MINUTE` defaults to 240 enforce checks per tenant and user.
+`ACL_SERVICE_CORS_ORIGINS` enables browser CORS when set.
 
-The root Dockerfile installs the frozen dependencies and maintained ACL package
-non-editably. The runtime contains only the installed environment, runs as UID
-10001, and does not use PYTHONPATH or the retired monorepo source tree.
+A control-plane service points `ACL_SERVICE_URL` at this base URL. An empty
+URL is a deny in those callers.
 
-With an existing read credential supplied in the shell environment:
+```sh
+curl -sS -X POST 'http://127.0.0.1:8000/api/v1/acl/enforce' \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "X-Tenant-ID: $TENANT_ID" \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"rbac","sub":"user:'"$SUBJECT"'","obj":"/marketplace/listings","act":"create"}'
+```
+
+Reference tuples for that call live in
+`acl_service.infrastructure.domain_policy_loader`: a marketplace seller role on
+`/marketplace/listings`, an ABAC rule that binds listing management to the
+seller id, and an ABAC rule that allows `/ai/inference` `invoke` only when the
+extra field is `budget:<id>`.
+
+Install or check a signed witness policy offline. `--check` does not open the
+database. Installation and `--export` read `DATABASE_URL`.
+
+```sh
+python -m acl_service.witness_policy_cli \
+  --policy policy.json --signature policy.sig --root-key root.pem \
+  --audience hypermesh --check
+```
+
+Public delivery of an already installed policy needs all four variables, each
+path absolute:
+
+```sh
+export SOCIACL_WITNESS_POLICY_PAYLOAD_FILE=/var/acl/policy.json
+export SOCIACL_WITNESS_POLICY_SIGNATURE_FILE=/var/acl/policy.sig
+export SOCIACL_WITNESS_POLICY_ROOT_FILE=/var/acl/root.pem
+export SOCIACL_WITNESS_POLICY_AUDIENCE=hypermesh
+```
+
+The root image installs the frozen dependencies and this package, then runs as
+UID 10001 with `python -I -m acl_service.main`. Pass a GitHub token that can
+read the pinned repositories as a BuildKit secret.
 
 ```sh
 docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN -t acl-service:local .
-bash scripts/check-image.sh acl-service:local
+docker run --rm -p 8000:8000 \
+  -e DATABASE_URL -e SERVICE_NAME=acl-service \
+  -e JWT_SECRET -e REFRESH_TOKEN_SECRET \
+  -e KEYCLOAK_JWKS_URL -e KEYCLOAK_ISSUER \
+  acl-service:local
 ```
 
-BuildKit mounts the credential only for dependency installation. Repository-scoped
-Git headers exist in that process environment; no credential or Git configuration
-is copied into the runtime. Never pass credentials as build arguments.
+## How Hypermesh uses it
 
-The image check compares installed runtime/resource hashes with src/acl_service
-and exercises the real application routes through ASGI HTTP in a read-only,
-network-disabled container. Auth, storage and event publishing use deterministic
-fixtures. It covers policy self-grants, authorized administration, tenant
-mismatch, spoofed group subjects, and untrusted identity/context predicates.
-These checks do not qualify real Keycloak, PostgreSQL/RLS, event transport,
-startup against configured services, or deployment. The image is not published
-or deployed by this workflow. CI runs image qualification after immutable
-package validation; the existing package publisher still requires the full
-workflow to succeed.
+Hypermesh sells a lease on a certified host. The
+[plane](https://github.com/hyperme-sh/hypermesh-plane) owns classes, devices,
+host certification, and lease state. The
+[host agent](https://github.com/hyperme-sh/hypermesh-host) enrolls the box and
+runs the lease. [hypermesh-ticket](https://github.com/hyperme-sh/hypermesh-ticket)
+signs the hm1 lease ticket the gateway checks. This service answers whether
+the caller may take the action.
 
-## Native PostgreSQL boundary checks
+Hosts and renters are users. A host shop is an organization inside the
+marketplace tenant. The plane and the other control-plane services built on
+[`controlplane-api`](https://github.com/hyperme-sh/controlplane-api) set
+`ACL_SERVICE_URL` and `POST /api/v1/acl/enforce` with the caller's bearer token
+and `X-Tenant-ID` before they create or administer tenant resources. The same
+call authorizes marketplace listing actions and budget-scoped inference.
 
-Run `bash scripts/check-postgres.sh` with Docker available and dependency read
-access configured. It installs the locked package non-editably and creates a
-unique PostgreSQL 16 container, bound only to a random loopback port, then applies
-the pinned DB package's owner migrations. It accepts no external database URL;
-the container and its volumes are removed even if a test fails. Docker or migration
-failures fail the check rather than skip it.
+When [`user-service`](https://github.com/hyperme-sh/user-service) publishes
+`user.created.v1`, this service consumes it (group
+`acl-service-controlplane-events`, client `acl-service-user-events`) and
+inserts `p, <user id>, user_profile, read` if that rule is absent. It then
+publishes `acl.policy.updated.v1`. Policy create and delete publish the same
+event type with operation `added` or `removed`.
 
-The 12 database regressions adopted from Panopticon #691 cover transaction-local
-tenant context after commit/refresh, foreign-row invisibility, RBAC/ABAC policy
-loading, and active issuer-subject membership across user, group and membership
-tenants. Operations use a role with neither superuser nor RLS-bypass privileges.
-CI runs these against the immutable candidate wheel in the package job, before
-image qualification. The active package suite additionally exercises HTTP introspection, MFA and
-account-lifecycle guards with the pinned auth package and controlled test responses.
-These checks do not establish live identity-provider acceptance.
+Share and recovery traffic stays on this service. A tenant member creates a
+share; a later caller presents the token to `by-token` or `evaluate`. Those
+routes emit `sociacl.share.created.v1`, `sociacl.share.resolved.v1`,
+`sociacl.access.decided.v1`, and `sociacl.recovery.session.started.v1`.
+Operators install the witness policy with the CLI. Hosts and other verifiers
+fetch `GET /api/v1/acl/sociacl/witness-policy` when publication is turned on.
+Keyring writes stay on the storage API used by that witness path. The gateway
+publishes this HTTP API. The service listens on port 8000.
 
-## Test qualification and stable acceptance
+## Develop and test
 
-GitHub `test-<commit>` prereleases are development snapshots. Their embedded
-package version does not reserve a stable version. Artifact and consumer evidence
-belongs under `releases/qualification`. Owning-package and artifact validation
-remain separate from stable release admission. Future test receipts must carry
-an explicit non-stable classification.
+```sh
+uv sync --frozen
+bash scripts/check-package.sh
+```
 
-`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
-actual immutable stable GitHub release. The pinned shared guard verifies the live
-release channel, stable tag source and asset digests; a test snapshot cannot
-become accepted through a provenance label. No stable baseline is recorded until
-that release exists. The merged initial-admission path validates the explicit
-candidate and checks complete live history when no baseline is selected. The
-publisher independently validates owning metadata and exact tested bytes, then
-atomically claims the initial source. Later releases require an actual stable
-baseline. Both shared pins reference merged implementations.
-Live deployment and coordinated consumer acceptance remain separate; no reviewer
-or approval gate is added.
+`scripts/check-package.sh` runs the `tests/` suite from source, from a fresh
+wheel, and from a rebuilt sdist. Docker is required. The suite starts
+PostgreSQL 17 and applies the pinned database migrations. A missing Docker
+daemon or a failed migration fails the run. `tests/` is the CI entry point.
+`core/acl-service/tests` is retained history.
 
-## Artifact qualification
+`bash scripts/check-package.sh --fixtures` installs the verified dependency
+wheels in `tests_artifacts/` and runs the same consumer checks without Git
+credentials. `bash scripts/check-postgres.sh` installs the package and runs
+`integration/` against a disposable PostgreSQL 16 container.
+`bash scripts/check-image.sh acl-service:local` compares image bytes with
+`src/acl_service` and exercises the HTTP routes in a read-only container with
+networking disabled.
 
-The historical qualification records the test-published 0.1.0 artifact from the current tenant
-boundary implementation, with successful main-run provenance and byte-for-byte
-Actions archive verification. The current 0.1.0 qualification includes the transferred checkpoint replay
-module and Apache-2.0 packaging; CI binds the declaration to the actual candidate wheel and checks
-the sdist rebuild preserves the same contract. This conservative byte-level
-contract detects implementation changes too, without claiming semantic compatibility.
-PostgreSQL boundary regressions remain required by main package qualification;
-provider and live deployment acceptance remain separate.
+Release mechanics, artifact retention, and the stable tag path are in
+[Releasing](docs/releasing.md). Runtime archive staging is in
+[Preparing a retained ACL runtime](docs/runtime-preparation.md).
 
-### Preparation artifacts
+## Release and versioning
 
-The read-only PR lane uploads a preparation candidate before running repository
-validators, then downloads that exact artifact ID in a separate job. Source,
-fresh-wheel and rebuilt-sdist consumers use verified fixtures built from the
-current exact private Git pins. Expected candidate hashes remain in the invoking
-shell and are rechecked; validation uploads evidence, never replacement packages.
+The package version is **0.1.0**. A push to `main` validates that commit and
+keeps the wheel and sdist as Actions artifacts. A `vMAJOR.MINOR.PATCH` tag on
+that tested commit publishes the GitHub Release from those exact files.
+Details, the immutable candidate, and qualification versus a stable baseline
+are in [Releasing](docs/releasing.md). Compatibility rules for admission are
+in [Release compatibility](docs/release-policy.md).
 
-`bash scripts/check-package.sh --fixtures` selects this credential-free consumer
-lane locally. The fixture manifest records exact clean source revisions and
-digests; these are not published or accepted synchronized baselines. The retained
-artifact is qualified only when both jobs pass. Full-stack credential-free deployment and live provider acceptance remain
-separate from package qualification. Preparation does not create tags, publish or deploy.
+## License
 
-### Retained runtime qualification
-
-Successful main image checks retain `tested-runtime` as a private Actions
-artifact for 30 days (subject to organization retention). It contains the exact
-checked image as `runtime.docker.tar` and `runtime-provenance.json`, which binds
-its archive checksum, local image ID, image config digest, Linux/amd64 platform, source revision,
-and Actions run/attempt. Checks and export use the immutable local image ID.
-The archive config digest and embedded owner/source labels are verified before
-upload; no candidate code is imported by the recorder.
-
-This is deployment preparation. A Docker image config digest is not a registry
-manifest digest. Nothing is pushed to a registry, released or deployed by this
-step. Future publication needs the user's explicit approval, retained exact-byte
-evidence, and separate live authorization/consumer acceptance. Do not rebuild an
-expired archive and claim it is the originally qualified image. Package
-`tested-dist` evidence and its release publisher remain separate.
-
-
-The recorder supports both classic Docker config IDs and containerd manifest/index
-IDs. For containerd it verifies each referenced metadata digest and size down to
-the saved config, selecting exactly one Linux/amd64 runtime. The local image ID
-and config digest are recorded separately. No registry publication is inferred.
-
-A separate `runtime-replay` job downloads the exact artifact ID emitted by the
-image job. Before loading it, the verifier compares the archive and receipt with
-the independently passed image ID, archive checksum, source and Actions run/attempt.
-It refuses archives containing repository tags. The job then loads the archive
-and repeats the network-isolated runtime checks without dependency credentials or
-the private-dependency environment. Newly loaded images and temporary files are
-cleaned up. This verifies retained-image replay; live test deployment and tenant
-integration acceptance still remain separate work.
-
-For read-only retrieval and staging of a retained runtime, see
-[runtime preparation](docs/runtime-preparation.md). The preparation tool verifies
-live GitHub qualification evidence and stages exact bytes without loading,
-publishing or deploying the image.
-
-
-Retained-runtime replay also performs an owned startup check with disposable
-PostgreSQL and the real app/event lifecycle. It verifies readiness, rejected
-missing/malformed credentials, tenant-scoped policy creation, restart persistence
-and idempotent redelivery. This uses no live credentials or existing database;
-external identity, production RLS and deployed-service acceptance remain separate.
-See [runtime preparation](docs/runtime-preparation.md) for scope and invocation.
-
-## Storage and event API boundary
-
-Policy routes, authorization evaluation and user-created handling depend on the
-service-owned `PolicyStore` API, not SQLAlchemy engines or ORM rows. Composition
-in `app.py` currently selects `PostgresPolicyStore`. Sessions, tenant RLS context
-and commits stay inside the adapter; callers receive immutable records.
-Successful mutations are visible to subsequent reads, including revocation.
-Deletes match the entire rule. Storage failures propagate rather than granting
-access or reporting successful event processing.
-
-The same contract tests run against an independent in-memory test adapter and
-owned PostgreSQL. The test adapter is not a production durability option.
-Events use the existing tenant publisher/routing APIs, supporting PostgreSQL
-and Service Bus. Publication after a committed mutation is a separate operation:
-redelivery retries publication with an idempotent insert. This does not claim
-an atomic database-and-bus transaction.
-
-This is the policy-storage boundary, not a completed service-wide migration:
-SociACL share/keyring repositories and request-session middleware still
-require database adapters, and application startup still requires PostgreSQL.
-Those boundaries must be converted before claiming a database-free deployment.
-No generic remote SQL proxy or new database microservice is introduced.
-
-Recovery-session routes also use a service-owned `RecoveryStore` API. The default
-PostgreSQL adapter serializes creation for the same tenant/idempotency key and
-returns immutable snapshots. Retrying creation preserves state, expiry and
-metadata; HTTP responses/events reflect the committed state. Transitions scope
-both tenant and session ID, including when the database role bypasses RLS.
-The contract runs against memory, administrative PostgreSQL and restricted-role
-PostgreSQL, including concurrent retries and cross-tenant rejection.
-
-This API stores recovery workflow metadata; it does not verify recovery proofs,
-release key material or expand authorization. The existing proof endpoint still
-only requests the `awaiting_proof` state. Publication remains separate from the
-storage commit. Advisory locking protects writers using this adapter; direct SQL
-writers must not bypass it. Existing duplicate historical rows are not repaired
-by this change. Share/keyring/witness repositories and session middleware remain
-separate conversion work before PostgreSQL can become optional for the full app.
-
-### Verified keyring storage API
-
-`domain.keyring_store.KeyringStore` defines the storage boundary for verified
-keyring ciphertext operations. `PostgresKeyringStore` owns its engine and delegates
-to the existing transactional adapter. State records, rejection errors and numeric
-limits are backend-neutral; existing engine-taking functions remain compatibility
-helpers within the PostgreSQL adapter.
-
-Every backend must serialize both ciphertext stores and their history floor per
-principal. Successful writes are committed before returning. A stale generation
-rejects the ciphertext change but still commits a newly verified floor; stale
-heads change nothing. Deletion keeps the generation/floor tombstones. Ambiguous
-commits require re-reading and re-verifying/re-signing, never blind retries.
-Shared memory/PostgreSQL contract tests exercise these rules and concurrent
-writes/observations; the memory implementation is only a test adapter.
-
-This API assumes a trusted caller has already verified the canonical principal,
-complete fresh history, signatures and envelope semantics. It does not implement
-that verifier, create an HTTP endpoint, authorize recovery, or activate deployment.
-Existing PostgreSQL durability/security tests remain. Share/witness repositories
-and session middleware still need conversion before the complete runtime can run
-without PostgreSQL.
-
-### Membership lookup boundary
-
-SociACL evaluation takes a `MembershipReader` rather than an engine. The default
-PostgreSQL adapter owns the user/group join and preserves explicit tenant checks
-on all three records, verified subject matching, active-user checks and deletion
-checks. Caller-supplied context cannot establish membership. Reads are uncached;
-a committed deactivation affects the next evaluation. Backend errors propagate
-instead of producing an allow decision. Evaluation runs outside the async HTTP
-loop, and no SQL or ORM type is imported by the predicate evaluator.
-
-The optional Casbin gate takes the existing `PolicyStore` API independently of
-membership storage. If explicitly required, it denies when its trusted subject
-or store is missing, and reads current same-tenant policy. This does not enable
-the optional gate on existing routes or add a new caller permission.
-
-Share creation, token lookup and use consumption still use the PostgreSQL share
-adapter directly; witness storage and request-session middleware also remain to
-convert. The complete runtime still requires PostgreSQL. Replacing the membership
-adapter must preserve current authorization evidence and revocation semantics.
-
-### Share storage and active-use reservation
-
-Share routes now use `ShareStore` and detached `ShareRecord` snapshots. PostgreSQL
-owns token generation, hashed-token lookup, RLS sessions and reservation locking;
-raw tokens are returned only by creation, and snapshots expose neither tokens nor
-hashes. Nested metadata is copied so callers cannot mutate stored state through a
-snapshot. Listing filters metadata by the authenticated creator unless the caller has an
-explicit same-tenant share-management grant.
-
-Evaluation reserves an active use before publishing an allow/notify decision.
-The PostgreSQL adapter locks the tenant/share row, checks revocation and expiry
-after acquiring the lock, then commits a finite decrement before returning true.
-A failed reservation produces `deny/share_unavailable`, including concurrent
-requests that evaluated the same one-use snapshot. Storage errors cannot emit an
-approval. Unlimited shares still require a current active-state check. A later
-publication/response failure can consume a use without delivery; there is no
-unsafe refund or blind retry, and no claim of atomic database-and-bus delivery.
-
-All synchronous share operations and membership evaluation run outside the async
-HTTP loop. Shared memory/administrative PostgreSQL/restricted-role PostgreSQL
-contract tests cover token boundaries, tenant isolation and concurrent consumption;
-HTTP tests cover stale approvals, storage failure and slow operations. Witness
-storage and session middleware remain to convert before PostgreSQL is optional
-for the complete runtime. No new production storage backend is selected here.
-
-### Share metadata authorization
-
-`GET /acl/sociacl/shares` returns only rows whose `created_by` matches the verified
-authentication subject. Creation sets this field server-side. A same-tenant Casbin
-grant for `user:<subject>`, resource `/acl/sociacl/shares`, action `manage` allows
-listing all shares in that tenant. Neither query parameters, a declared owner UUID,
-nor a foreign-tenant policy grants this access. Owner UUIDs are metadata, not a
-verified mapping to the authentication subject. Assigned-owner access requires a
-trusted identity mapping before it can be supported; creators and managers work
-without one. Legacy rows without a creator are visible only to managers.
-
-The storage API requires explicit creator scope, applies it in the PostgreSQL
-query, and accepts an unfiltered scope only from trusted management authorization.
-Policy lookup failure propagates without reading share metadata. Revoking a grant
-affects the next listing. Raw tokens and hashes remain excluded. This tightens
-listing authorization without changing public token resolution or share creation.
-
-## Witness policy read boundary
-
-Public policy export uses `WitnessPolicyReader.locked_policy()`, a semantic
-storage interface. Its context holds serialization against policy updates until
-export has rechecked expiry and matched the exact installed revision and keys.
-The PostgreSQL adapter holds a shared row lock; alternate backends must provide
-an equivalent read lease, not an unlocked cached snapshot. Signed input bytes
-are returned unchanged. Storage failures remain unavailable, never last-good
-fallbacks. Reader snapshots are detached from persistence.
-
-Signed policy installation now uses `WitnessPolicyWriter.install_verified()`.
-The writer must recheck authorization while serialized against other readers
-and writers, including same-revision retries, and atomically preserve retirement
-history. The CLI selects the PostgreSQL adapter; signature and audience checks
-remain outside persistence. No network write endpoint is introduced.
-
-Complete checkpoint snapshots now consume `WitnessPolicyHistoryReader` through
-all continuity, authorization and replay callers. The PostgreSQL adapter returns
-detached current policy and complete retirement history under one shared lock,
-held through checkpoint signing and final policy-expiry checks. Missing history
-is rejected, not reconstructed from active keys. A storage exit failure discards
-the response. These records are trusted storage state; current policy signatures
-do not independently authenticate historical completeness.
-
-Timestamp signing now consumes a policy reader; the PostgreSQL signing adapter
-preserves the existing exclusive lock through signing and transaction exit.
-The old repository signing function remains a compatibility wrapper. New callers
-inject the reader into `witness_policy_signing.sign_with_policy`.
-
-`CheckpointReplayStore.consume()` requires atomic, durable one-use consumption
-before signing. Its PostgreSQL adapter retains synchronous commit and bounded
-transaction-local lock/statement timeouts. Duplicates, failures and uncertain
-commits reject, and signing or delivery failure never refunds consumption.
-Authenticated enrollment/client/root-epoch/challenge commitments still define
-the replay namespace; credential renewal cannot reset it. Storage wait time
-remains part of enrollment freshness. Alternative adapters must preserve these
-semantics and operational rollback protection; none is deployed here. Publication remains
-default-off with its existing configuration. Independent root custody, deployed reader privileges,
-edge controls, consumer freshness and management-authority acceptance in #15
-remain required; package qualification does not establish those results.
+First-party code is [Apache-2.0](LICENSE). Dependency packages keep their own
+licenses.
