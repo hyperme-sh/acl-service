@@ -308,8 +308,8 @@ Share routes now use `ShareStore` and detached `ShareRecord` snapshots. PostgreS
 owns token generation, hashed-token lookup, RLS sessions and reservation locking;
 raw tokens are returned only by creation, and snapshots expose neither tokens nor
 hashes. Nested metadata is copied so callers cannot mutate stored state through a
-snapshot. Tenant-scoped listing retains its existing authorization scope; tighter
-owner/manager filtering remains tracked in #8.
+snapshot. Listing filters metadata by the authenticated creator unless the caller has an
+explicit same-tenant share-management grant.
 
 Evaluation reserves an active use before publishing an allow/notify decision.
 The PostgreSQL adapter locks the tenant/share row, checks revocation and expiry
@@ -326,3 +326,20 @@ contract tests cover token boundaries, tenant isolation and concurrent consumpti
 HTTP tests cover stale approvals, storage failure and slow operations. Witness
 storage and session middleware remain to convert before PostgreSQL is optional
 for the complete runtime. No new production storage backend is selected here.
+
+### Share metadata authorization
+
+`GET /acl/sociacl/shares` returns only rows whose `created_by` matches the verified
+authentication subject. Creation sets this field server-side. A same-tenant Casbin
+grant for `user:<subject>`, resource `/acl/sociacl/shares`, action `manage` allows
+listing all shares in that tenant. Neither query parameters, a declared owner UUID,
+nor a foreign-tenant policy grants this access. Owner UUIDs are metadata, not a
+verified mapping to the authentication subject. Assigned-owner access requires a
+trusted identity mapping before it can be supported; creators and managers work
+without one. Legacy rows without a creator are visible only to managers.
+
+The storage API requires explicit creator scope, applies it in the PostgreSQL
+query, and accepts an unfiltered scope only from trusted management authorization.
+Policy lookup failure propagates without reading share metadata. Revoking a grant
+affects the next listing. Raw tokens and hashes remain excluded. This tightens
+listing authorization without changing public token resolution or share creation.
