@@ -60,7 +60,11 @@ fi
 distribution_hashes=$(cd "$scratch/dist" && sha256sum -- *.whl *.tar.gz)
 python3 scripts/verify_wheel.py "$scratch/dist"
 python3 scripts/export_release_contract.py "$scratch"/dist/*.whl --output "$scratch/contract"
-python3 scripts/verify_release_candidate.py releases/candidate/release.json "$scratch/contract/contract.json" "$scratch/contract/evidence.json" acl-service
+for qualified_manifest in releases/qualification/current/release.json releases/candidate/release.json; do
+  if [[ -f "$qualified_manifest" ]]; then
+    python3 scripts/verify_release_candidate.py "$qualified_manifest" "$scratch/contract/contract.json" "$scratch/contract/evidence.json" acl-service
+  fi
+done
 check_lock
 sync_environment
 if (( ${#fixture_wheels[@]} )); then
