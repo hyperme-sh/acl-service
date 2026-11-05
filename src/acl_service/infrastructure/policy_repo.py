@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import AclCasbinRule
+from acl_service.domain.policy_store import PolicyRecord
 
 
 def _set_guc(session: Session, tenant_id: uuid.UUID) -> None:
@@ -70,6 +71,9 @@ def add_rule_if_absent(
             session.commit()
         except IntegrityError:
             session.rollback()
+            _set_guc(session, tenant_id)
+            if _find_rule(session, tenant_id, ptype, rule) is None:
+                raise
             return False
         return True
 
@@ -99,12 +103,7 @@ def add_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> 
 
 
 def delete_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> bool:
-    conds = [
-        AclCasbinRule.tenant_id == tenant_id,
-        AclCasbinRule.ptype == ptype,
-    ]
-    for i, v in enumerate(rule):
-        conds.append(getattr(AclCasbinRule, f"v{i}") == v)
+    conds = [AclCasbinRule.tenant_id == tenant_id, *_rule_match(ptype, rule)]
     with Session(sync_engine) as session:
         _set_guc(session, tenant_id)
         obj = session.scalars(
@@ -115,3 +114,26 @@ def delete_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) 
         session.delete(obj)
         session.commit()
         return True
+
+
+def _record(row: AclCasbinRule) -> PolicyRecord:
+    return PolicyRecord(row.id, row.ptype, *(getattr(row, f"v{i}") for i in range(6)))
+
+
+class PostgresPolicyStore:
+    """Own SQL sessions and return detached, backend-neutral records."""
+
+    def __init__(self, engine):
+        self._engine = engine
+
+    def list_rules(self, tenant_id):
+        return [_record(row) for row in list_rules(self._engine, tenant_id)]
+
+    def add_rule(self, tenant_id, ptype, rule):
+        return _record(add_rule(self._engine, tenant_id, ptype, rule))
+
+    def add_rule_if_absent(self, tenant_id, ptype, rule):
+        return add_rule_if_absent(self._engine, tenant_id, ptype, rule)
+
+    def delete_rule(self, tenant_id, ptype, rule):
+        return delete_rule(self._engine, tenant_id, ptype, rule)

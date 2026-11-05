@@ -133,6 +133,7 @@ async def test_policy_mutations_require_preexisting_management_grant(monkeypatch
     tid = uuid.uuid4()
     app = FastAPI()
     app.state.sync_engine = object()
+    app.state.policy_store = object()
     app.include_router(routes.router)
     app.dependency_overrides[deps.require_matched_tenant] = lambda: tid
     app.dependency_overrides[deps.get_current_user] = lambda: AuthMeResponse(sub='caller')

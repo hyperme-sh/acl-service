@@ -211,3 +211,34 @@ For read-only retrieval and staging of a retained runtime, see
 [runtime preparation](docs/runtime-preparation.md). The preparation tool verifies
 live GitHub qualification evidence and stages exact bytes without loading,
 publishing or deploying the image.
+
+
+Retained-runtime replay also performs an owned startup check with disposable
+PostgreSQL and the real app/event lifecycle. It verifies readiness, rejected
+missing/malformed credentials, tenant-scoped policy creation, restart persistence
+and idempotent redelivery. This uses no live credentials or existing database;
+external identity, production RLS and deployed-service acceptance remain separate.
+See [runtime preparation](docs/runtime-preparation.md) for scope and invocation.
+
+## Storage and event API boundary
+
+Policy routes, authorization evaluation and user-created handling depend on the
+service-owned `PolicyStore` API, not SQLAlchemy engines or ORM rows. Composition
+in `app.py` currently selects `PostgresPolicyStore`. Sessions, tenant RLS context
+and commits stay inside the adapter; callers receive immutable records.
+Successful mutations are visible to subsequent reads, including revocation.
+Deletes match the entire rule. Storage failures propagate rather than granting
+access or reporting successful event processing.
+
+The same contract tests run against an independent in-memory test adapter and
+owned PostgreSQL. The test adapter is not a production durability option.
+Events use the existing tenant publisher/routing APIs, supporting PostgreSQL
+and Service Bus. Publication after a committed mutation is a separate operation:
+redelivery retries publication with an idempotent insert. This does not claim
+an atomic database-and-bus transaction.
+
+This is the policy-storage boundary, not a completed service-wide migration:
+SociACL share/recovery/keyring repositories and request-session middleware still
+require database adapters, and application startup still requires PostgreSQL.
+Those boundaries must be converted before claiming a database-free deployment.
+No generic remote SQL proxy or new database microservice is introduced.

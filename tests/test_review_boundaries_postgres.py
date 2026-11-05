@@ -115,7 +115,7 @@ def test_mixed_model_loaders_under_rls(restricted_engine, seed, filename, extra,
         adapter.load_filtered_policy(model, SimpleNamespace(ptype=[], v0=[], v1=[], v2=[], v3=[], v4=[], v5=[]))
         enforcer = casbin.Enforcer(model)
     else:
-        enforcer = make_enforcer(restricted_engine, seed.ta, model_file=filename)
+        enforcer = make_enforcer(policy_repo.PostgresPolicyStore(restricted_engine), seed.ta, model_file=filename)
     args = ["ai", "invoke"] + ([extra] if extra else [])
     assert enforcer.enforce(subject, *args)
     assert not enforcer.enforce("foreign", *args)

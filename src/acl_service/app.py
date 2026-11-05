@@ -25,6 +25,7 @@ from controlplane_db.session import normalize_database_url
 from api.infrastructure.tenant_user_rate_limiter import TenantUserRateLimiter
 
 from acl_service.infrastructure.db_url import sync_database_url
+from acl_service.infrastructure.policy_repo import PostgresPolicyStore
 from acl_service.infrastructure.user_created_consumer import build_user_created_consumer
 from acl_service.interfaces.api.routes import router as acl_router
 from acl_service.interfaces.api.sociacl_routes import router as sociacl_router
@@ -52,6 +53,7 @@ def create_app(
         app.state.async_engine = engine
         sync_eng = create_engine(sync_database_url(settings.database_url), pool_pre_ping=True)
         app.state.sync_engine = sync_eng
+        app.state.policy_store = PostgresPolicyStore(sync_eng)
         app.state.rate_limiter = TenantUserRateLimiter(
             per_minute=settings.acl_rate_limit_per_minute,
         )
@@ -79,7 +81,7 @@ def create_app(
             set_tenant_event_publisher(_ListSink())
         else:
             await install_tenant_event_publisher(service_name=svc_name)
-            user_consumer = build_user_created_consumer(sync_eng, settings.database_url)
+            user_consumer = build_user_created_consumer(app.state.policy_store, settings.database_url)
             await user_consumer.start()
             app.state.event_consumer = user_consumer
 

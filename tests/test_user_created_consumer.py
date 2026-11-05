@@ -154,3 +154,19 @@ async def test_user_created_existing_rule_still_emits():
 
     mock_publish.assert_awaited_once()
     assert mock_publish.await_args.kwargs["event_type"] == ACL_POLICY_UPDATED_V1
+
+
+@pytest.mark.asyncio
+async def test_storage_failure_does_not_publish_success():
+    tid, uid = uuid.uuid4(), uuid.uuid4()
+    store = MagicMock()
+    store.add_rule_if_absent.side_effect = RuntimeError('storage unavailable')
+    publisher = MagicMock(publish=AsyncMock())
+    consumer = build_user_created_consumer(store, 'postgresql://localhost/controlplane')
+    env = ControlPlaneEventEnvelope(event_type=USER_CREATED_V1, service='user-service',
+        tenant_id=tid, payload=UserCreatedEvent(user_id=uid, email='u@example.com',
+        tenant_id=str(tid)).to_envelope_payload())
+    with patch('acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher', return_value=publisher):
+        with pytest.raises(RuntimeError, match='storage unavailable'):
+            await consumer.handle_message(key=None, value=env.model_dump_json().encode(), headers={})
+    publisher.publish.assert_not_awaited()

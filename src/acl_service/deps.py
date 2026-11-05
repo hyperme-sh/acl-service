@@ -46,7 +46,7 @@ def require_permission(resource: str, action: str):
     ) -> None:
         from acl_service.infrastructure.enforcer_factory import enforce_rbac
 
-        eng = request.app.state.sync_engine
+        eng = request.app.state.policy_store
         sub = f"user:{me.sub}"
         ok = await asyncio.to_thread(
             enforce_rbac, eng, tenant_id, sub, resource, action
