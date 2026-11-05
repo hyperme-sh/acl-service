@@ -6,6 +6,28 @@ on:
 permissions:
   contents: read
 jobs:
+  image:
+    needs: package
+    if: github.ref == 'refs/heads/main'
+    runs-on:
+      group: shared-local
+      labels: [self-hosted, linux, x64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build and verify the standalone runtime
+        env:
+          DEPENDENCY_READ_TOKEN: ${{ secrets.DEPENDENCY_READ_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="acl-service-check:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
+          docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN -t "$image" .
+          unset DEPENDENCY_READ_TOKEN
+          bash scripts/check-image.sh "$image"
   candidate:
     if: github.ref == 'refs/heads/main'
     runs-on:
