@@ -211,3 +211,11 @@ For read-only retrieval and staging of a retained runtime, see
 [runtime preparation](docs/runtime-preparation.md). The preparation tool verifies
 live GitHub qualification evidence and stages exact bytes without loading,
 publishing or deploying the image.
+
+
+Retained-runtime replay also performs an owned startup check with disposable
+PostgreSQL and the real app/event lifecycle. It verifies readiness, rejected
+missing/malformed credentials, tenant-scoped policy creation, restart persistence
+and idempotent redelivery. This uses no live credentials or existing database;
+external identity, production RLS and deployed-service acceptance remain separate.
+See [runtime preparation](docs/runtime-preparation.md) for scope and invocation.

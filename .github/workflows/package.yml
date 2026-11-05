@@ -115,6 +115,7 @@ jobs:
           trap cleanup EXIT
           docker image load --input "$RUNTIME_REPLAY_DIR/runtime.docker.tar"
           bash scripts/check-image.sh "$EXPECTED_IMAGE_ID"
+          python3 scripts/check-runtime-startup.py "$EXPECTED_IMAGE_ID"
   candidate:
     if: github.ref == 'refs/heads/main'
     runs-on:

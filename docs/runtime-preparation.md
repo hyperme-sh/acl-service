@@ -51,9 +51,33 @@ remain distinct from registry publication evidence.
 
 ## Remaining test-deployment acceptance
 
-The replay checks compare installed runtime bytes and exercise HTTP authorization
-boundaries with synthetic dependencies. They deliberately do not enter the real
-application lifespan, connect a database/event bus, or prove external token trust.
+The network-disabled HTTP replay fixture compares installed runtime bytes and
+exercises authorization boundaries with synthetic dependencies. A separate
+startup check now enters the real application lifespan on a newly created internal
+Docker network. It migrates an owned PostgreSQL database, verifies HTTP readiness
+and rejection of missing/malformed credentials, and exercises the real PostgreSQL
+publisher and user-created consumer for two synthetic tenants. Restart and
+redelivery checks verify durable policies and continued event processing.
+
+Run it only against an already-loaded, verified local image ID:
+
+```sh
+python3 scripts/check-runtime-startup.py sha256:EXACT_LOCAL_IMAGE_ID
+```
+
+It accepts no existing database URL or external service credentials, publishes no
+host ports, mounts only its probe read-only, and removes its containers/network.
+The PostgreSQL image uses the same `postgres:16-alpine` dependency as existing
+integration checks; application containers are read-only with a temporary /tmp.
+No package version, tag, registry publication or host configuration is changed.
+
+This fixture deliberately uses a disposable admin database role for migrations
+and event setup. It does not qualify production RLS privileges, external OIDC/JWKS
+trust, Service Bus transport, deployed consumer interoperability, or a public
+service endpoint. Separate existing RLS tests and future live acceptance retain
+those boundaries. The real retained artifact from run 42051184287 at source
+`cae3d1fcd41452cdb22cfb6f95009a6a51b4f796` passed these startup/restart checks
+locally without rebuilding; automatic execution follows this change's merge.
 
 Before selecting an actual test runtime, prepare an isolated tenant/data scope,
 the owning database and migration contract, verified auth/tenant configuration,
