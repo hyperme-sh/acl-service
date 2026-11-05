@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
-  "line": "0.24",
+  "line": "0.1",
   "components": {
     "acl-service": {
-      "version": "0.24.0",
+      "version": "0.1.0",
       "contract": "contract.json",
-      "contract_sha256": "6d27187d589a133d43b42554d75704bb97fba18e100dc4f4f48006537159c970",
+      "contract_sha256": "228fdac5f62639277713845396e3c5c68c873a4aa7bb4d54e4966d4df6967d4f",
       "artifact": {
         "kind": "package",
-        "sha256": "473f6f996c9571eed0462b09245f7040475e09ec5bf006a0fe824af52d19c2f1",
-        "uri": "urn:sha256:473f6f996c9571eed0462b09245f7040475e09ec5bf006a0fe824af52d19c2f1"
+        "sha256": "96c7e7bb6ce9bcf6e9af4fb77984d6e206133891800146293f207aa6967aacdc",
+        "uri": "urn:sha256:96c7e7bb6ce9bcf6e9af4fb77984d6e206133891800146293f207aa6967aacdc"
       }
     }
   },

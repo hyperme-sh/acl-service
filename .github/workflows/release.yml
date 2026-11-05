@@ -10,18 +10,20 @@ concurrency:
   cancel-in-progress: false
 jobs:
   release-admission:
-    if: github.event_name == 'push'
+    # Publication is held until the owner explicitly authorizes it.
+    if: ${{ false }}
     uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@d4859177789c33142a2c09d43986ccb0a923a4a8
     with:
-      release-line: '0.24'
+      release-line: '0.1'
       baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
       requested-version: ${{ github.ref_name }}
   publish:
+    # Publication is held until the owner explicitly authorizes it.
+    if: ${{ false }}
     needs: release-admission
     permissions:
       contents: write
       actions: read
-    if: github.event_name == 'push' && needs.release-admission.result == 'success'
     runs-on: [self-hosted, linux, x64, debrunner]
     timeout-minutes: 15
     steps:
