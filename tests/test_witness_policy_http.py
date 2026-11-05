@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.exc import DBAPIError
 
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyWriter
 from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyReader
 from acl_service.app import create_app
 from acl_service.infrastructure import witness_policy_ingest as ingest
@@ -45,7 +46,7 @@ def client(engine, publication):
 
 
 def installed(engine, signed):
-    return ingest.install_signed_policy(engine, *signed, ROOT_KEY.public_key(), AUDIENCE)
+    return ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), *signed, ROOT_KEY.public_key(), AUDIENCE)
 
 
 def decode(value):

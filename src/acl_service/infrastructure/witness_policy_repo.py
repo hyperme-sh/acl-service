@@ -35,6 +35,16 @@ class PostgresWitnessPolicyReader:
             yield _snapshot(row) if row is not None else None
 
 
+class PostgresWitnessPolicyWriter:
+    def __init__(self, engine):
+        self._engine = engine
+
+    def install_verified(self, revision, keys, *, check_authorization):
+        return install_verified_policy(
+            self._engine, revision, keys, check_authorization=check_authorization,
+        )
+
+
 def _snapshot(row):
     return PolicySnapshot(row.revision, deepcopy(row.jwks))
 

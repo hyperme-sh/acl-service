@@ -12,6 +12,7 @@
     "acl_service/domain/share_store.py": "29a30988db32ae696e1748db8673113883fef50da977015303ce52cfb50d343b",
     "acl_service/domain/sociacl_evaluator.py": "073ee04d8d6399aac72516989e9f48a2f9caa598fbab0d5e0db85e1c6400625e",
     "acl_service/domain/witness_policy_reader.py": "3339d32a22f330e606f2f595d6fb726a9aab81e828e5ac889065f8e104a4df6a",
+    "acl_service/domain/witness_policy_writer.py": "eb9af3812f11056943593458f7c7bf64d5fe03361f327456832dcfe76a26e6e3",
     "acl_service/infrastructure/casbin_adapter.py": "28519ff0c072fea2f78a127def01ba9e300fb77976b0b31d7e29a5caecc0572f",
     "acl_service/infrastructure/db_url.py": "2e760d9ae16a990e0fc7a3afdb60be55778767b30ace67bd818aae158da7e83a",
     "acl_service/infrastructure/domain_policy_loader.py": "dd350c301e29896e25e9148f0e2d7ae38e235edd8dc822495f71019c7f53f42c",
@@ -27,9 +28,9 @@
     "acl_service/infrastructure/witness_checkpoint_continuity.py": "94f6087c61bdf416f83a45b6125551c5aadd98fd106b346e35431c39287b9666",
     "acl_service/infrastructure/witness_checkpoint_replay.py": "288bb8a494b556f66172b94a5725106eff0f54a1b77c840b94e6bb360ab4d4dc",
     "acl_service/infrastructure/witness_policy_export.py": "c1748cfd41f676c9245d5e3871a7786c8d616bb1e59bdcdf145c2d35a609ceb4",
-    "acl_service/infrastructure/witness_policy_ingest.py": "9d07b47897b5e25e485926f4bd7da3ca68c3dd4658155a38649616207c326d17",
+    "acl_service/infrastructure/witness_policy_ingest.py": "488f095f6b342bb6eb6f16d33a995a2c24d27142ded27d2993a38d9dc89ef735",
     "acl_service/infrastructure/witness_policy_publication.py": "d1c343f73546e87e6409a8a5cc59f6c4046a1cedccfb00ba13da76cc358c9268",
-    "acl_service/infrastructure/witness_policy_repo.py": "f575856f199d057b86846fd276fd8fa4800d94e2296b0a2ca0bc3f28b67caaf9",
+    "acl_service/infrastructure/witness_policy_repo.py": "20fe9e98ca9377ae92b77992b3f4582bd541f83304a0856124f9323782c6755d",
     "acl_service/infrastructure/witness_policy_snapshot.py": "137904d8dce15b57a6edc0f1073f676964934c92f18d325cb85054ef84a2367b",
     "acl_service/infrastructure/witness_signer.py": "d68a2d86eb530bfe2b9364be7aa2a4ff89cca5cadb41265b8f90884619848eab",
     "acl_service/interfaces/api/routes.py": "d721a125f2a791478240accc9eb1598fd70a7473d573c22a04ddc37bc07394f2",
@@ -39,7 +40,7 @@
     "acl_service/middleware.py": "f7f071386738c8a0f5ba0f97eaeff23dfdbc72545a273ae4f19eae4379885ddd",
     "acl_service/resources/model_abac.conf": "03670786b5d37116340f9e9735b00df9594724dd2923a64319a61cc9f8a076c6",
     "acl_service/resources/model_rbac.conf": "82a4b3db1ef656a981d175656b16a1c72488a8d9d0729ab2b705e8c33c94490e",
-    "acl_service/witness_policy_cli.py": "b8f4854331f7024ad4653948c30b4b5cbbf2a25b5bdd0044833535fd3eff19e1"
+    "acl_service/witness_policy_cli.py": "70ff30df75bf2668ed43030aa2990819352a39d8daa24ad06143c433f7adc43b"
   },
   "requires_dist": [
     "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@47fc18da54f80b821029424eaac02c27b051399d",

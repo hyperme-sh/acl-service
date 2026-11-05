@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 
 from acl_service.infrastructure.witness_signer import MAX_INTEGER, P256_ORDER, WitnessKey, WitnessRejected, public_jwks
-from acl_service.infrastructure.witness_policy_repo import install_verified_policy
+from acl_service.domain.witness_policy_writer import WitnessPolicyWriter
 
 DOMAIN = b"sociacl-witness-policy-v1\n"
 MAX_POLICY_BYTES = 262144
@@ -107,9 +107,10 @@ def _parse_jwks(jwks, root_key) -> tuple[WitnessKey, ...]:
     return tuple(keys)
 
 
-def install_signed_policy(engine, payload: bytes, signature: bytes, root_key, audience: str):
+def install_signed_policy(writer: WitnessPolicyWriter, payload: bytes, signature: bytes, root_key, audience: str):
     verified = verify_policy(payload, signature, root_key, audience)
-    # Recheck time under the row lock: waiting for another writer cannot outlive
+    # Recheck time inside the serialized write: waiting for another writer cannot outlive
     # the signed update's validity and then silently install it.
-    return install_verified_policy(engine, verified.revision, verified.keys,
-                                   check_authorization=verified.check_current)
+    return writer.install_verified(
+        verified.revision, verified.keys, check_authorization=verified.check_current,
+    )

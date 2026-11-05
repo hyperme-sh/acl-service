@@ -7,7 +7,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from sqlalchemy import create_engine
 
-from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyReader
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyReader, PostgresWitnessPolicyWriter
 from acl_service.infrastructure.db_url import sync_database_url
 from acl_service.infrastructure.witness_policy_export import export_signed_policy
 from acl_service.infrastructure.witness_policy_ingest import MAX_POLICY_BYTES, install_signed_policy, verify_policy
@@ -44,7 +44,7 @@ def main(argv=None):
         if args.export:
             print(json.dumps(export_signed_policy(PostgresWitnessPolicyReader(engine), payload, signature, root, args.audience)))
             return 0
-        installed = install_signed_policy(engine, payload, signature, root, args.audience)
+        installed = install_signed_policy(PostgresWitnessPolicyWriter(engine), payload, signature, root, args.audience)
         print(json.dumps({"installedRevision": installed.revision, "installed": True}))
         return 0
     except Exception:
