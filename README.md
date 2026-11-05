@@ -172,7 +172,7 @@ separate. Preparation does not create tags, publish or deploy.
 Successful main image checks retain `tested-runtime` as a private Actions
 artifact for 30 days (subject to organization retention). It contains the exact
 checked image as `runtime.docker.tar` and `runtime-provenance.json`, which binds
-its archive checksum, image config digest, Linux/amd64 platform, source revision,
+its archive checksum, local image ID, image config digest, Linux/amd64 platform, source revision,
 and Actions run/attempt. Checks and export use the immutable local image ID.
 The archive config digest and embedded owner/source labels are verified before
 upload; no candidate code is imported by the recorder.
@@ -183,3 +183,18 @@ step. Future publication needs the user's explicit approval, retained exact-byte
 evidence, and separate live authorization/consumer acceptance. Do not rebuild an
 expired archive and claim it is the originally qualified image. Package
 `tested-dist` evidence and its release publisher remain separate.
+
+
+The recorder supports both classic Docker config IDs and containerd manifest/index
+IDs. For containerd it verifies each referenced metadata digest and size down to
+the saved config, selecting exactly one Linux/amd64 runtime. The local image ID
+and config digest are recorded separately. No registry publication is inferred.
+
+A separate `runtime-replay` job downloads the exact artifact ID emitted by the
+image job. Before loading it, the verifier compares the archive and receipt with
+the independently passed image ID, archive checksum, source and Actions run/attempt.
+It refuses archives containing repository tags. The job then loads the archive
+and repeats the network-isolated runtime checks without dependency credentials or
+the private-dependency environment. Newly loaded images and temporary files are
+cleaned up. This verifies retained-image replay; live test deployment and tenant
+integration acceptance still remain separate work.

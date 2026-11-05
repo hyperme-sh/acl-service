@@ -7,6 +7,11 @@ permissions:
   contents: read
 jobs:
   image:
+    outputs:
+      artifact-id: ${{ steps.runtime-upload.outputs.artifact-id }}
+      image-id: ${{ steps.runtime-build.outputs.image-id }}
+      archive-sha256: ${{ steps.runtime-build.outputs.archive-sha256 }}
+      producer-attempt: ${{ steps.runtime-build.outputs.producer-attempt }}
     needs: package
     if: github.ref == 'refs/heads/main'
     runs-on:
@@ -37,6 +42,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Build and verify the standalone runtime
+        id: runtime-build
         env:
           DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
         shell: bash
@@ -50,6 +56,8 @@ jobs:
             -t "$image" .
           unset DEPENDENCY_READ_TOKEN
           image_id=$(docker image inspect --format '{{.Id}}' "$image")
+          echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
+          echo "producer-attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
           bash scripts/check-image.sh "$image_id"
           runtime_dir=$(mktemp -d "$RUNNER_TEMP/acl-tested-runtime.XXXXXX")
           echo "RUNTIME_ARTIFACT_DIR=$runtime_dir" >> "$GITHUB_ENV"
@@ -58,7 +66,10 @@ jobs:
             --image-id "$image_id" --revision "$GITHUB_SHA" \
             --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
             --output "$runtime_dir/runtime-provenance.json"
+          archive_sha256=$(sha256sum "$runtime_dir/runtime.docker.tar")
+          echo "archive-sha256=${archive_sha256%% *}" >> "$GITHUB_OUTPUT"
       - name: Retain qualified local runtime for deployment preparation
+        id: runtime-upload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tested-runtime
@@ -66,6 +77,44 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+  runtime-replay:
+    needs: image
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, x64, debrunner]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare isolated download directory
+        run: echo "RUNTIME_REPLAY_DIR=$(mktemp -d "$RUNNER_TEMP/acl-runtime-replay.XXXXXX")" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.image.outputs.artifact-id }}
+          path: ${{ env.RUNTIME_REPLAY_DIR }}
+          merge-multiple: true
+      - name: Verify and replay the retained runtime without dependency credentials
+        env:
+          EXPECTED_IMAGE_ID: ${{ needs.image.outputs.image-id }}
+          EXPECTED_ARCHIVE_SHA256: ${{ needs.image.outputs.archive-sha256 }}
+          EXPECTED_PRODUCER_ATTEMPT: ${{ needs.image.outputs.producer-attempt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/record_runtime_artifact.py "$RUNTIME_REPLAY_DIR/runtime.docker.tar" \
+            --verify-receipt "$RUNTIME_REPLAY_DIR/runtime-provenance.json" \
+            --image-id "$EXPECTED_IMAGE_ID" --revision "$GITHUB_SHA" \
+            --archive-sha256 "$EXPECTED_ARCHIVE_SHA256" \
+            --run-id "$GITHUB_RUN_ID" --attempt "$EXPECTED_PRODUCER_ATTEMPT"
+          existed=false
+          if docker image inspect "$EXPECTED_IMAGE_ID" >/dev/null 2>&1; then existed=true; fi
+          cleanup() {
+            if [ "$existed" = false ]; then docker image rm "$EXPECTED_IMAGE_ID" >/dev/null 2>&1 || true; fi
+            rm -rf "$RUNTIME_REPLAY_DIR"
+          }
+          trap cleanup EXIT
+          docker image load --input "$RUNTIME_REPLAY_DIR/runtime.docker.tar"
+          bash scripts/check-image.sh "$EXPECTED_IMAGE_ID"
   candidate:
     if: github.ref == 'refs/heads/main'
     runs-on:
