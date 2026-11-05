@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import base64
 from copy import deepcopy
-from dataclasses import dataclass
+from contextlib import contextmanager
 from collections.abc import Callable, Sequence
 
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -16,15 +16,23 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import SociaclWitnessPolicy
+from acl_service.domain.witness_policy_reader import PolicySnapshot
 from acl_service.infrastructure.witness_signer import (
     MAX_INTEGER, WitnessKey, WitnessRejected, WitnessSigner, public_jwks,
 )
 
 
-@dataclass(frozen=True)
-class PolicySnapshot:
-    revision: int
-    jwks: dict
+class PostgresWitnessPolicyReader:
+    def __init__(self, engine):
+        self._engine = engine
+
+    @contextmanager
+    def locked_policy(self):
+        with Session(self._engine) as session, session.begin():
+            row = session.scalars(select(SociaclWitnessPolicy)
+                                  .where(SociaclWitnessPolicy.id == 1)
+                                  .with_for_update(read=True)).one_or_none()
+            yield _snapshot(row) if row is not None else None
 
 
 def _snapshot(row):

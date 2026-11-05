@@ -343,3 +343,19 @@ query, and accepts an unfiltered scope only from trusted management authorizatio
 Policy lookup failure propagates without reading share metadata. Revoking a grant
 affects the next listing. Raw tokens and hashes remain excluded. This tightens
 listing authorization without changing public token resolution or share creation.
+
+## Witness policy read boundary
+
+Public policy export uses `WitnessPolicyReader.locked_policy()`, a semantic
+storage interface. Its context holds serialization against policy updates until
+export has rechecked expiry and matched the exact installed revision and keys.
+The PostgreSQL adapter holds a shared row lock; alternate backends must provide
+an equivalent read lease, not an unlocked cached snapshot. Signed input bytes
+are returned unchanged. Storage failures remain unavailable, never last-good
+fallbacks. Reader snapshots are detached from persistence.
+
+This boundary does not move policy installation, signing, checkpoint or history
+writes behind a replacement backend yet. Publication remains default-off with
+its existing configuration. Independent root custody, deployed reader privileges,
+edge controls, consumer freshness and management-authority acceptance in #15
+remain required; package qualification does not establish those results.

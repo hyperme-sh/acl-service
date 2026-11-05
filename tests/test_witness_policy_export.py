@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyReader
 from acl_service import witness_policy_cli as cli
 from acl_service.infrastructure import witness_policy_ingest as ingest
 from acl_service.infrastructure.witness_policy_export import export_signed_policy
@@ -14,7 +15,7 @@ from test_keyring_state_repo import state_url, state_engine  # noqa: F401
 
 
 def export(engine, payload, signature):
-    return export_signed_policy(engine, payload, signature, ROOT_KEY.public_key(), AUDIENCE)
+    return export_signed_policy(PostgresWitnessPolicyReader(engine), payload, signature, ROOT_KEY.public_key(), AUDIENCE)
 
 
 def install(engine, payload, signature):
@@ -106,3 +107,39 @@ def test_invalid_export_never_connects(tmp_path, monkeypatch, capsys):
     payload, signature = bundle()
     assert cli.main(files(tmp_path, payload + b' ', signature) + ['--export']) == 1
     assert capsys.readouterr().out == 'witness policy rejected\n'
+
+
+def test_reader_lease_blocks_updates_and_detaches_snapshot(engine):
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError
+
+    signed = bundle()
+    install(engine, *signed)
+    reader = PostgresWitnessPolicyReader(engine)
+    with reader.locked_policy() as snapshot:
+        snapshot.jwks['keys'].clear()
+        # A distinct connection cannot obtain a conflicting write lock while
+        # the read lease is active. NOWAIT makes this independent of scheduling.
+        with pytest.raises(DBAPIError) as failure:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    'SELECT id FROM sociacl_witness_policy WHERE id = 1 FOR UPDATE NOWAIT'
+                ))
+        assert failure.value.orig.sqlstate == '55P03'
+    assert read_policy(engine).jwks['keys']
+    with engine.begin() as connection:
+        assert connection.execute(text(
+            'SELECT id FROM sociacl_witness_policy WHERE id = 1 FOR UPDATE NOWAIT'
+        )).scalar_one() == 1
+
+
+def test_reader_lease_releases_lock_when_export_fails(engine):
+    from sqlalchemy import text
+
+    install(engine, *bundle())
+    with pytest.raises(WitnessRejected):
+        export(engine, *bundle({**document(), 'revision': 2}))
+    with engine.begin() as connection:
+        assert connection.execute(text(
+            'SELECT id FROM sociacl_witness_policy WHERE id = 1 FOR UPDATE NOWAIT'
+        )).scalar_one() == 1

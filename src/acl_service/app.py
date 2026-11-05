@@ -24,6 +24,7 @@ from controlplane_db.session import normalize_database_url
 
 from api.infrastructure.tenant_user_rate_limiter import TenantUserRateLimiter
 
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyReader
 from acl_service.infrastructure.db_url import sync_database_url
 from acl_service.infrastructure.policy_repo import PostgresPolicyStore
 from acl_service.infrastructure.recovery_repo import PostgresRecoveryStore
@@ -60,6 +61,7 @@ def create_app(
         app.state.recovery_store = PostgresRecoveryStore(sync_eng)
         app.state.membership_reader = PostgresMembershipReader(sync_eng)
         app.state.share_store = PostgresShareStore(sync_eng)
+        app.state.witness_policy_reader = PostgresWitnessPolicyReader(sync_eng)
         app.state.rate_limiter = TenantUserRateLimiter(
             per_minute=settings.acl_rate_limit_per_minute,
         )
