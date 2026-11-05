@@ -23,5 +23,5 @@ The read-only preparation lane on the existing `shared-local` debrunners may use
 without credentials. Preserve immutable candidate upload before validation and
 post-validation digest checks. No tags, publication or merges during preparation.
 
-Use the existing `shared-local` runner group with `[self-hosted, linux, x64]`
+Use the existing `shared-local` runner group with `[self-hosted, linux, x64, debrunner]`
 for CI, admission and publication. Do not introduce GitHub-hosted runner jobs.
