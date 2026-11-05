@@ -22,3 +22,11 @@ The user is the sole developer. Never add or enable GitHub required reviewers, b
 The read-only hosted preparation lane may use exact dependency-wheel fixtures
 without credentials. Preserve immutable candidate upload before validation and
 post-validation digest checks. No tags, publication or merges during preparation.
+
+## Private CI runner policy
+
+Private repository jobs use `[self-hosted, linux, x64, debrunner]`, including
+preparation, package validation and release jobs. This supersedes earlier hosted
+runner exceptions in this file. Keep dedicated infrastructure-convergence and
+trusted payment-smoke jobs on their existing specialized selectors. Reusable
+workflows must route private callers to debrunners. Do not add approval gates.
