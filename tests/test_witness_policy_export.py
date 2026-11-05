@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyWriter
 from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyReader
 from acl_service import witness_policy_cli as cli
 from acl_service.infrastructure import witness_policy_ingest as ingest
@@ -19,7 +20,7 @@ def export(engine, payload, signature):
 
 
 def install(engine, payload, signature):
-    return ingest.install_signed_policy(engine, payload, signature, ROOT_KEY.public_key(), AUDIENCE)
+    return ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), payload, signature, ROOT_KEY.public_key(), AUDIENCE)
 
 
 def decode(value):

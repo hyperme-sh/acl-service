@@ -10,10 +10,16 @@ from sqlalchemy import event, text
 
 from acl_service.infrastructure.witness_signer import WitnessKey, WitnessRejected
 from acl_service.infrastructure.witness_policy_repo import (
-    install_verified_policy as install, read_policy, sign_with_policy,
+    PostgresWitnessPolicyWriter, read_policy, sign_with_policy,
 )
 from controlplane_db import migrations
 from test_keyring_state_repo import state_url, state_engine  # noqa: F401
+
+
+def install(engine, revision, keys):
+    return PostgresWitnessPolicyWriter(engine).install_verified(
+        revision, keys, check_authorization=lambda: None,
+    )
 
 
 @pytest.fixture

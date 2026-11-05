@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from controlplane_db.models import SociaclWitnessPolicy
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyWriter
 from acl_service.infrastructure import witness_policy_ingest as ingest
 from acl_service.infrastructure import witness_policy_snapshot as snapshots
 from acl_service.infrastructure.witness_policy_repo import install_verified_policy, read_policy
@@ -23,7 +24,7 @@ from test_keyring_state_repo import state_url, state_engine  # noqa: F401
 
 
 def install(engine, signed):
-    return ingest.install_signed_policy(engine, *signed, ROOT_KEY.public_key(), AUDIENCE)
+    return ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), *signed, ROOT_KEY.public_key(), AUDIENCE)
 
 
 def snapshot(engine, signed):

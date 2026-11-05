@@ -354,8 +354,14 @@ an equivalent read lease, not an unlocked cached snapshot. Signed input bytes
 are returned unchanged. Storage failures remain unavailable, never last-good
 fallbacks. Reader snapshots are detached from persistence.
 
-This boundary does not move policy installation, signing, checkpoint or history
-writes behind a replacement backend yet. Publication remains default-off with
-its existing configuration. Independent root custody, deployed reader privileges,
+Signed policy installation now uses `WitnessPolicyWriter.install_verified()`.
+The writer must recheck authorization while serialized against other readers
+and writers, including same-revision retries, and atomically preserve retirement
+history. The CLI selects the PostgreSQL adapter; signature and audience checks
+remain outside persistence. No network write endpoint is introduced.
+
+Signing, checkpoint and history operations still require their own storage
+boundaries; no replacement persistence backend is deployed. Publication remains
+default-off with its existing configuration. Independent root custody, deployed reader privileges,
 edge controls, consumer freshness and management-authority acceptance in #15
 remain required; package qualification does not establish those results.

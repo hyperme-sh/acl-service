@@ -7,6 +7,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyWriter
 from acl_service.infrastructure import witness_policy_ingest as ingest
 from acl_service.infrastructure.witness_signer import WitnessRejected, P256_ORDER
 from acl_service.infrastructure.witness_policy_repo import read_policy
@@ -120,13 +121,13 @@ def test_signature_is_compact_low_s_and_domain_bound():
 
 def test_authenticated_install_still_enforces_durable_revision(engine):
     d = document(); payload, signature = bundle(d)
-    installed = ingest.install_signed_policy(engine, payload, signature, ROOT_KEY.public_key(), AUDIENCE)
+    installed = ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), payload, signature, ROOT_KEY.public_key(), AUDIENCE)
     assert installed.revision == 1
     d["revision"] = 2; d["jwks"] = {"keys": []}
     newer = bundle(d)
-    ingest.install_signed_policy(engine, *newer, ROOT_KEY.public_key(), AUDIENCE)
+    ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), *newer, ROOT_KEY.public_key(), AUDIENCE)
     with pytest.raises(WitnessRejected):
-        ingest.install_signed_policy(engine, payload, signature, ROOT_KEY.public_key(), AUDIENCE)
+        ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), payload, signature, ROOT_KEY.public_key(), AUDIENCE)
     assert read_policy(engine).revision == 2
     assert read_policy(engine).jwks == {"keys": []}
 
@@ -137,7 +138,7 @@ def test_expired_authorization_under_lock_rolls_back(engine, monkeypatch):
     samples = iter([1000, 1001])
     monkeypatch.setattr(ingest.time, "time", lambda: next(samples))
     with pytest.raises(WitnessRejected):
-        ingest.install_signed_policy(engine, payload, signature, ROOT_KEY.public_key(), AUDIENCE)
+        ingest.install_signed_policy(PostgresWitnessPolicyWriter(engine), payload, signature, ROOT_KEY.public_key(), AUDIENCE)
     assert read_policy(engine) is None
 
 
