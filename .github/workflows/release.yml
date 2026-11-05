@@ -9,13 +9,20 @@ concurrency:
   group: package-release-stable-package-release
   cancel-in-progress: false
 jobs:
+  release-admission:
+    if: github.event_name == 'push'
+    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@d4859177789c33142a2c09d43986ccb0a923a4a8
+    with:
+      release-line: '0.24'
+      baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
+      requested-version: ${{ github.ref_name }}
   publish:
+    needs: release-admission
     permissions:
       contents: write
       actions: read
-    runs-on:
-      group: shared-local
-      labels: [self-hosted, linux, x64, debrunner]
+    if: github.event_name == 'push' && needs.release-admission.result == 'success'
+    runs-on: [self-hosted, linux, x64, debrunner]
     timeout-minutes: 15
     steps:
       - name: Publish exact tested stable artifacts
