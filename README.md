@@ -101,3 +101,21 @@ startup against configured services, or deployment. The image is not published
 or deployed by this workflow. CI runs image qualification after immutable
 package validation; the existing package publisher still requires the full
 workflow to succeed.
+
+## Native PostgreSQL boundary checks
+
+Run `bash scripts/check-postgres.sh` with Docker available and dependency read
+access configured. It installs the locked package non-editably and creates a
+unique PostgreSQL 16 container, bound only to a random loopback port, then applies
+the pinned DB package's owner migrations. It accepts no external database URL;
+the container and its volumes are removed even if a test fails. Docker or migration
+failures fail the check rather than skip it.
+
+The 12 database regressions adopted from Panopticon #691 cover transaction-local
+tenant context after commit/refresh, foreign-row invisibility, RBAC/ABAC policy
+loading, and active issuer-subject membership across user, group and membership
+tenants. Operations use a role with neither superuser nor RLS-bypass privileges.
+CI runs these against the immutable candidate wheel in the package job, before
+image qualification. Historical HTTP introspection/MFA/account-lifecycle acceptance
+from #691 still needs coordinated auth dependencies; these database checks and
+the fixture-based container routes do not establish live identity acceptance.
