@@ -6,7 +6,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: package-release
+  group: package-release-stable-package-release
   cancel-in-progress: false
 jobs:
   publish:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - name: Publish or promote exact tested artifacts
+      - name: Publish exact tested stable artifacts
         uses: hyperme-sh/.github/actions/release-channel@e0a197a6c3bdac180ef2a8a4678a1ebb8997b0f0
         with:
           workflow: .github/workflows/package.yml

@@ -47,6 +47,15 @@ unless the user explicitly requests that specific change. This includes producti
 releases. Automated tests and advisory reviews are welcome; human approval
 prerequisites are not. GitHub plan upgrades are not release-adoption prerequisites.
 
+### Actions qualification and stable publication
+
+Main merges and workflow completion do not publish GitHub test releases. Exact
+qualification files remain in Actions artifacts with finite retention. The pinned
+publisher independently verifies real stable provenance for subsequent releases
+and verifies the absence of stable history for initial publication. It refuses
+qualification snapshots as baselines even if a caller job reports success.
+This wiring publishes no release and adds no human approval prerequisite.
+
 ## Test qualification and stable acceptance
 
 GitHub `test-<commit>` prereleases are development snapshots. Their embedded
