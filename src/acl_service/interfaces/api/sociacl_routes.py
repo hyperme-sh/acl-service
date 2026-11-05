@@ -180,12 +180,17 @@ async def sociacl_create_share(
 async def sociacl_list_shares(
     request: Request,
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
-    _me: AuthMeResponse = Depends(get_current_user),
+    me: AuthMeResponse = Depends(get_current_user),
 ):
     store = request.app.state.share_store
+    if not me.sub:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Verified subject required")
 
     def _run():
-        return list_shares(store, tenant_id)
+        from acl_service.infrastructure.enforcer_factory import enforce_rbac
+        manager = enforce_rbac(request.app.state.policy_store, tenant_id,
+                               f"user:{me.sub}", "/acl/sociacl/shares", "manage")
+        return list_shares(store, tenant_id, creator_sub=None if manager else str(me.sub))
 
     rows = await asyncio.to_thread(_run)
     return [_owner_payload(r) for r in rows]

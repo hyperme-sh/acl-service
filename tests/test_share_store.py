@@ -27,9 +27,10 @@ class MemoryShareStore:
             self.rows[hashed] = row
             return deepcopy(row), token
 
-    def list_shares(self, tenant_id):
+    def list_shares(self, tenant_id, *, creator_sub):
         with self.lock:
-            return deepcopy(sorted((r for r in self.rows.values() if r.tenant_id == tenant_id),
+            return deepcopy(sorted((r for r in self.rows.values() if r.tenant_id == tenant_id
+                                    and (creator_sub is None or r.created_by == creator_sub)),
                                    key=lambda r: r.created_at, reverse=True))
 
     def lookup_share_by_token_hash(self, hashed):
@@ -79,7 +80,7 @@ def test_snapshot_token_boundary_and_tenant_scope(store, seed):
     assert not hasattr(row, 'token_hash') and not hasattr(row, 'token')
     assert store.lookup_share_by_token_hash(hash_share_token(token)) == row
     assert store.lookup_share_by_token_hash(hash_share_token('not-a-token')) is None
-    assert row not in store.list_shares(seed.tb)
+    assert row not in store.list_shares(seed.tb, creator_sub=None)
     assert not store.decrement_uses(seed.tb, row.id)
     row.resource_descriptor['name'] = 'modified snapshot'
     assert store.lookup_share_by_token_hash(hash_share_token(token)).resource_descriptor == {'name': 'test'}
@@ -104,3 +105,15 @@ def test_expired_and_unlimited_reservations(store, seed):
     unlimited, token = create(store, seed.ta, uses_remaining=None)
     assert all(store.decrement_uses(seed.ta, unlimited.id) for _ in range(3))
     assert store.lookup_share_by_token_hash(hash_share_token(token)).uses_remaining is None
+
+
+def test_creator_scope_and_explicit_manager_scope(store, seed):
+    creator = 'creator-' + str(uuid4())
+    own, _ = create(store, seed.ta, created_by=creator)
+    other, _ = create(store, seed.ta, created_by='other-' + str(uuid4()))
+    legacy, _ = create(store, seed.ta, created_by=None)
+    foreign, _ = create(store, seed.tb, created_by=creator)
+    assert store.list_shares(seed.ta, creator_sub=creator) == [own]
+    visible = store.list_shares(seed.ta, creator_sub=None)
+    assert all(row in visible for row in (own, other, legacy))
+    assert foreign not in visible

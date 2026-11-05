@@ -36,7 +36,9 @@ class ShareStore(Protocol):
         expires_at: datetime | None, uses_remaining: int | None,
         owner_user_id: UUID | None, group_id: UUID | None,
         created_by: str | None) -> tuple[ShareRecord, str]: ...
-    def list_shares(self, tenant_id: UUID) -> list[ShareRecord]: ...
+    def list_shares(self, tenant_id: UUID, *, creator_sub: str | None) -> list[ShareRecord]:
+        """Filter by verified creator; None requires trusted management authorization."""
+        ...
     def lookup_share_by_token_hash(self, token_hash: str) -> ShareRecord | None: ...
     def decrement_uses(self, tenant_id: UUID, share_id: UUID) -> bool: ...
 
@@ -49,8 +51,8 @@ def create_share(store: ShareStore, **kwargs) -> tuple[ShareRecord, str]:
     return store.create_share(**kwargs)
 
 
-def list_shares(store: ShareStore, tenant_id: UUID) -> list[ShareRecord]:
-    return store.list_shares(tenant_id)
+def list_shares(store: ShareStore, tenant_id: UUID, *, creator_sub: str | None) -> list[ShareRecord]:
+    return store.list_shares(tenant_id, creator_sub=creator_sub)
 
 
 def lookup_share_by_token_hash(store: ShareStore, token_hash: str) -> ShareRecord | None:

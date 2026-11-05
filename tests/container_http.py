@@ -79,6 +79,18 @@ class ImageHTTPTests(unittest.TestCase):
         add.assert_called_once()
         remove.assert_called_once()
 
+    def test_share_metadata_scope_comes_from_verified_creator_or_policy(self):
+        permission = self.patches.enter_context(patch.object(enforcer_factory, "enforce_rbac"))
+        listing = self.patches.enter_context(patch.object(sociacl_routes, "list_shares", return_value=[]))
+        for manager in (False, True):
+            permission.return_value = manager
+            response = self.client.get("/api/v1/acl/sociacl/shares?manager=true&creator_sub=other",
+                                       headers=self.headers)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(listing.call_args.kwargs["creator_sub"], None if manager else "verified-user")
+            self.assertEqual(permission.call_args.args[1:],
+                             (self.tenant, "user:verified-user", "/acl/sociacl/shares", "manage"))
+
     def prepare_share(self, predicate):
         link = SimpleNamespace(id=uuid.uuid4(), tenant_id=self.tenant, revoked_at=None,
             expires_at=None, uses_remaining=None, predicate_json=predicate, mode=RELEASE_MODE)

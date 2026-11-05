@@ -76,17 +76,14 @@ def create_share(
         return row, raw
 
 
-def list_shares(sync_engine, tenant_id: uuid.UUID) -> list[SociaclShareLink]:
-    """Tenant-scoped share metadata. Token hash is never returned to callers."""
+def list_shares(sync_engine, tenant_id: uuid.UUID, *, creator_sub: str | None) -> list[SociaclShareLink]:
+    """Tenant-scoped metadata with a trusted caller's creator/manager scope."""
     with Session(sync_engine) as session:
         _set_guc(session, tenant_id)
-        return list(
-            session.scalars(
-                select(SociaclShareLink)
-                .where(SociaclShareLink.tenant_id == tenant_id)
-                .order_by(SociaclShareLink.created_at.desc())
-            ).all()
-        )
+        query = select(SociaclShareLink).where(SociaclShareLink.tenant_id == tenant_id)
+        if creator_sub is not None:
+            query = query.where(SociaclShareLink.created_by == creator_sub)
+        return list(session.scalars(query.order_by(SociaclShareLink.created_at.desc())).all())
 
 
 def decrement_uses(
@@ -124,8 +121,8 @@ class PostgresShareStore:
         row, token = create_share(self._engine, **kwargs)
         return _snapshot(row), token
 
-    def list_shares(self, tenant_id):
-        return [_snapshot(row) for row in list_shares(self._engine, tenant_id)]
+    def list_shares(self, tenant_id, *, creator_sub):
+        return [_snapshot(row) for row in list_shares(self._engine, tenant_id, creator_sub=creator_sub)]
 
     def lookup_share_by_token_hash(self, token_hash):
         row = lookup_share_by_token_hash(self._engine, token_hash)
