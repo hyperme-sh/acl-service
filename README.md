@@ -238,7 +238,23 @@ redelivery retries publication with an idempotent insert. This does not claim
 an atomic database-and-bus transaction.
 
 This is the policy-storage boundary, not a completed service-wide migration:
-SociACL share/recovery/keyring repositories and request-session middleware still
+SociACL share/keyring repositories and request-session middleware still
 require database adapters, and application startup still requires PostgreSQL.
 Those boundaries must be converted before claiming a database-free deployment.
 No generic remote SQL proxy or new database microservice is introduced.
+
+Recovery-session routes also use a service-owned `RecoveryStore` API. The default
+PostgreSQL adapter serializes creation for the same tenant/idempotency key and
+returns immutable snapshots. Retrying creation preserves state, expiry and
+metadata; HTTP responses/events reflect the committed state. Transitions scope
+both tenant and session ID, including when the database role bypasses RLS.
+The contract runs against memory, administrative PostgreSQL and restricted-role
+PostgreSQL, including concurrent retries and cross-tenant rejection.
+
+This API stores recovery workflow metadata; it does not verify recovery proofs,
+release key material or expand authorization. The existing proof endpoint still
+only requests the `awaiting_proof` state. Publication remains separate from the
+storage commit. Advisory locking protects writers using this adapter; direct SQL
+writers must not bypass it. Existing duplicate historical rows are not repaired
+by this change. Share/keyring/witness repositories and session middleware remain
+separate conversion work before PostgreSQL can become optional for the full app.

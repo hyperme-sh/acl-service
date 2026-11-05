@@ -40,7 +40,7 @@ from spanopticon_models.sociacl import (
 from acl_service.deps import get_current_user, require_matched_tenant, optional_authenticated_user
 from acl_service.domain.dtos import SociaclShareCreatedResponse
 from acl_service.domain.sociacl_evaluator import _share_active, evaluate_share_access
-from acl_service.infrastructure.recovery_repo import create_or_get_session, transition_state
+from acl_service.domain.recovery_store import RecoveryStore
 from acl_service.infrastructure.share_repo import (
     create_share,
     decrement_uses,
@@ -271,9 +271,9 @@ async def sociacl_recovery_create(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     me: AuthMeResponse = Depends(get_current_user),
 ):
-    eng = request.app.state.sync_engine
-    row = create_or_get_session(
-        eng,
+    store: RecoveryStore = request.app.state.recovery_store
+    row = await asyncio.to_thread(
+        store.create_or_get_session,
         tenant_id,
         idempotency_key=body.idempotency_key,
         metadata=body.metadata,
@@ -284,13 +284,13 @@ async def sociacl_recovery_create(
         payload=SociaclRecoverySessionPayload(
             tenant_id=tenant_id,
             session_id=row.id,
-            state="pending",  # type: ignore[arg-type]
+            state=row.state,  # type: ignore[arg-type]
             idempotency_key=row.idempotency_key,
         ).to_envelope_payload(),
     )
     return RecoverySessionResponse(
         session_id=row.id,
-        state="pending",
+        state=row.state,
         expires_at=row.expires_at.isoformat(),
     )
 
@@ -307,8 +307,8 @@ async def sociacl_recovery_proof(
     _me: AuthMeResponse = Depends(get_current_user),
 ):
     _ = body
-    eng = request.app.state.sync_engine
-    row = transition_state(eng, tenant_id, session_id, "awaiting_proof")
+    store: RecoveryStore = request.app.state.recovery_store
+    row = await asyncio.to_thread(store.transition_state, tenant_id, session_id, "awaiting_proof")
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     return {"ok": True, "state": row.state}
