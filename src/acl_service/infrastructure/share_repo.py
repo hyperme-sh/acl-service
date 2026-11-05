@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import hashlib
+from copy import deepcopy
 import secrets
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from controlplane_db.models import SociaclShareLink
-
-
-def hash_share_token(raw: str) -> str:
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+from acl_service.domain.share_store import ShareRecord, hash_share_token
 
 
 def _set_guc(session: Session, tenant_id: uuid.UUID) -> None:
@@ -95,16 +92,44 @@ def list_shares(sync_engine, tenant_id: uuid.UUID) -> list[SociaclShareLink]:
 def decrement_uses(
     sync_engine, tenant_id: uuid.UUID, share_id: uuid.UUID
 ) -> bool:
-    """Decrement uses_remaining when finite; returns False if exhausted."""
-    with Session(sync_engine) as session:
+    """Reserve an active use atomically; never acknowledge exhausted/foreign shares."""
+    with Session(sync_engine) as session, session.begin():
         _set_guc(session, tenant_id)
-        obj = session.get(SociaclShareLink, share_id)
-        if obj is None:
+        obj = session.scalars(select(SociaclShareLink).where(
+            SociaclShareLink.id == share_id,
+            SociaclShareLink.tenant_id == tenant_id,
+        ).with_for_update()).first()
+        if obj is None or obj.revoked_at is not None:
             return False
-        if obj.uses_remaining is None:
-            return True
-        if obj.uses_remaining <= 0:
+        # Evaluate the clock after acquiring the lock, not before waiting for it.
+        if obj.expires_at is not None and obj.expires_at <= datetime.now(timezone.utc):
             return False
-        obj.uses_remaining -= 1
-        session.commit()
-        return True
+        if obj.uses_remaining is not None:
+            if obj.uses_remaining <= 0:
+                return False
+            obj.uses_remaining -= 1
+    return True
+
+
+def _snapshot(row: SociaclShareLink) -> ShareRecord:
+    return ShareRecord(**{name: deepcopy(getattr(row, name))
+                          for name in ShareRecord.__dataclass_fields__})
+
+
+class PostgresShareStore:
+    def __init__(self, engine):
+        self._engine = engine
+
+    def create_share(self, **kwargs):
+        row, token = create_share(self._engine, **kwargs)
+        return _snapshot(row), token
+
+    def list_shares(self, tenant_id):
+        return [_snapshot(row) for row in list_shares(self._engine, tenant_id)]
+
+    def lookup_share_by_token_hash(self, token_hash):
+        row = lookup_share_by_token_hash(self._engine, token_hash)
+        return _snapshot(row) if row is not None else None
+
+    def decrement_uses(self, tenant_id, share_id):
+        return decrement_uses(self._engine, tenant_id, share_id)
