@@ -169,9 +169,11 @@ def test_recovery_refresh_restores_tenant_context(monkeypatch, operation):
         refreshed = False
         def __enter__(self): return self
         def __exit__(self,*args): pass
-        def execute(self, stmt, params): self.tenant = params['tid']
-        def scalars(self, stmt): return SimpleNamespace(first=lambda:None)
-        def get(self,*args): return row
+        def execute(self, stmt, params):
+            if 'tid' in params:
+                self.tenant = params['tid']
+        def scalars(self, stmt):
+            return SimpleNamespace(first=lambda: row if operation == "transition" else None)
         def add(self,row): pass
         def commit(self): self.tenant = None
         def refresh(self,row):

@@ -23,7 +23,7 @@ def restricted_engine(migrated_sync_url):
         cx.execute(text("CREATE ROLE acl_review_tester NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT"))
         cx.execute(text("GRANT acl_review_tester TO CURRENT_USER"))
         cx.execute(text("GRANT USAGE ON SCHEMA public TO acl_review_tester"))
-        cx.execute(text("GRANT SELECT, INSERT, UPDATE, DELETE ON acl_casbin_rules, sociacl_share_links TO acl_review_tester"))
+        cx.execute(text("GRANT SELECT, INSERT, UPDATE, DELETE ON acl_casbin_rules, sociacl_share_links, sociacl_recovery_sessions TO acl_review_tester"))
         cx.execute(text("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO acl_review_tester"))
         cx.execute(text("GRANT SELECT ON users, groups, user_group_memberships TO acl_review_tester"))
         # The public-token lookup is an explicit capability, not PUBLIC execute.
