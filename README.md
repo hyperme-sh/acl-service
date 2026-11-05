@@ -198,3 +198,8 @@ and repeats the network-isolated runtime checks without dependency credentials o
 the private-dependency environment. Newly loaded images and temporary files are
 cleaned up. This verifies retained-image replay; live test deployment and tenant
 integration acceptance still remain separate work.
+
+For read-only retrieval and staging of a retained runtime, see
+[runtime preparation](docs/runtime-preparation.md). The preparation tool verifies
+live GitHub qualification evidence and stages exact bytes without loading,
+publishing or deploying the image.
