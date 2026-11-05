@@ -7,17 +7,13 @@ import hashlib
 import json
 import time
 
-from sqlalchemy import text
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import SQLAlchemyError
-
-from controlplane_db.models import SociaclCheckpointRequest
+from acl_service.domain.checkpoint_replay_store import CheckpointReplayStore
 from acl_service.infrastructure import witness_checkpoint as issuer
 from acl_service.infrastructure.witness_checkpoint_authorization import RefreshEnrollment
 from acl_service.infrastructure.witness_signer import WitnessRejected
 
 
-def sign_refresh_once(enrollment: RefreshEnrollment, replay_engine, body, authorization,
+def sign_refresh_once(enrollment: RefreshEnrollment, replay_store: CheckpointReplayStore, body, authorization,
                       continuity_source, policy_reader, policy_payload, policy_signature, policy_root,
                       *, management_private_key, lifetime=300, clock=issuer._clock,
                       monotonic=time.monotonic, replay_timeout_ms=1000):
@@ -39,27 +35,7 @@ def sign_refresh_once(enrollment: RefreshEnrollment, replay_engine, body, author
         ['sociacl-checkpoint-consumption-v1', enrollment.audience, enrollment.client,
          enrollment.root_epoch, challenge], ensure_ascii=False, separators=(',', ':')
     ).encode('utf-8')).hexdigest()
-    try:
-        if replay_engine.dialect.name != 'postgresql':
-            raise WitnessRejected()
-        with replay_engine.begin() as connection:
-            # Force WAL flush before reporting consumption even if the role's
-            # default is asynchronous. A replica/backup rollback still needs
-            # independent operational protection.
-            connection.execute(text('SET LOCAL synchronous_commit = on'))
-            # Transaction-local settings cannot leak to later pooled borrowers.
-            # Bound contention and statement execution separately from the
-            # credential lease; neither timeout permits signing on uncertainty.
-            connection.execute(text("SELECT set_config('lock_timeout', :timeout, true), "
-                                    "set_config('statement_timeout', :timeout, true)"),
-                               {'timeout': f'{replay_timeout_ms}ms'})
-            result = connection.execute(insert(SociaclCheckpointRequest).values(
-                request_hash=key, consumed_at=now).on_conflict_do_nothing().returning(
-                    SociaclCheckpointRequest.request_hash)).scalar_one_or_none()
-            if result is None:
-                raise WitnessRejected()
-    except SQLAlchemyError:
-        raise WitnessRejected() from None
+    replay_store.consume(key, now, timeout_ms=replay_timeout_ms)
     # Include time spent waiting for the replay commit in enrollment freshness.
     def bounded_clock():
         current, elapsed = issuer._sample(clock, monotonic)

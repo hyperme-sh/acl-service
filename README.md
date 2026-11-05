@@ -368,8 +368,19 @@ is rejected, not reconstructed from active keys. A storage exit failure discards
 the response. These records are trusted storage state; current policy signatures
 do not independently authenticate historical completeness.
 
-Timestamp signing and challenge-replay writes still require storage boundaries;
-no replacement persistence backend is deployed. Publication remains
+Timestamp signing now consumes a policy reader; the PostgreSQL signing adapter
+preserves the existing exclusive lock through signing and transaction exit.
+The old repository signing function remains a compatibility wrapper. New callers
+inject the reader into `witness_policy_signing.sign_with_policy`.
+
+`CheckpointReplayStore.consume()` requires atomic, durable one-use consumption
+before signing. Its PostgreSQL adapter retains synchronous commit and bounded
+transaction-local lock/statement timeouts. Duplicates, failures and uncertain
+commits reject, and signing or delivery failure never refunds consumption.
+Authenticated enrollment/client/root-epoch/challenge commitments still define
+the replay namespace; credential renewal cannot reset it. Storage wait time
+remains part of enrollment freshness. Alternative adapters must preserve these
+semantics and operational rollback protection; none is deployed here. Publication remains
 default-off with its existing configuration. Independent root custody, deployed reader privileges,
 edge controls, consumer freshness and management-authority acceptance in #15
 remain required; package qualification does not establish those results.
