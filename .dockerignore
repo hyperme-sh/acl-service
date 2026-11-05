@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/**
+!scripts/
+!scripts/install-image-runtime.py
+**/__pycache__/
+**/*.pyc

@@ -16,14 +16,13 @@ fixture, user-created event handling and packaged RBAC/ABAC models. Checks run
 from source, a normal fresh wheel outside this checkout and a rebuilt sdist wheel.
 Wheel runtime and policy resource bytes must match source.
 
-Original database, checkpoint, policy lifecycle and HTTP integration tests,
-fixtures and Dockerfile remain under core/acl-service as owner integration
-references. That Dockerfile assumes the monorepo layout and is not a standalone
-build. PostgreSQL/RLS, concurrency, container and consumer acceptance remain separate.
+Original database, checkpoint, policy lifecycle and HTTP integration tests and
+fixtures remain under core/acl-service as owner integration references. The
+divergent historical runtime, package metadata and monorepo Dockerfile have been
+removed. PostgreSQL/RLS, concurrency and live consumer acceptance remain separate.
 
 The main-only shared-runner workflow uses pinned actions, read-only contents and exact
-repository credential headers. Actions remains disabled pending approved scoped
-DEPENDENCY_READ_TOKEN access and shared-runner qualification. No live policy, signing
+repository credential headers. CI requires DEPENDENCY_READ_TOKEN access to the pinned private dependencies. No live policy, signing
 key, identity, publishing or deployment operation occurs.
 
 ## Policy administration
@@ -74,3 +73,31 @@ To validate a previously built candidate locally, set `RELEASE_CANDIDATE_DIR` to
 a directory containing exactly its wheel and source distribution when invoking
 `scripts/check-package.sh`. With no candidate directory, the ordinary local
 build-and-test path is unchanged.
+
+## Standalone container
+
+The root Dockerfile installs the frozen dependencies and maintained ACL package
+non-editably. The runtime contains only the installed environment, runs as UID
+10001, and does not use PYTHONPATH or the retired monorepo source tree.
+
+With an existing read credential supplied in the shell environment:
+
+```sh
+docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN -t acl-service:local .
+bash scripts/check-image.sh acl-service:local
+```
+
+BuildKit mounts the credential only for dependency installation. Repository-scoped
+Git headers exist in that process environment; no credential or Git configuration
+is copied into the runtime. Never pass credentials as build arguments.
+
+The image check compares installed runtime/resource hashes with src/acl_service
+and exercises the real application routes through ASGI HTTP in a read-only,
+network-disabled container. Auth, storage and event publishing use deterministic
+fixtures. It covers policy self-grants, authorized administration, tenant
+mismatch, spoofed group subjects, and untrusted identity/context predicates.
+These checks do not qualify real Keycloak, PostgreSQL/RLS, event transport,
+startup against configured services, or deployment. The image is not published
+or deployed by this workflow. CI runs image qualification after immutable
+package validation; the existing package publisher still requires the full
+workflow to succeed.
