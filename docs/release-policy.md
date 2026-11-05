@@ -51,9 +51,9 @@ prerequisites are not. GitHub plan upgrades are not release-adoption prerequisit
 
 Main merges and workflow completion do not publish GitHub test releases. Exact
 qualification files remain in Actions artifacts with finite retention. The pinned
-publisher independently verifies real stable provenance for subsequent releases
-and verifies the absence of stable history for initial publication. It refuses
-qualification snapshots as baselines even if a caller job reports success.
+publisher independently verifies a real immutable stable baseline and refuses
+qualification snapshots even if a caller job reports success. Missing stable
+baselines remain closed; first stable bootstrap is separate implementation work.
 This wiring publishes no release and adds no human approval prerequisite.
 
 ## Test qualification and stable acceptance
