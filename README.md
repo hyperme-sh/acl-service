@@ -119,3 +119,18 @@ CI runs these against the immutable candidate wheel in the package job, before
 image qualification. Historical HTTP introspection/MFA/account-lifecycle acceptance
 from #691 still needs coordinated auth dependencies; these database checks and
 the fixture-based container routes do not establish live identity acceptance.
+
+### Preparation artifacts
+
+The read-only PR lane uploads a preparation candidate before running repository
+validators, then downloads that exact artifact ID in a separate job. Source,
+fresh-wheel and rebuilt-sdist consumers use verified fixtures built from the
+current exact private Git pins. Expected candidate hashes remain in the invoking
+shell and are rechecked; validation uploads evidence, never replacement packages.
+
+`bash scripts/check-package.sh --fixtures` selects this credential-free consumer
+lane locally. The fixture manifest records exact clean source revisions and
+digests; these are not published or accepted synchronized baselines. The retained
+artifact is qualified only when both jobs pass. Versions, dependency adoption,
+prior-baseline comparison, PostgreSQL/RLS and container qualification remain
+separate. Preparation does not create tags, publish or deploy.
