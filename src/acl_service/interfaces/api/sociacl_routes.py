@@ -233,8 +233,9 @@ async def sociacl_evaluate(
     link = lookup_share_by_token_hash(eng, th)
     if link is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
-    decision = evaluate_share_access(
-        eng,
+    decision = await asyncio.to_thread(
+        evaluate_share_access,
+        request.app.state.membership_reader,
         link.tenant_id,
         link,
         body.context,

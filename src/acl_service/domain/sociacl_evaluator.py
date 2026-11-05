@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, select, text
-from sqlalchemy.orm import Session
+from typing import Protocol
 
-from controlplane_db.models import Group, SociaclShareLink, User, UserGroupMembership
+from acl_service.domain.membership_reader import MembershipReader
+from acl_service.domain.policy_store import PolicyStore
 from spanopticon_models.sociacl import (
     SociACLDecision,
     SociACLDecisionKind,
@@ -18,6 +18,14 @@ from spanopticon_models.sociacl import (
 )
 
 from acl_service.infrastructure.enforcer_factory import enforce_rbac
+
+
+class SharePolicyView(Protocol):
+    revoked_at: datetime | None
+    expires_at: datetime | None
+    uses_remaining: int | None
+    predicate_json: dict
+    mode: str
 
 
 def _now_utc() -> datetime:
@@ -32,7 +40,7 @@ def _normalize_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
-def _share_active(link: SociaclShareLink, now: datetime) -> tuple[bool, str]:
+def _share_active(link: SharePolicyView, now: datetime) -> tuple[bool, str]:
     if link.revoked_at is not None:
         return False, "revoked"
     exp = _normalize_utc(link.expires_at)
@@ -67,14 +75,15 @@ def evaluate_predicates(
 
 
 def evaluate_share_access(
-    sync_engine,
+    memberships: MembershipReader,
     tenant_id: uuid.UUID,
-    link: SociaclShareLink,
+    link: SharePolicyView,
     ctx: SociACLRequestContext,
     *,
     authenticated_sub: str | None = None,
     require_casbin_sociacl_gate: bool = False,
     casbin_sub: str | None = None,
+    policy_store: PolicyStore | None = None,
 ) -> SociACLDecision:
     """
     Evaluate SociACL for a share row. Optional Casbin gate: resource ``sociacl:share``, action ``evaluate``.
@@ -97,9 +106,9 @@ def evaluate_share_access(
             matched_predicates=[],
         )
 
-    if require_casbin_sociacl_gate and casbin_sub:
-        ok = enforce_rbac(
-            sync_engine,
+    if require_casbin_sociacl_gate:
+        ok = bool(casbin_sub) and policy_store is not None and enforce_rbac(
+            policy_store,
             tenant_id,
             casbin_sub,
             "sociacl:share",
@@ -127,7 +136,7 @@ def evaluate_share_access(
                 reason_code="sub_required_for_group",
                 matched_predicates=[],
             )
-        if not _user_in_group(sync_engine, tenant_id, authenticated_sub, pred.member_of_group_id):
+        if not _user_in_group(memberships, tenant_id, authenticated_sub, pred.member_of_group_id):
             return SociACLDecision(
                 decision=SociACLDecisionKind.deny,
                 reason_code="not_group_member",
@@ -155,27 +164,8 @@ def evaluate_share_access(
     )
 
 
+
 def _user_in_group(
-    sync_engine, tenant_id: uuid.UUID, subject: str, group_id: uuid.UUID
+    memberships: MembershipReader, tenant_id: uuid.UUID, subject: str, group_id: uuid.UUID,
 ) -> bool:
-    with Session(sync_engine) as session:
-        session.execute(
-            text("SELECT set_config('app.current_tenant_id', :tid, true)"),
-            {"tid": str(tenant_id)},
-        )
-        row = session.scalars(
-            select(UserGroupMembership).join(User, User.id == UserGroupMembership.user_id).join(
-                Group, Group.id == UserGroupMembership.group_id
-            ).where(
-                and_(
-                    UserGroupMembership.tenant_id == tenant_id,
-                    User.tenant_id == tenant_id,
-                    Group.tenant_id == tenant_id,
-                    User.keycloak_sub == subject,
-                    User.is_active.is_(True),
-                    User.deleted_at.is_(None),
-                    UserGroupMembership.group_id == group_id,
-                )
-            )
-        ).first()
-        return row is not None
+    return memberships is not None and memberships.user_in_group(tenant_id, subject, group_id)

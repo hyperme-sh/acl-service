@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
-from acl_service.domain.sociacl_evaluator import _user_in_group
+from acl_service.infrastructure.membership_reader import PostgresMembershipReader
 from acl_service.infrastructure import policy_repo, share_repo
 from acl_service.infrastructure.casbin_adapter import TenantCasbinAdapter
 from acl_service.infrastructure.enforcer_factory import _RESOURCES, make_enforcer
@@ -141,7 +141,7 @@ def test_group_resolution_uses_active_subject_and_all_tenant_scopes(restricted_e
             session.get(UserGroupMembership, data.member).tenant_id = data.foreign
         session.commit()
     owner.dispose()
-    assert _user_in_group(restricted_engine, data.tenant, data.subject, data.group) is (state == "active")
+    assert PostgresMembershipReader(restricted_engine).user_in_group(data.tenant, data.subject, data.group) is (state == "active")
     # A caller cannot substitute the row UUID for the authenticated issuer subject.
-    assert not _user_in_group(restricted_engine, data.tenant, str(data.user), data.group)
-    assert not _user_in_group(restricted_engine, data.foreign, data.subject, data.group)
+    assert not PostgresMembershipReader(restricted_engine).user_in_group(data.tenant, str(data.user), data.group)
+    assert not PostgresMembershipReader(restricted_engine).user_in_group(data.foreign, data.subject, data.group)

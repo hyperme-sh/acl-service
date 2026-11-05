@@ -112,7 +112,7 @@ async def test_share_route_never_uses_payload_identity(monkeypatch, identity):
     me = None if identity == 'anonymous' else AuthMeResponse(
         sub='verified', tenant_id=tid if identity == 'matched' else uuid.uuid4())
     request = Request({'type':'http','headers':[],
-                       'app':SimpleNamespace(state=SimpleNamespace(sync_engine=None))})
+                       'app':SimpleNamespace(state=SimpleNamespace(sync_engine=None, membership_reader=None))})
     await routes.sociacl_evaluate(SociACLEvaluateRequest(token='test-token',
         context=SociACLRequestContext(sub='spoofed')), request, me)
     expected = 'verified' if identity == 'matched' else None
