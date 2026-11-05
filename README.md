@@ -10,29 +10,30 @@ artifacts; no prior release is required. Version changes, tags and publication
 require the owner's explicit authorization to the agent.
 
 Tenant authorization, Casbin policies and SociACL witness/keyring interfaces.
-Version 0.24.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
+First-party code is Apache-2.0 licensed; dependency wheels retain their own licenses.
+Runtime: src/acl_service; factory: acl_service.app.create_app.
 
 ## Development
 
-Use Python 3.13 and uv 0.11.26 with read access to the nine pinned private
-dependency repositories listed in .github/workflows/package.yml.
+Use Python 3.13, uv 0.11.26 and Docker. The credential-free qualification lane
+uses verified dependency wheels built from the exact source pins:
 
-    uv sync --frozen
-    bash scripts/check-package.sh
+    bash scripts/check-package.sh --fixtures
 
-The standalone suite validates witness signatures and expiry, the interoperability
-fixture, user-created event handling and packaged RBAC/ABAC models. Checks run
-from source, a normal fresh wheel outside this checkout and a rebuilt sdist wheel.
-Wheel runtime and policy resource bytes must match source.
+The active `tests/` suite includes the transferred PostgreSQL/RLS, policy HTTP,
+checkpoint replay, keyring persistence and witness tests. Disposable PostgreSQL
+17 containers run the installed database package's migrations. Required Docker
+or migration failures fail qualification; cases cannot silently skip. Source,
+fresh-wheel and rebuilt-sdist runs must pass the same nonempty case inventory.
+Wheel runtime, policy resources, SPDX metadata and Apache license bytes are checked.
+`tests/panopticon-transfer-provenance.json` records immutable source hashes and
+adaptations to the current owner security boundaries. The archived
+`core/acl-service/tests` tree is historical, not the CI test entry point.
 
-Original database, checkpoint, policy lifecycle and HTTP integration tests and
-fixtures remain under core/acl-service as owner integration references. The
-divergent historical runtime, package metadata and monorepo Dockerfile have been
-removed. PostgreSQL/RLS, concurrency and live consumer acceptance remain separate.
-
-The main-only shared-runner workflow uses pinned actions, read-only contents and exact
-repository credential headers. CI requires DEPENDENCY_READ_TOKEN access to the pinned private dependencies. No live policy, signing
-key, identity, publishing or deployment operation occurs.
+Private CI runs on debrunners. The preparation lane needs no private credentials;
+the normal dependency-build lane uses short-lived GitHub App tokens scoped to the
+listed dependency repositories. Tests use generated keys and disposable data.
+They do not activate a live identity provider, publish policies or deploy services.
 
 ## Policy administration
 
@@ -125,9 +126,9 @@ tenant context after commit/refresh, foreign-row invisibility, RBAC/ABAC policy
 loading, and active issuer-subject membership across user, group and membership
 tenants. Operations use a role with neither superuser nor RLS-bypass privileges.
 CI runs these against the immutable candidate wheel in the package job, before
-image qualification. Historical HTTP introspection/MFA/account-lifecycle acceptance
-from #691 still needs coordinated auth dependencies; these database checks and
-the fixture-based container routes do not establish live identity acceptance.
+image qualification. The active package suite additionally exercises HTTP introspection, MFA and
+account-lifecycle guards with the pinned auth package and controlled test responses.
+These checks do not establish live identity-provider acceptance.
 
 ## Test qualification and stable acceptance
 
@@ -153,9 +154,8 @@ or approval gate is added.
 
 The historical qualification records the test-published 0.1.0 artifact from the current tenant
 boundary implementation, with successful main-run provenance and byte-for-byte
-Actions archive verification. The current 0.24.0 qualification changes metadata only. Its
-complete packaged runtime, policy resources and dependency declarations match
-that snapshot; CI binds the declaration to the actual candidate wheel and checks
+Actions archive verification. The current 0.1.0 qualification includes the transferred checkpoint replay
+module and Apache-2.0 packaging; CI binds the declaration to the actual candidate wheel and checks
 the sdist rebuild preserves the same contract. This conservative byte-level
 contract detects implementation changes too, without claiming semantic compatibility.
 PostgreSQL boundary regressions remain required by main package qualification;
@@ -172,9 +172,8 @@ shell and are rechecked; validation uploads evidence, never replacement packages
 `bash scripts/check-package.sh --fixtures` selects this credential-free consumer
 lane locally. The fixture manifest records exact clean source revisions and
 digests; these are not published or accepted synchronized baselines. The retained
-artifact is qualified only when both jobs pass. Full dependency alignment and a qualified 0.24 baseline,
-PostgreSQL/RLS and container qualification remain
-separate. Preparation does not create tags, publish or deploy.
+artifact is qualified only when both jobs pass. Full-stack credential-free deployment and live provider acceptance remain
+separate from package qualification. Preparation does not create tags, publish or deploy.
 
 ### Retained runtime qualification
 

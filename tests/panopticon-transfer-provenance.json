@@ -1,0 +1,125 @@
+{
+  "repository": "FyberLabs/panopticon",
+  "commit": "2cd00fd9a7ebb950999571a81be7cb0a24d9264e",
+  "files": [
+    {
+      "source": "core/acl-service/tests/conftest.py",
+      "destination": "tests/conftest.py",
+      "sha256": "6e81becab2f17000f471f9058e25f277773673c886d0a05c6510708d5fdee2f8"
+    },
+    {
+      "source": "core/acl-service/tests/fixtures/sociacl-checkpoint-issued.json",
+      "destination": "tests/fixtures/sociacl-checkpoint-issued.json",
+      "sha256": "4c87244ced26ad643d9f45aed460ade3987152dd860b0e5eb1afcc9609ddbbd3"
+    },
+    {
+      "source": "core/acl-service/tests/fixtures/sociacl-policy-snapshot.json",
+      "destination": "tests/fixtures/sociacl-policy-snapshot.json",
+      "sha256": "ca515b0b33ae8d8b547f8584c2a0a600e10b41ae784ab65bc299d5a129235692"
+    },
+    {
+      "source": "core/acl-service/tests/fixtures/sociacl-witness.json",
+      "destination": "tests/fixtures/sociacl-witness.json",
+      "sha256": "b7504aa6067ebdb4480bc05ff31f53a12be1c26d75e7cd29adc7408cd129571f"
+    },
+    {
+      "source": "core/acl-service/tests/test_acl_domain_marketplace_ai.py",
+      "destination": "tests/test_acl_domain_marketplace_ai.py",
+      "sha256": "865a800bd2526f3ee27cf965394f248c3550a20aeb899b21cf7088a25759b490"
+    },
+    {
+      "source": "core/acl-service/tests/test_acl_integration.py",
+      "destination": "tests/test_acl_integration.py",
+      "sha256": "db422ae4072fc499c7734282de14125bee44d33558d9b5f545002776847ec1f3"
+    },
+    {
+      "source": "core/acl-service/tests/test_keyring_state_repo.py",
+      "destination": "tests/test_keyring_state_repo.py",
+      "sha256": "efe46c46bf88e0282a43bb86ccc8c4a68303e2ae69de92d696e529d41f93e0e7"
+    },
+    {
+      "source": "core/acl-service/tests/test_review_boundaries.py",
+      "destination": "tests/test_review_boundaries.py",
+      "sha256": "b41ccff1996ff9cfa77bf4d211edfcc3c3c865d3d152df359e0cf7d125321c01"
+    },
+    {
+      "source": "core/acl-service/tests/test_review_boundaries_postgres.py",
+      "destination": "tests/test_review_boundaries_postgres.py",
+      "sha256": "e43d1b277e6ce73befa81cccf70103fa1ac2734e5b9b00062d8fa3e1fbf85396"
+    },
+    {
+      "source": "core/acl-service/tests/test_sociacl_integration.py",
+      "destination": "tests/test_sociacl_integration.py",
+      "sha256": "289452c8d1707c6df4af851561d691af8942cff29be6722fb864b92bfa67b835"
+    },
+    {
+      "source": "core/acl-service/tests/test_user_created_consumer.py",
+      "destination": "tests/test_user_created_consumer.py",
+      "sha256": "68ced0e5ec7dc4193c72870d380f5b632cc74bfa16db85057b45ef5906fa1048"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_checkpoint.py",
+      "destination": "tests/test_witness_checkpoint.py",
+      "sha256": "1730252a0de128a673c9e0288f3d8de42a87924c679c9ceeee32d0749d6e756f"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_checkpoint_authorization.py",
+      "destination": "tests/test_witness_checkpoint_authorization.py",
+      "sha256": "8a8a1680ba77c63576584c932d00e57c2f7433135cb7304ec0e2051b8b167d78"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_checkpoint_continuity.py",
+      "destination": "tests/test_witness_checkpoint_continuity.py",
+      "sha256": "d48594624f5820a398c15a6a2a874d6e26526db22eec4a859885ffb66c8beeb9"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_checkpoint_replay.py",
+      "destination": "tests/test_witness_checkpoint_replay.py",
+      "sha256": "d09c0369e6646ffa68f07fcc73ba4afafffb9ea77a6c9328a1843bbff2f437ff"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_policy_export.py",
+      "destination": "tests/test_witness_policy_export.py",
+      "sha256": "f0b26c73be886d924a162115f215bdd518132afe40dd901d296ebff7e1f46ec6"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_policy_http.py",
+      "destination": "tests/test_witness_policy_http.py",
+      "sha256": "389e597d70c95e1edf999e52d042774cde562d9fd3145b4688969147eb50c9e3"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_policy_ingest.py",
+      "destination": "tests/test_witness_policy_ingest.py",
+      "sha256": "ebd3cc621a957414f22cb6b0a91eaa568ce211196c37dc8df84a5509c3e83899"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_policy_repo.py",
+      "destination": "tests/test_witness_policy_repo.py",
+      "sha256": "41003dc5498c86f782dd82720937d5737953d863be2c17bbea71dcf597a30569"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_policy_snapshot.py",
+      "destination": "tests/test_witness_policy_snapshot.py",
+      "sha256": "eaa768046953250c4bcf2e65c2da881b5536849013387690e57c514ddcd56798"
+    },
+    {
+      "source": "core/acl-service/tests/test_witness_signer.py",
+      "destination": "tests/test_witness_signer.py",
+      "sha256": "f5e03d54315a09ae82a8844171fa0328629927b904d2f8a9c6139e73060aabd5",
+      "adaptation": "Preserve existing fixture-derived key identifier instead of historical branding literal."
+    },
+    {
+      "source": "core/acl-service/src/acl_service/infrastructure/witness_checkpoint_replay.py",
+      "destination": "src/acl_service/infrastructure/witness_checkpoint_replay.py",
+      "sha256": "288bb8a494b556f66172b94a5725106eff0f54a1b77c840b94e6bb360ab4d4dc"
+    }
+  ],
+  "adaptations": [
+    "Disposable database fixtures use installed controlplane_db migrations and explicit psycopg URLs instead of monorepo Alembic configuration.",
+    "Required Docker failures must fail package qualification rather than skip acceptance cases.",
+    "Imports use the owning spanopticon_models package; existing stronger owner boundary assertions are retained.",
+    "Trusted test setup seeds a tenant-scoped policy-management grant; HTTP authorization remains enforced.",
+    "Restricted-role HTTP fixtures explicitly grant only the hardened token-lookup function, retaining NOBYPASSRLS.",
+    "Caller-provided positive vouch claims and blocked handles assert current fail-closed evidence requirements rather than historical untrusted-context authorization."
+  ]
+}

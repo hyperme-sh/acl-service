@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-unset PYTHONPATH UV_NO_SYNC
+unset PYTHONPATH UV_NO_SYNC SKIP_TESTCONTAINERS
 sync_options=()
 run_options=()
 export_options=()
@@ -53,7 +53,7 @@ if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
 else
   check_lock
   sync_environment
-  uv run --frozen "${run_options[@]}" pytest
+  uv run --frozen "${run_options[@]}" pytest --junitxml="$scratch/source.xml"
   uv build --out-dir "$scratch/dist"
 fi
 # Validate the fresh candidate before running any source tests or installing code.
@@ -67,8 +67,8 @@ for qualified_manifest in releases/qualification/current/release.json releases/c
 done
 check_lock
 sync_environment
-if (( ${#fixture_wheels[@]} )); then
-  if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then uv run --frozen --no-sync pytest; fi
+if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
+  uv run --frozen "${run_options[@]}" pytest --junitxml="$scratch/source.xml"
 fi
 uv run --frozen "${run_options[@]}" pytest -q tests_tools
 uv export --frozen "${export_options[@]}" --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
@@ -81,7 +81,7 @@ uv pip uninstall --python "$scratch/venv/bin/python" spanopticon-models auth-ser
 uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" "$scratch"/dist/*.whl
 fi
 cp -R tests "$scratch/"
-(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
+(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests --junitxml="$scratch/wheel.xml")
 # Rebuild from the sdist; a checkout must not supply omitted package files.
 uv run --frozen "${run_options[@]}" python - "$scratch" <<'PY'
 import pathlib, sys, tarfile
@@ -94,11 +94,14 @@ uv run --frozen "${run_options[@]}" python scripts/verify_wheel.py "$scratch/reb
 python3 scripts/export_release_contract.py "$scratch"/rebuilt/*.whl --output "$scratch/rebuilt-contract"
 cmp "$scratch/contract/contract.json" "$scratch/rebuilt-contract/contract.json"
 uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
-(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
+(cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests --junitxml="$scratch/sdist.xml")
 
 # Installed tests may inspect these files, but must not replace validated bytes.
 (cd "$scratch/dist" && sha256sum --check <<< "$distribution_hashes")
 
+python3 scripts/verify-test-results.py "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml"
+
 if [[ -n "${PREPARATION_EVIDENCE_DIR:-}" ]]; then
   python3 scripts/export_release_contract.py "$scratch"/dist/*.whl --output "$PREPARATION_EVIDENCE_DIR"
+  cp "$scratch/source.xml" "$scratch/wheel.xml" "$scratch/sdist.xml" "$PREPARATION_EVIDENCE_DIR/"
 fi

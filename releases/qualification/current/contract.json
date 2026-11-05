@@ -18,6 +18,7 @@
     "acl_service/infrastructure/witness_checkpoint.py": "1a2ce63d8a81911e39a1f63427a4bcb85c7bb73ea0f91208ad1fabce4259ba7c",
     "acl_service/infrastructure/witness_checkpoint_authorization.py": "68e8f9673607af2024c592e7d68c6a7b6ba59479e0e84804e19198b6c1aa6fa6",
     "acl_service/infrastructure/witness_checkpoint_continuity.py": "94f6087c61bdf416f83a45b6125551c5aadd98fd106b346e35431c39287b9666",
+    "acl_service/infrastructure/witness_checkpoint_replay.py": "288bb8a494b556f66172b94a5725106eff0f54a1b77c840b94e6bb360ab4d4dc",
     "acl_service/infrastructure/witness_policy_export.py": "10c7c1c45fd481a9eb95b325a3d96cfa7e86f3aba24611f02d1ac1b8583299dc",
     "acl_service/infrastructure/witness_policy_ingest.py": "9d07b47897b5e25e485926f4bd7da3ca68c3dd4658155a38649616207c326d17",
     "acl_service/infrastructure/witness_policy_publication.py": "fb1d9c4299bc2168e7af4918f12969ea53ffba98ba6d48c2ae4228b277a332c4",
