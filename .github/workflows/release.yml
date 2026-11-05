@@ -9,24 +9,15 @@ concurrency:
   group: package-release-stable-package-release
   cancel-in-progress: false
 jobs:
-  release-admission:
-    if: github.event_name == 'push'
-    uses: hyperme-sh/spanopticon/.github/workflows/component-release.yml@60e605ff39923c61bccc6c732181f82e557be35a
-    with:
-      release-line: '0.24'
-      baseline-ref: ${{ vars.SPANOPTICON_RELEASE_BASELINE_SHA }}
-      requested-version: ${{ github.ref_name }}
   publish:
-    needs: release-admission
     permissions:
       contents: write
       actions: read
-    if: github.event_name == 'push' && needs.release-admission.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Publish exact tested stable artifacts
-        uses: hyperme-sh/.github/actions/release-channel@c16044a6d987d7d912d70bcd09ea731ab2b91b9e
+        uses: hyperme-sh/.github/actions/release-channel@f850d9aba2310f61d7db1294eec1f8ae36b67e0c
         with:
           workflow: .github/workflows/package.yml
           token: ${{ github.token }}

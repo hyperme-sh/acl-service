@@ -68,8 +68,10 @@ an explicit non-stable classification.
 actual immutable stable GitHub release. The pinned shared guard verifies the live
 release channel, stable tag source and asset digests; a test snapshot cannot
 become accepted through a provenance label. No stable baseline is recorded until
-that release exists. Missing stable baselines remain closed in the currently
-merged publisher. Initial stable bootstrap is separate implementation and release
-work; this correction adopts only merged, reviewed guard/publisher commits.
+that release exists. The merged initial-admission path validates the explicit
+candidate and checks complete live history when no baseline is selected. The
+publisher independently validates owning metadata and exact tested bytes, then
+atomically claims the initial source. Later releases require an actual stable
+baseline. Both shared pins reference merged implementations.
 Live deployment and coordinated consumer acceptance remain separate; no reviewer
 or approval gate is added.
