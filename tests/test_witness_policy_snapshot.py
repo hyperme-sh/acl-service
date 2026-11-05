@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from controlplane_db.models import SociaclWitnessPolicy
-from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyWriter
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyWriter, PostgresWitnessPolicyHistoryReader
 from acl_service.infrastructure import witness_policy_ingest as ingest
 from acl_service.infrastructure import witness_policy_snapshot as snapshots
 from acl_service.infrastructure.witness_policy_repo import install_verified_policy, read_policy
@@ -28,7 +28,7 @@ def install(engine, signed):
 
 
 def snapshot(engine, signed):
-    return snapshots.locked_complete_policy_snapshot(engine, *signed, ROOT_KEY.public_key(), AUDIENCE)
+    return snapshots.locked_complete_policy_snapshot(PostgresWitnessPolicyHistoryReader(engine), *signed, ROOT_KEY.public_key(), AUDIENCE)
 
 
 def corrupt(engine, change):
@@ -156,7 +156,7 @@ def test_complete_history_matches_shared_typescript_rust_state_fixture(engine, m
     with Session(engine) as session, session.begin():
         session.add(SociaclWitnessPolicy(id=1, revision=state['revision'], jwks=state['jwks'],
             history={entry['jwk']['kid']: entry for entry in state['history']}))
-    with snapshots.locked_complete_policy_snapshot(engine, *signed, root, state['audience']) as result:
+    with snapshots.locked_complete_policy_snapshot(PostgresWitnessPolicyHistoryReader(engine), *signed, root, state['audience']) as result:
         assert json.loads(result.state_json) == state
         assert json.loads(result.policy_json) == envelope
         assert json.loads(result.state_json)['root'] == fixture['root']
@@ -214,3 +214,17 @@ def test_waiting_reader_rechecks_new_committed_revision(engine):
                 row.history = {kid: {**entry, 'removed': True} for kid, entry in row.history.items()}
             with pytest.raises(WitnessRejected): future.result(timeout=10)
     finally: event.remove(engine, 'before_cursor_execute', started)
+
+
+def test_history_reader_detaches_nested_policy_and_tombstones(engine):
+    install(engine, bundle())
+    reader = PostgresWitnessPolicyHistoryReader(engine)
+    with reader.locked_history() as row:
+        assert row is not None
+        before = json.loads(json.dumps(row.history))
+        row.jwks['keys'].clear()
+        next(iter(row.history.values()))['jwk']['notBefore'] = 0
+        row.history.clear()
+    with reader.locked_history() as reread:
+        assert reread.jwks['keys']
+        assert reread.history == before

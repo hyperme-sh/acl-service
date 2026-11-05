@@ -67,7 +67,7 @@ def _sign_payload(private_key, payload):
 
 
 def sign_checkpoint_for_verified_refresh(
-        engine, policy_payload: bytes, policy_signature: bytes, policy_root, audience: str,
+        policy_reader, policy_payload: bytes, policy_signature: bytes, policy_root, audience: str,
         *, management_private_key, continuity: CheckpointContinuity, client: str,
         challenge: str, lifetime: int = 300, clock: Callable[[], int] = _clock,
         monotonic: Callable[[], float] = time.monotonic,
@@ -101,7 +101,7 @@ def sign_checkpoint_for_verified_refresh(
         initial_time, initial_elapsed = _sample(clock, monotonic)
         management_point = management_private_key.public_key().public_numbers()
         management_root = _b64(management_point.x.to_bytes(32, 'big')) + '.' + _b64(management_point.y.to_bytes(32, 'big'))
-        with locked_complete_policy_snapshot(engine, policy_payload, policy_signature, policy_root, audience) as snapshot:
+        with locked_complete_policy_snapshot(policy_reader, policy_payload, policy_signature, policy_root, audience) as snapshot:
             state = json.loads(snapshot.state_json)
             if (state['root'] == management_root
                     or any(entry['jwk']['x'] + '.' + entry['jwk']['y'] == management_root for entry in state['history'])

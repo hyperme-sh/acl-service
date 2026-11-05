@@ -69,7 +69,7 @@ class RefreshEnrollment:
         except (ValueError, TypeError, KeyError, UnicodeError, RecursionError):
             raise WitnessRejected() from None
 
-    def sign_refresh(self, body, authorization, continuity_source, engine,
+    def sign_refresh(self, body, authorization, continuity_source, policy_reader,
                      policy_payload, policy_signature, policy_root, *, management_private_key,
                      lifetime=300, clock=issuer._clock, monotonic=time.monotonic):
         """Authorize scope before any source/DB access, preserving credential lease.
@@ -88,7 +88,7 @@ class RefreshEnrollment:
                 raise WitnessRejected()
             self.authorize(body, authorization, now)
         return continuity_source.sign_for_verified_refresh(
-            engine, policy_payload, policy_signature, policy_root, self.audience,
+            policy_reader, policy_payload, policy_signature, policy_root, self.audience,
             management_private_key=management_private_key, client=self.client,
             challenge=challenge, lifetime=lifetime, clock=clock, monotonic=monotonic,
             expires_at_limit=self.expires_at, validate_before_return=validate_authorization)

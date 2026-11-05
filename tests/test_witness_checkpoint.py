@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, utils
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 from controlplane_db.models import SociaclWitnessPolicy
+from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicyHistoryReader
 from acl_service.infrastructure import witness_checkpoint as issuer
 from acl_service.infrastructure import witness_policy_ingest as ingest
 from acl_service.infrastructure.witness_policy_repo import install_verified_policy
@@ -32,7 +33,7 @@ def ready(engine,monkeypatch):
     monkeypatch.setattr(ingest.time,'time',lambda:FIXTURE['now'])
     with Session(engine) as session,session.begin():
         session.add(SociaclWitnessPolicy(id=1,revision=state['revision'],jwks=state['jwks'],history={e['jwk']['kid']:e for e in state['history']}))
-    return dict(engine=engine,policy_payload=decode(envelope['payload']),policy_signature=decode(envelope['signature']),
+    return dict(policy_reader=PostgresWitnessPolicyHistoryReader(engine),policy_payload=decode(envelope['payload']),policy_signature=decode(envelope['signature']),
         policy_root=ROOT,audience=state['audience'],management_private_key=MANAGEMENT,
         continuity=issuer.CheckpointContinuity(1,commitment(state)),client='client-enrollment-1',challenge=CHALLENGE)
 
@@ -58,13 +59,13 @@ def test_binds_complete_history_and_earlier_policy_expiry(ready):
     ('challenge',CHALLENGE+'='),('challenge','!'*43),('challenge','A'*42+'B'),('lifetime',0),('lifetime',301),
     ('lifetime',True),('lifetime',1.5),('expires_at_limit',True),('expires_at_limit',-1),('expires_at_limit',9007199254740992),('management_private_key',None),('management_private_key',ec.generate_private_key(ec.SECP384R1()))])
 def test_invalid_inputs_before_database(ready,field,value):
-    ready.update(engine=object());ready[field]=value
+    ready.update(policy_reader=object());ready[field]=value
     with pytest.raises(WitnessRejected): issuer.sign_checkpoint_for_verified_refresh(**ready)
 
 @pytest.mark.parametrize('continuity',[issuer.CheckpointContinuity(0,b'x'*32),issuer.CheckpointContinuity(True,b'x'*32),
     issuer.CheckpointContinuity(9007199254740992,b'x'*32),issuer.CheckpointContinuity(1,b'x'*31),issuer.CheckpointContinuity(1,'x'*32),None])
 def test_invalid_continuity_before_database(ready,continuity):
-    ready.update(engine=object(),continuity=continuity)
+    ready.update(policy_reader=object(),continuity=continuity)
     with pytest.raises(WitnessRejected): issuer.sign_checkpoint_for_verified_refresh(**ready)
 
 @pytest.mark.parametrize('scalar',[17,19,20])
@@ -90,17 +91,17 @@ def test_clock_expiry_rollback_and_stalls(ready,clock,mono):
     walls,elapsed=iter(clock),iter(mono)
     with pytest.raises(WitnessRejected):issuer.sign_checkpoint_for_verified_refresh(**ready,clock=lambda:next(walls),monotonic=lambda:next(elapsed))
 
-def test_writer_waits_for_signing(ready,monkeypatch):
+def test_writer_waits_for_signing(ready,monkeypatch,engine):
     signing,release,writing=Event(),Event(),Event();original=issuer._sign_payload
     def held(*args):
         signing.set();assert release.wait(10);return original(*args)
     def started(conn,cursor,statement,parameters,context,executemany):
         if statement.startswith('INSERT INTO sociacl_witness_policy'):writing.set()
-    monkeypatch.setattr(issuer,'_sign_payload',held);event.listen(ready['engine'],'before_cursor_execute',started)
+    monkeypatch.setattr(issuer,'_sign_payload',held);event.listen(engine,'before_cursor_execute',started)
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             result=pool.submit(issuer.sign_checkpoint_for_verified_refresh,**ready);assert signing.wait(10)
-            removal=pool.submit(install_verified_policy,ready['engine'],9,[])
+            removal=pool.submit(install_verified_policy,engine,9,[])
             try:
                 assert writing.wait(10)
                 with pytest.raises(TimeoutError):removal.result(timeout=0.2)
@@ -108,7 +109,7 @@ def test_writer_waits_for_signing(ready,monkeypatch):
             assert verify_response(result.result(timeout=10))['state']['revision']==8
             assert removal.result(timeout=10).revision==9
         with pytest.raises(WitnessRejected):issuer.sign_checkpoint_for_verified_refresh(**ready)
-    finally:release.set();event.remove(ready['engine'],'before_cursor_execute',started)
+    finally:release.set();event.remove(engine,'before_cursor_execute',started)
 
 @pytest.mark.parametrize('limit',['MAX_PAYLOAD_BYTES','MAX_ENVELOPE_BYTES','MAX_RESPONSE_BYTES'])
 def test_wire_caps(ready,monkeypatch,limit):

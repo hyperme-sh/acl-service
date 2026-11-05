@@ -18,7 +18,7 @@ from acl_service.infrastructure.witness_signer import WitnessRejected
 
 
 def sign_refresh_once(enrollment: RefreshEnrollment, replay_engine, body, authorization,
-                      continuity_source, engine, policy_payload, policy_signature, policy_root,
+                      continuity_source, policy_reader, policy_payload, policy_signature, policy_root,
                       *, management_private_key, lifetime=300, clock=issuer._clock,
                       monotonic=time.monotonic, replay_timeout_ms=1000):
     """Commit consumption before signing; never release it on a lost/failed response.
@@ -66,6 +66,6 @@ def sign_refresh_once(enrollment: RefreshEnrollment, replay_engine, body, author
         if not now <= current < enrollment.expires_at or not started <= elapsed < started + enrollment.expires_at - now:
             raise WitnessRejected()
         return current
-    return enrollment.sign_refresh(body, authorization, continuity_source, engine,
+    return enrollment.sign_refresh(body, authorization, continuity_source, policy_reader,
         policy_payload, policy_signature, policy_root, management_private_key=management_private_key,
         lifetime=lifetime, clock=bounded_clock, monotonic=monotonic)
