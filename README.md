@@ -1,7 +1,7 @@
 # ACL service
 
 Tenant authorization, Casbin policies and SociACL witness/keyring interfaces.
-Version 0.1.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
+Version 0.24.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
 
 ## Development
 
@@ -120,6 +120,18 @@ image qualification. Historical HTTP introspection/MFA/account-lifecycle accepta
 from #691 still needs coordinated auth dependencies; these database checks and
 the fixture-based container routes do not establish live identity acceptance.
 
+## Release compatibility baseline
+
+The accepted bundle records the published 0.1.0 artifact from the current tenant
+boundary implementation, with successful main-run provenance and byte-for-byte
+Actions archive verification. The 0.24.0 candidate changes metadata only. Its
+complete packaged runtime, policy resources and dependency declarations match
+that baseline; CI binds the declaration to the actual candidate wheel and checks
+the sdist rebuild preserves the same contract. This conservative byte-level
+contract detects implementation changes too, without claiming semantic compatibility.
+PostgreSQL boundary regressions remain required by main package qualification;
+provider and live deployment acceptance remain separate.
+
 ### Preparation artifacts
 
 The read-only PR lane uploads a preparation candidate before running repository
@@ -131,6 +143,6 @@ shell and are rechecked; validation uploads evidence, never replacement packages
 `bash scripts/check-package.sh --fixtures` selects this credential-free consumer
 lane locally. The fixture manifest records exact clean source revisions and
 digests; these are not published or accepted synchronized baselines. The retained
-artifact is qualified only when both jobs pass. Versions, dependency adoption,
-prior-baseline comparison, PostgreSQL/RLS and container qualification remain
+artifact is qualified only when both jobs pass. Full dependency alignment and a qualified 0.24 baseline,
+PostgreSQL/RLS and container qualification remain
 separate. Preparation does not create tags, publish or deploy.

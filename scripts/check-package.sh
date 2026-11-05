@@ -59,12 +59,14 @@ fi
 # Validate the fresh candidate before running any source tests or installing code.
 distribution_hashes=$(cd "$scratch/dist" && sha256sum -- *.whl *.tar.gz)
 python3 scripts/verify_wheel.py "$scratch/dist"
+python3 scripts/export_release_contract.py "$scratch"/dist/*.whl --output "$scratch/contract"
+python3 scripts/verify_release_candidate.py releases/candidate/release.json "$scratch/contract/contract.json" "$scratch/contract/evidence.json" acl-service
 check_lock
 sync_environment
 if (( ${#fixture_wheels[@]} )); then
   if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then uv run --frozen --no-sync pytest; fi
-  uv run --frozen --no-sync pytest -q tests_tools
 fi
+uv run --frozen "${run_options[@]}" pytest -q tests_tools
 uv export --frozen "${export_options[@]}" --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
@@ -85,6 +87,8 @@ with tarfile.open(next((root / 'dist').glob('*.tar.gz'))) as archive:
 PY
 uv build --wheel "$scratch"/sdist/* --out-dir "$scratch/rebuilt"
 uv run --frozen "${run_options[@]}" python scripts/verify_wheel.py "$scratch/rebuilt"
+python3 scripts/export_release_contract.py "$scratch"/rebuilt/*.whl --output "$scratch/rebuilt-contract"
+cmp "$scratch/contract/contract.json" "$scratch/rebuilt-contract/contract.json"
 uv pip install --no-config --python "$scratch/venv/bin/python" --no-deps --reinstall "$scratch"/rebuilt/*.whl
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests)
 

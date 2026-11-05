@@ -1,4 +1,4 @@
-"""Inspect complete acl-service wheel contents without importing candidate code."""
+"""Inspect complete ACL wheel contents without importing candidate code."""
 import argparse
 import email.parser
 import hashlib
@@ -17,7 +17,7 @@ def snapshot(wheel):
             raise ValueError('Duplicate or unsafe wheel paths')
         metadata_files = [n for n in names if re.fullmatch(r'acl_service-[^/]+\.dist-info/METADATA', n)]
         if len(metadata_files) != 1:
-            raise ValueError('Expected one acl-service distribution')
+            raise ValueError('Expected one ACL distribution')
         prefix = metadata_files[0].removesuffix('METADATA')
         runtime = [n for n in names if not n.startswith(prefix)]
         if not runtime or any(not n.startswith('acl_service/') for n in runtime):
@@ -32,9 +32,11 @@ def snapshot(wheel):
         contents = {n: archive.read(n) for n in sorted(runtime)}
     root = contents.get('acl_service/__init__.py')
     if root is None:
-        raise ValueError('Missing acl-service package exports')
+        raise ValueError('Missing ACL package exports')
     contract = {'schema_version': 1,
-                'coverage': 'conservative complete packaged acl-service runtime and resources',
+                'coverage': 'conservative complete packaged ACL runtime and dependency declarations; implementation changes require compatibility assessment',
+                'requires_python': metadata.get('Requires-Python'),
+                'requires_dist': sorted(metadata.get_all('Requires-Dist', [])),
                 'packaged_file_sha256': {n: hashlib.sha256(b).hexdigest() for n, b in contents.items()}}
     encoded = (json.dumps(contract, sort_keys=True, indent=2)+'\n').encode()
     evidence = {'schema_version': 1, 'distribution': 'acl-service', 'version': ver,

@@ -41,3 +41,15 @@ def test_runtime_change_is_detected_without_execution(tmp_path):
 ])
 def test_invalid_inventory_or_identity_rejected(tmp_path,change):
     with pytest.raises(ValueError):exporter.snapshot(wheel(tmp_path,change=change))
+
+
+def test_policy_and_dependency_changes_are_detected(tmp_path):
+    original, _ = exporter.snapshot(wheel(tmp_path))
+    def policy(files):
+        files['acl_service/policies/rbac.conf'] = b'[policy_effect]\ne = some(where (p.eft == allow))\n'
+    changed, _ = exporter.snapshot(wheel(tmp_path, change=policy))
+    assert changed != original
+    def dependency(files):
+        files['acl_service-0.2.0.dist-info/METADATA'] += b'Requires-Dist: casbin>=2\n'
+    changed, _ = exporter.snapshot(wheel(tmp_path, change=dependency))
+    assert changed != original

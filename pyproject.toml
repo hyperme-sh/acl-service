@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "acl-service"
-version = "0.1.0"
+version = "0.24.0"
 requires-python = ">=3.13"
 dependencies = [
     "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@edac59b2cc55923c983a11a451c4bed9ce53edef",
@@ -32,7 +32,7 @@ dev = [
 packages = ["src/acl_service"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/tests_artifacts", "/tests_tools", "/src", "/tests", "/integration", "/scripts", "/pyproject.toml", "/uv.lock", "/README.md", "/Dockerfile", "/.dockerignore"]
+include = ["/tests_artifacts", "/src", "/tests", "/integration", "/scripts", "/tests_tools", "/releases", "/pyproject.toml", "/uv.lock", "/README.md", "/Dockerfile", "/.dockerignore"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
