@@ -92,3 +92,12 @@ and event processing using the selected runtime identity. A health response,
 fixture replay or archive checksum alone does not close those gates. The owning
 infra test target and any eventual registry publication/deployment adapter remain
 separate work; this script performs none of them.
+
+### Adapter coverage versus the service contract
+
+The owned PostgreSQL startup probe qualifies one concrete persistence/event
+adapter. It is not a requirement that every deployment use PostgreSQL. Policy
+operations use `PolicyStore`, with shared in-memory/PostgreSQL contract tests;
+the probe selects its event publisher through the transport factory. Direct
+SQL inspection is adapter-specific evidence only. Remaining SociACL repositories
+and database middleware have not yet been converted to replaceable storage APIs.

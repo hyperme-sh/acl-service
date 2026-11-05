@@ -20,7 +20,7 @@ from acl_service.domain.dtos import (
     PolicyRuleDelete,
 )
 from acl_service.infrastructure.enforcer_factory import make_enforcer
-from acl_service.infrastructure.policy_repo import add_rule, delete_rule, list_rules
+from acl_service.domain.policy_store import add_rule, delete_rule, list_rules
 
 router = APIRouter(tags=["ACL"])
 
@@ -55,7 +55,7 @@ async def list_policies(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     _me: AuthMeResponse = Depends(get_current_user),
 ):
-    eng = request.app.state.sync_engine
+    eng = request.app.state.policy_store
 
     def _run():
         return list_rules(eng, tenant_id)
@@ -89,7 +89,7 @@ async def create_policy(
     me: AuthMeResponse = Depends(get_current_user),
     _management: None = Depends(require_permission("/acl/policies", "manage")),
 ):
-    eng = request.app.state.sync_engine
+    eng = request.app.state.policy_store
 
     def _run():
         return add_rule(eng, tenant_id, body.ptype, body.rule)
@@ -121,7 +121,7 @@ async def remove_policy(
     me: AuthMeResponse = Depends(get_current_user),
     _management: None = Depends(require_permission("/acl/policies", "manage")),
 ):
-    eng = request.app.state.sync_engine
+    eng = request.app.state.policy_store
 
     def _run():
         return delete_rule(eng, tenant_id, body.ptype, body.rule)
@@ -153,7 +153,7 @@ async def enforce_check(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="ACL enforce rate limit exceeded for this tenant and user",
         )
-    eng = request.app.state.sync_engine
+    eng = request.app.state.policy_store
     model_file = "model_rbac.conf" if body.model == "rbac" else "model_abac.conf"
 
     def _run():

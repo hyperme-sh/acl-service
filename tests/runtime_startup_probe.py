@@ -10,7 +10,7 @@ import uuid
 
 from sqlalchemy import create_engine, text
 from controlplane_db.migrations import upgrade
-from controlplane_events import PostgresEventPublisher
+from api.infrastructure.messaging.tenant_event_publisher import resolve_event_publisher
 
 URL = os.environ['DATABASE_URL']
 TENANT_A = uuid.UUID(os.environ['FIXTURE_TENANT_A'])
@@ -77,7 +77,8 @@ def check_http():
 
 
 async def publish(events):
-    publisher = PostgresEventPublisher(URL, 'acl-owned-startup-fixture')
+    publisher = resolve_event_publisher(database_url=URL, service_name='acl-owned-startup-fixture',
+        service_bus_connection_string=None)
     await publisher.start()
     try:
         for tenant, user in events:

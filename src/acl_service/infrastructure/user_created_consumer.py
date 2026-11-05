@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
-from sqlalchemy.engine import Engine
+from acl_service.domain.policy_store import PolicyStore
 
 from controlplane_api.event_types import ACL_POLICY_UPDATED_V1, USER_CREATED_V1
 from controlplane_api.config import settings
@@ -14,12 +14,12 @@ from api.infrastructure.messaging.tenant_event_publisher import (
 )
 from controlplane_events.payloads import AclPolicyUpdatedPayload
 from controlplane_events.payloads.user_created import UserCreatedEvent
-from acl_service.infrastructure.policy_repo import add_rule_if_absent
+from acl_service.domain.policy_store import add_rule_if_absent
 
 ACL_USER_CREATED_GROUP = "acl-service-controlplane-events"
 
 
-def build_user_created_consumer(sync_engine: Engine, database_url: str):
+def build_user_created_consumer(store: PolicyStore, database_url: str):
     async def on_user_created(_envelope, payload: UserCreatedEvent) -> None:
         tid = _envelope.tenant_id
         if tid is None:
@@ -29,7 +29,7 @@ def build_user_created_consumer(sync_engine: Engine, database_url: str):
         rule = [str(uid), "user_profile", "read"]
 
         def _add() -> bool:
-            return add_rule_if_absent(sync_engine, tid, "p", rule)
+            return add_rule_if_absent(store, tid, "p", rule)
 
         # The rule may already exist from an earlier path that never published
         # acl.policy.updated. Emit the event either way. The rule insert itself

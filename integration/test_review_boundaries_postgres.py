@@ -13,6 +13,7 @@ from acl_service.domain.sociacl_evaluator import _user_in_group
 from acl_service.infrastructure import policy_repo, share_repo
 from acl_service.infrastructure.casbin_adapter import TenantCasbinAdapter
 from acl_service.infrastructure.enforcer_factory import _RESOURCES, make_enforcer
+from acl_service.infrastructure.policy_repo import PostgresPolicyStore
 from controlplane_db.models import Group, Role, Tenant, User, UserGroupMembership
 
 
@@ -113,7 +114,7 @@ def test_mixed_model_loaders_under_rls(restricted_engine, seed, filename, extra,
         adapter.load_filtered_policy(model, SimpleNamespace(ptype=[], v0=[], v1=[], v2=[], v3=[], v4=[], v5=[]))
         enforcer = casbin.Enforcer(model)
     else:
-        enforcer = make_enforcer(restricted_engine, seed.ta, model_file=filename)
+        enforcer = make_enforcer(PostgresPolicyStore(restricted_engine), seed.ta, model_file=filename)
     args = ["ai", "invoke"] + ([extra] if extra else [])
     assert enforcer.enforce(subject, *args)
     assert not enforcer.enforce("foreign", *args)

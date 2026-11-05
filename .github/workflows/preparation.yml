@@ -53,6 +53,8 @@ jobs:
           expected=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
           bash scripts/check-package.sh --fixtures
           (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$expected")
+      - name: Check policy storage contract against owned PostgreSQL
+        run: .venv/bin/python -m pytest -q integration
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: prepared-evidence
