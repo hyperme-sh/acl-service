@@ -44,9 +44,28 @@ jobs:
           set -euo pipefail
           image="acl-service-check:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
-          docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN -t "$image" .
+          docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label org.opencontainers.image.source=https://github.com/hyperme-sh/acl-service \
+            -t "$image" .
           unset DEPENDENCY_READ_TOKEN
-          bash scripts/check-image.sh "$image"
+          image_id=$(docker image inspect --format '{{.Id}}' "$image")
+          bash scripts/check-image.sh "$image_id"
+          runtime_dir=$(mktemp -d "$RUNNER_TEMP/acl-tested-runtime.XXXXXX")
+          echo "RUNTIME_ARTIFACT_DIR=$runtime_dir" >> "$GITHUB_ENV"
+          docker image save --output "$runtime_dir/runtime.docker.tar" "$image_id"
+          python3 scripts/record_runtime_artifact.py "$runtime_dir/runtime.docker.tar" \
+            --image-id "$image_id" --revision "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
+            --output "$runtime_dir/runtime-provenance.json"
+      - name: Retain qualified local runtime for deployment preparation
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-runtime
+          path: ${{ env.RUNTIME_ARTIFACT_DIR }}/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
   candidate:
     if: github.ref == 'refs/heads/main'
     runs-on:
