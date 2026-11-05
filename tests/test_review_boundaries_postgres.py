@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 
-from acl_service.domain.sociacl_evaluator import _user_in_group
+from acl_service.infrastructure.membership_reader import PostgresMembershipReader
 from acl_service.infrastructure import policy_repo, share_repo
 from acl_service.infrastructure.casbin_adapter import TenantCasbinAdapter
 from acl_service.infrastructure.enforcer_factory import _RESOURCES, make_enforcer
@@ -142,10 +142,10 @@ def test_group_resolution_uses_active_subject_and_all_tenant_scopes(restricted_e
             session.get(UserGroupMembership, data.member).tenant_id = data.foreign
         session.commit()
     owner.dispose()
-    assert _user_in_group(restricted_engine, data.tenant, data.subject, data.group) is (state == "active")
+    assert PostgresMembershipReader(restricted_engine).user_in_group(data.tenant, data.subject, data.group) is (state == "active")
     # A caller cannot substitute the row UUID for the authenticated issuer subject.
-    assert not _user_in_group(restricted_engine, data.tenant, str(data.user), data.group)
-    assert not _user_in_group(restricted_engine, data.foreign, data.subject, data.group)
+    assert not PostgresMembershipReader(restricted_engine).user_in_group(data.tenant, str(data.user), data.group)
+    assert not PostgresMembershipReader(restricted_engine).user_in_group(data.foreign, data.subject, data.group)
 
 
 @pytest.mark.asyncio
@@ -212,3 +212,24 @@ async def test_public_share_http_verifies_identity_and_retains_mfa_lifecycle_gua
                                       headers={"Authorization": "Basic ignored"})).status_code == 401
     finally:
         app.state.sync_engine = original_engine
+
+
+def test_membership_api_observes_deactivation_in_next_decision(restricted_engine, migrated_sync_url, membership):
+    from acl_service.domain.sociacl_evaluator import evaluate_share_access
+    from spanopticon_models.sociacl import SociACLRequestContext, SociACLShareMode
+    data = membership
+    reader = PostgresMembershipReader(restricted_engine)
+    mode = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
+    link = SimpleNamespace(revoked_at=None, expires_at=None, uses_remaining=None,
+        predicate_json={'member_of_group_id': str(data.group)}, mode=mode)
+    def evaluate():
+        return evaluate_share_access(reader, data.tenant, link, SociACLRequestContext(sub='spoofed'),
+            authenticated_sub=data.subject)
+    assert evaluate().decision.value == 'allow'
+    owner = create_engine(migrated_sync_url)
+    try:
+        with owner.begin() as cx:
+            cx.execute(text('UPDATE users SET is_active=false WHERE id=:id'), {'id': data.user})
+        assert evaluate().decision.value == 'deny'
+    finally:
+        owner.dispose()

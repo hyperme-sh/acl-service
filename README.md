@@ -281,3 +281,23 @@ that verifier, create an HTTP endpoint, authorize recovery, or activate deployme
 Existing PostgreSQL durability/security tests remain. Share/witness repositories
 and session middleware still need conversion before the complete runtime can run
 without PostgreSQL.
+
+### Membership lookup boundary
+
+SociACL evaluation takes a `MembershipReader` rather than an engine. The default
+PostgreSQL adapter owns the user/group join and preserves explicit tenant checks
+on all three records, verified subject matching, active-user checks and deletion
+checks. Caller-supplied context cannot establish membership. Reads are uncached;
+a committed deactivation affects the next evaluation. Backend errors propagate
+instead of producing an allow decision. Evaluation runs outside the async HTTP
+loop, and no SQL or ORM type is imported by the predicate evaluator.
+
+The optional Casbin gate takes the existing `PolicyStore` API independently of
+membership storage. If explicitly required, it denies when its trusted subject
+or store is missing, and reads current same-tenant policy. This does not enable
+the optional gate on existing routes or add a new caller permission.
+
+Share creation, token lookup and use consumption still use the PostgreSQL share
+adapter directly; witness storage and request-session middleware also remain to
+convert. The complete runtime still requires PostgreSQL. Replacing the membership
+adapter must preserve current authorization evidence and revocation semantics.

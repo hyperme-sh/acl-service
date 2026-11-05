@@ -27,6 +27,7 @@ from api.infrastructure.tenant_user_rate_limiter import TenantUserRateLimiter
 from acl_service.infrastructure.db_url import sync_database_url
 from acl_service.infrastructure.policy_repo import PostgresPolicyStore
 from acl_service.infrastructure.recovery_repo import PostgresRecoveryStore
+from acl_service.infrastructure.membership_reader import PostgresMembershipReader
 from acl_service.infrastructure.user_created_consumer import build_user_created_consumer
 from acl_service.interfaces.api.routes import router as acl_router
 from acl_service.interfaces.api.sociacl_routes import router as sociacl_router
@@ -56,6 +57,7 @@ def create_app(
         app.state.sync_engine = sync_eng
         app.state.policy_store = PostgresPolicyStore(sync_eng)
         app.state.recovery_store = PostgresRecoveryStore(sync_eng)
+        app.state.membership_reader = PostgresMembershipReader(sync_eng)
         app.state.rate_limiter = TenantUserRateLimiter(
             per_minute=settings.acl_rate_limit_per_minute,
         )
