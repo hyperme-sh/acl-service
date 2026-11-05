@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from controlplane_db.migrations import upgrade
 
 
@@ -18,14 +19,23 @@ def migrated_sync_url():
                     "postgres:16-alpine"], check=True, capture_output=True)
     try:
         port = subprocess.check_output(["docker", "port", name, "5432/tcp"], text=True).strip().rsplit(":", 1)[1]
-        for attempt in range(60):
-            ready = subprocess.run(["docker", "exec", name, "pg_isready", "-U", "postgres"], capture_output=True)
-            if ready.returncode == 0:
-                break
-            time.sleep(1)
-        else:
-            raise RuntimeError("Disposable PostgreSQL did not become ready")
         url = f"postgresql+psycopg://postgres:{password}@127.0.0.1:{port}/postgres"
+        # The image's temporary initialization server is socket-only. Probe the
+        # published TCP endpoint used by migrations, not an in-container socket.
+        probe = create_engine(url, connect_args={"connect_timeout": 1})
+        try:
+            deadline = time.monotonic() + 60
+            while True:
+                try:
+                    with probe.connect() as connection:
+                        connection.execute(text("SELECT 1"))
+                    break
+                except OperationalError:
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError("Disposable PostgreSQL TCP endpoint did not become ready") from None
+                    time.sleep(1)
+        finally:
+            probe.dispose()
         upgrade(url)
         yield url
     finally:
