@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "kind": "qualified-test-snapshot",
+  "stable_release": false,
+  "former_record_path": "releases/accepted",
+  "test_release": "test-878d0687125919cf5fda035971743d7bfbd3da35",
+  "reason": "Test qualification does not establish accepted stable provenance."
+}

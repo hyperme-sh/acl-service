@@ -120,13 +120,29 @@ image qualification. Historical HTTP introspection/MFA/account-lifecycle accepta
 from #691 still needs coordinated auth dependencies; these database checks and
 the fixture-based container routes do not establish live identity acceptance.
 
-## Release compatibility baseline
+## Test qualification and stable acceptance
 
-The accepted bundle records the published 0.1.0 artifact from the current tenant
+GitHub `test-<commit>` prereleases are development snapshots. Their embedded
+package version does not reserve a stable version. Artifact and consumer evidence
+belongs under `releases/qualification`. Owning-package and artifact validation
+remain separate from stable release admission. Future test receipts must carry
+an explicit non-stable classification.
+
+`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
+actual immutable stable GitHub release. The pinned shared guard verifies the live
+release channel, stable tag source and asset digests; a test snapshot cannot
+become accepted through a provenance label. No stable baseline is recorded until
+that release exists. Stable publication remains closed without a valid baseline;
+first stable bootstrap and coordinated release qualification remain separate.
+No stable version, approval prerequisite or deployment is introduced here.
+
+## Artifact qualification
+
+The historical qualification records the test-published 0.1.0 artifact from the current tenant
 boundary implementation, with successful main-run provenance and byte-for-byte
-Actions archive verification. The 0.24.0 candidate changes metadata only. Its
+Actions archive verification. The current 0.24.0 qualification changes metadata only. Its
 complete packaged runtime, policy resources and dependency declarations match
-that baseline; CI binds the declaration to the actual candidate wheel and checks
+that snapshot; CI binds the declaration to the actual candidate wheel and checks
 the sdist rebuild preserves the same contract. This conservative byte-level
 contract detects implementation changes too, without claiming semantic compatibility.
 PostgreSQL boundary regressions remain required by main package qualification;
