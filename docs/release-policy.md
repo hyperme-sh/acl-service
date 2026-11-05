@@ -47,6 +47,15 @@ unless the user explicitly requests that specific change. This includes producti
 releases. Automated tests and advisory reviews are welcome; human approval
 prerequisites are not. GitHub plan upgrades are not release-adoption prerequisites.
 
+### Actions qualification and stable publication
+
+Main merges and workflow completion do not publish GitHub test releases. Exact
+qualification files remain in Actions artifacts with finite retention. The pinned
+publisher independently verifies a real immutable stable baseline and refuses
+qualification snapshots even if a caller job reports success. Missing stable
+baselines remain closed; first stable bootstrap is separate implementation work.
+This wiring publishes no release and adds no human approval prerequisite.
+
 ## Test qualification and stable acceptance
 
 GitHub `test-<commit>` prereleases are development snapshots. Their embedded
@@ -59,6 +68,8 @@ an explicit non-stable classification.
 actual immutable stable GitHub release. The pinned shared guard verifies the live
 release channel, stable tag source and asset digests; a test snapshot cannot
 become accepted through a provenance label. No stable baseline is recorded until
-that release exists. Stable publication remains closed without a valid baseline;
-first stable bootstrap and coordinated release qualification remain separate.
-No stable version, approval prerequisite or deployment is introduced here.
+that release exists. Missing stable baselines remain closed in the currently
+merged publisher. Initial stable bootstrap is separate implementation and release
+work; this correction adopts only merged, reviewed guard/publisher commits.
+Live deployment and coordinated consumer acceptance remain separate; no reviewer
+or approval gate is added.

@@ -43,12 +43,12 @@ can proceed; caller source labels do not establish provenance.
 
 ## Release channels
 
-Successful main-push validation retains the validated Python wheel and source distribution and publishes
-an immutable `test-<commit>` GitHub prerelease. Push a `vMAJOR.MINOR.PATCH`
-tag at that tested commit to promote the exact files to a stable release,
+Successful main-push validation retains the validated Python wheel and source
+distribution as Actions artifacts. Push a `vMAJOR.MINOR.PATCH` tag at that tested
+commit to promote the exact files to a stable release,
 without rebuilding. Repository visibility applies to all package assets.
-Package metadata versions are preserved; these are GitHub distribution snapshots,
-not automatic PyPI publication or service deployment.
+Main builds create no GitHub release or reserved stable version. Stable assets
+are GitHub distributions, not automatic PyPI publication or service deployment.
 
 Promotion requires the original Actions artifact (90-day requested retention;
 organization policy may shorten it). Expired evidence fails closed: validate a
@@ -132,9 +132,11 @@ an explicit non-stable classification.
 actual immutable stable GitHub release. The pinned shared guard verifies the live
 release channel, stable tag source and asset digests; a test snapshot cannot
 become accepted through a provenance label. No stable baseline is recorded until
-that release exists. Stable publication remains closed without a valid baseline;
-first stable bootstrap and coordinated release qualification remain separate.
-No stable version, approval prerequisite or deployment is introduced here.
+that release exists. Missing stable baselines remain closed in the currently
+merged publisher. Initial stable bootstrap is separate implementation and release
+work; this correction adopts only merged, reviewed guard/publisher commits.
+Live deployment and coordinated consumer acceptance remain separate; no reviewer
+or approval gate is added.
 
 ## Artifact qualification
 
