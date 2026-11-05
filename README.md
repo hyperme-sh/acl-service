@@ -60,15 +60,42 @@ SociACL sits beside those rules:
   when publication is configured, and it fails closed on expiry, signature, or
   revision mismatch.
 - `KeyringStore` (`PostgresKeyringStore`) holds verified recovery and wrap
-ciphertext for a principal. Callers reach it through `KeyringStore` after
-they have checked the principal, history, and signatures.
+  ciphertext for a principal. Callers reach it through `KeyringStore` after
+  they have checked the principal, history, and signatures.
 
-Successful policy, share, and recovery writes publish a control-plane event
-after the database commit. The default bus is the PostgreSQL events table. Set
-`AZURE_SERVICE_BUS_CONNECTION_STRING` to use Azure Service Bus on the same
-`controlplane.events.v1` envelope. A later publication failure retries with an
-idempotent insert. The database commit and the bus publish are separate
-operations.
+Successful policy, share, and recovery writes commit in PostgreSQL, then
+publish a control-plane event. The commit and the publish are separate. A
+publish error is returned on the HTTP response, and the process leaves that
+event unpublished. `POST /api/v1/acl/sociacl/shares` mints a new token on every
+call, so repeating it after a publish error creates a second share. An
+identical policy rule returns the existing row, and a recovery session with
+the same idempotency key returns the existing session. A client that calls
+either route again publishes the event on that later call.
+
+Redelivery applies to `user.created.v1` consumption in
+`build_user_created_consumer`. The handler inserts
+`p, <user id>, user_profile, read` with `add_rule_if_absent`, then publishes
+`acl.policy.updated.v1`. If the handler fails, the Postgres consumer marks
+that delivery pending again (default of 5 attempts) and the Service Bus
+consumer abandons the message for the broker to redeliver. The rule insert
+stays one row across those deliveries. Each delivery publishes
+`acl.policy.updated.v1` again.
+
+The default bus is the PostgreSQL `controlplane_events` table. That is the
+transport in the frozen install and the root image. Azure Service Bus uses the
+same `controlplane.events.v1` envelope when
+`AZURE_SERVICE_BUS_CONNECTION_STRING` is set, and it needs
+`azure-servicebus>=7.12.0` from the `servicebus` extra of pinned
+`controlplane-core` 0.1.0
+(`c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8`). `uv.lock` and the image install
+(`uv sync --frozen` in `scripts/install-image-runtime.py`) omit that extra.
+With the variable set and the package absent, `AzureServiceBusSender.start`
+raises `RuntimeError` during startup. Install the package into the environment
+that runs the process, `.venv` locally or `/opt/venv` in the image:
+
+```sh
+uv pip install --python .venv/bin/python 'azure-servicebus>=7.12.0'
+```
 
 | Method | Path | Who calls it |
 | --- | --- | --- |
@@ -167,7 +194,35 @@ read the pinned repositories as a BuildKit secret.
 
 ```sh
 docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN -t acl-service:local .
+```
+
+The container joins Docker's default bridge. `127.0.0.1` on that network is
+the container, so the host PostgreSQL and Keycloak URLs from the local example
+above do not reach those processes. Set `DATABASE_URL` and `KEYCLOAK_JWKS_URL`
+to addresses the container can open. Set `KEYCLOAK_ISSUER` to the `iss` value
+carried in the access tokens.
+
+```sh
 docker run --rm -p 8000:8000 \
+  --add-host=host.docker.internal:host-gateway \
+  -e DATABASE_URL='postgresql+psycopg://controlplane:controlplane123@host.docker.internal:5432/controlplane' \
+  -e KEYCLOAK_JWKS_URL='http://host.docker.internal:8081/realms/controlplane/protocol/openid-connect/certs' \
+  -e KEYCLOAK_ISSUER='http://127.0.0.1:8081/realms/controlplane' \
+  -e SERVICE_NAME=acl-service \
+  -e JWT_SECRET -e REFRESH_TOKEN_SECRET \
+  acl-service:local
+```
+
+`host-gateway` is the host as seen from the bridge. When PostgreSQL and
+Keycloak are containers on a shared user-defined network, use their DNS names
+in `DATABASE_URL` and `KEYCLOAK_JWKS_URL` instead.
+
+On a Linux daemon, `--network host` places the process on the host network
+stack. The `127.0.0.1` URLs from the local example then reach PostgreSQL and
+Keycloak, and the process listens on the host's port 8000.
+
+```sh
+docker run --rm --network host \
   -e DATABASE_URL -e SERVICE_NAME=acl-service \
   -e JWT_SECRET -e REFRESH_TOKEN_SECRET \
   -e KEYCLOAK_JWKS_URL -e KEYCLOAK_ISSUER \
