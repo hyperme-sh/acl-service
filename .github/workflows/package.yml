@@ -14,9 +14,7 @@ jobs:
       producer-attempt: ${{ steps.runtime-build.outputs.producer-attempt }}
     needs: package
     if: github.ref == 'refs/heads/main'
-    runs-on:
-      group: shared-local
-      labels: [self-hosted, linux, x64, debrunner]
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     environment: controlplane-libs-read
     steps:
@@ -80,7 +78,7 @@ jobs:
   runtime-replay:
     needs: image
     if: github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, debrunner]
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -118,9 +116,7 @@ jobs:
           python3 scripts/check-runtime-startup.py "$EXPECTED_IMAGE_ID"
   candidate:
     if: github.ref == 'refs/heads/main'
-    runs-on:
-      group: shared-local
-      labels: [self-hosted, linux, x64, debrunner]
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     outputs:
       artifact-id: ${{ steps.candidate.outputs.artifact-id }}
@@ -151,9 +147,7 @@ jobs:
   source:
     needs: candidate
     if: github.ref == 'refs/heads/main'
-    runs-on:
-      group: shared-local
-      labels: [self-hosted, linux, x64, debrunner]
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     environment: controlplane-libs-read
     steps:
@@ -217,9 +211,7 @@ jobs:
   package:
     needs: [candidate, source]
     if: github.ref == 'refs/heads/main'
-    runs-on:
-      group: shared-local
-      labels: [self-hosted, linux, x64, debrunner]
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 15
     environment: controlplane-libs-read
     steps:
