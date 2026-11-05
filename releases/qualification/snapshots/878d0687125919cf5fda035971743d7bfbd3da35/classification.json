@@ -1,0 +1,10 @@
+{
+  "kind": "qualified-test-snapshot",
+  "stable_release": false,
+  "repository": "hyperme-sh/acl-service",
+  "source_revision": "878d0687125919cf5fda035971743d7bfbd3da35",
+  "release_id": 434677957,
+  "tag": "test-878d0687125919cf5fda035971743d7bfbd3da35",
+  "prerelease": true,
+  "immutable": true
+}

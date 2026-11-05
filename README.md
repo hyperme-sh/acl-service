@@ -43,36 +43,16 @@ can proceed; caller source labels do not establish provenance.
 
 ## Release channels
 
-Successful main-push validation retains the validated Python wheel and source distribution and publishes
-an immutable `test-<commit>` GitHub prerelease. Push a `vMAJOR.MINOR.PATCH`
-tag at that tested commit to promote the exact files to a stable release,
-without rebuilding. Repository visibility applies to all package assets.
-Package metadata versions are preserved; these are GitHub distribution snapshots,
-not automatic PyPI publication or service deployment.
+Main validation retains its exact qualified files in Actions artifacts. It does
+not create GitHub releases or tags. Historical `test-<commit>` prereleases remain
+qualification evidence and do not establish an accepted stable release.
 
-Promotion requires the original Actions artifact (90-day requested retention;
-organization policy may shorten it). Expired evidence fails closed: validate a
-new main revision. The publisher verifies the run, source, workflow and artifact
-digest independently of release metadata. Repository immutable releases must be
-enabled. See the [shared release contract](https://github.com/hyperme-sh/.github/blob/7749591fccd30d46ba9b0adabe82114001c9d0de/actions/release-channel/README.md).
-
-### Immutable release candidate validation
-
-The candidate job builds and uploads `tested-dist` immediately after the build, before running repository validators or tests. Source tests run in their own job. Only after they pass does a separate job
-download that exact artifact ID and run fresh-wheel and rebuilt-sdist checks
-against a disposable copy. Expected hashes remain in the invoking shell and
-are rechecked after validation; neither downloaded nor staged distributions
-may be replaced by tests. Tests cannot replace the
-already uploaded candidate through a post-test staging step: validation never
-uploads artifacts. The publisher requires the entire main-push workflow to
-succeed and promotes only the immutable candidate. Failed validation leaves an
-unpublished candidate, not a successful release. Both jobs keep the existing
-shared-runner policy; this is artifact immutability, not host isolation.
-
-To validate a previously built candidate locally, set `RELEASE_CANDIDATE_DIR` to
-a directory containing exactly its wheel and source distribution when invoking
-`scripts/check-package.sh`. With no candidate directory, the ordinary local
-build-and-test path is unchanged.
+Stable publication requires an explicit `vMAJOR.MINOR.PATCH` tag, the exact
+successful main validation artifact, compatible declared contracts and an actual
+immutable stable baseline. The publisher independently verifies that evidence;
+successful caller jobs alone cannot establish acceptance. Missing evidence and
+first-stable bootstrap remain closed. Package qualification, coordinated consumer
+acceptance and runtime deployment remain separate.
 
 ## Standalone container
 
@@ -131,3 +111,12 @@ the sdist rebuild preserves the same contract. This conservative byte-level
 contract detects implementation changes too, without claiming semantic compatibility.
 PostgreSQL boundary regressions remain required by main package qualification;
 provider and live deployment acceptance remain separate.
+
+### Actions qualification and stable publication
+
+Main merges and workflow completion do not publish GitHub test releases. Exact
+qualification files remain in Actions artifacts with finite retention. The pinned
+publisher independently verifies a real immutable stable baseline and refuses
+qualification snapshots, even if a caller job reports success. Existing valid
+stable records are retained; no release, version change, deployment or human
+approval prerequisite is introduced by this correction.
