@@ -32,6 +32,7 @@ class ImageHTTPTests(unittest.TestCase):
         self.tenant = uuid.uuid4()
         self.app = create_app()
         self.app.state.sync_engine = object()
+        self.app.state.share_store = object()
         self.app.state.membership_reader = object()
         self.app.state.policy_store = object()
         self.user = AuthMeResponse(sub="verified-user", tenant_id=self.tenant)

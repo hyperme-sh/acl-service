@@ -158,6 +158,8 @@ async def test_public_share_http_verifies_identity_and_retains_mfa_lifecycle_gua
 
     data = membership
     original_engine = app.state.sync_engine
+    original_share_store = app.state.share_store
+    app.state.share_store = share_repo.PostgresShareStore(restricted_engine)
     app.state.sync_engine = restricted_engine
     link, token = share_repo.create_share(
         restricted_engine, tenant_id=data.tenant, resource_kind="user", resource_descriptor={},
@@ -212,6 +214,7 @@ async def test_public_share_http_verifies_identity_and_retains_mfa_lifecycle_gua
                                       headers={"Authorization": "Basic ignored"})).status_code == 401
     finally:
         app.state.sync_engine = original_engine
+        app.state.share_store = original_share_store
 
 
 def test_membership_api_observes_deactivation_in_next_decision(restricted_engine, migrated_sync_url, membership):
@@ -231,5 +234,26 @@ def test_membership_api_observes_deactivation_in_next_decision(restricted_engine
         with owner.begin() as cx:
             cx.execute(text('UPDATE users SET is_active=false WHERE id=:id'), {'id': data.user})
         assert evaluate().decision.value == 'deny'
+    finally:
+        owner.dispose()
+
+
+def test_share_reservation_rechecks_revocation_and_tenant(restricted_engine, migrated_sync_url, seed):
+    from datetime import timedelta
+    store = share_repo.PostgresShareStore(restricted_engine)
+    row, token = store.create_share(tenant_id=seed.ta, resource_kind='document',
+        resource_descriptor={}, predicate_json={}, mode='release_if_match', expires_at=None,
+        uses_remaining=1, owner_user_id=None, group_id=None, created_by='synthetic')
+    assert not store.decrement_uses(seed.tb, row.id)
+    owner = create_engine(migrated_sync_url)
+    try:
+        with owner.begin() as cx:
+            cx.execute(text('UPDATE sociacl_share_links SET revoked_at=now() WHERE id=:id'), {'id': row.id})
+        assert not store.decrement_uses(seed.ta, row.id)
+        with owner.begin() as cx:
+            cx.execute(text('UPDATE sociacl_share_links SET revoked_at=NULL, expires_at=:expiry WHERE id=:id'),
+                       {'id': row.id, 'expiry': datetime.now(timezone.utc) - timedelta(seconds=1)})
+        assert not store.decrement_uses(seed.ta, row.id)
+        assert store.lookup_share_by_token_hash(share_repo.hash_share_token(token)).uses_remaining == 1
     finally:
         owner.dispose()

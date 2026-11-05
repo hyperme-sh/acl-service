@@ -301,3 +301,28 @@ Share creation, token lookup and use consumption still use the PostgreSQL share
 adapter directly; witness storage and request-session middleware also remain to
 convert. The complete runtime still requires PostgreSQL. Replacing the membership
 adapter must preserve current authorization evidence and revocation semantics.
+
+### Share storage and active-use reservation
+
+Share routes now use `ShareStore` and detached `ShareRecord` snapshots. PostgreSQL
+owns token generation, hashed-token lookup, RLS sessions and reservation locking;
+raw tokens are returned only by creation, and snapshots expose neither tokens nor
+hashes. Nested metadata is copied so callers cannot mutate stored state through a
+snapshot. Tenant-scoped listing retains its existing authorization scope; tighter
+owner/manager filtering remains tracked in #8.
+
+Evaluation reserves an active use before publishing an allow/notify decision.
+The PostgreSQL adapter locks the tenant/share row, checks revocation and expiry
+after acquiring the lock, then commits a finite decrement before returning true.
+A failed reservation produces `deny/share_unavailable`, including concurrent
+requests that evaluated the same one-use snapshot. Storage errors cannot emit an
+approval. Unlimited shares still require a current active-state check. A later
+publication/response failure can consume a use without delivery; there is no
+unsafe refund or blind retry, and no claim of atomic database-and-bus delivery.
+
+All synchronous share operations and membership evaluation run outside the async
+HTTP loop. Shared memory/administrative PostgreSQL/restricted-role PostgreSQL
+contract tests cover token boundaries, tenant isolation and concurrent consumption;
+HTTP tests cover stale approvals, storage failure and slow operations. Witness
+storage and session middleware remain to convert before PostgreSQL is optional
+for the complete runtime. No new production storage backend is selected here.

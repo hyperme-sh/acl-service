@@ -41,7 +41,7 @@ from acl_service.deps import get_current_user, require_matched_tenant, optional_
 from acl_service.domain.dtos import SociaclShareCreatedResponse
 from acl_service.domain.sociacl_evaluator import _share_active, evaluate_share_access
 from acl_service.domain.recovery_store import RecoveryStore
-from acl_service.infrastructure.share_repo import (
+from acl_service.domain.share_store import (
     create_share,
     decrement_uses,
     hash_share_token,
@@ -137,10 +137,10 @@ async def sociacl_create_share(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     me: AuthMeResponse = Depends(get_current_user),
 ):
-    eng = request.app.state.sync_engine
+    store = request.app.state.share_store
     exp = _parse_expires_iso(body.expires_at)
-    row, raw_token = create_share(
-        eng,
+    row, raw_token = await asyncio.to_thread(
+        create_share, store,
         tenant_id=tenant_id,
         resource_kind=body.resource_kind.value,
         resource_descriptor=body.resource_descriptor,
@@ -182,10 +182,10 @@ async def sociacl_list_shares(
     tenant_id: uuid.UUID = Depends(require_matched_tenant),
     _me: AuthMeResponse = Depends(get_current_user),
 ):
-    eng = request.app.state.sync_engine
+    store = request.app.state.share_store
 
     def _run():
-        return list_shares(eng, tenant_id)
+        return list_shares(store, tenant_id)
 
     rows = await asyncio.to_thread(_run)
     return [_owner_payload(r) for r in rows]
@@ -201,9 +201,9 @@ async def sociacl_resolve_share(token: str, request: Request):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limited")
     if len(token) < 8:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
-    eng = request.app.state.sync_engine
+    store = request.app.state.share_store
     th = hash_share_token(token)
-    link = lookup_share_by_token_hash(eng, th)
+    link = await asyncio.to_thread(lookup_share_by_token_hash, store, th)
     if link is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
     pub = _public_payload(link)
@@ -228,9 +228,9 @@ async def sociacl_evaluate(
     ip = _client_ip(request)
     if not _public_rl.allow(f"eval:{ip}"):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limited")
-    eng = request.app.state.sync_engine
+    store = request.app.state.share_store
     th = hash_share_token(body.token)
-    link = lookup_share_by_token_hash(eng, th)
+    link = await asyncio.to_thread(lookup_share_by_token_hash, store, th)
     if link is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
     decision = await asyncio.to_thread(
@@ -241,6 +241,11 @@ async def sociacl_evaluate(
         body.context,
         authenticated_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None,
     )
+    if decision.decision in (SociACLDecisionKind.allow, SociACLDecisionKind.notify_owner):
+        reserved = await asyncio.to_thread(decrement_uses, store, link.tenant_id, link.id)
+        if not reserved:
+            decision = SociACLDecision(decision=SociACLDecisionKind.deny,
+                reason_code="share_unavailable", matched_predicates=[])
     await get_tenant_event_publisher().publish(
         tenant_id=link.tenant_id,
         event_type=SOCIACL_ACCESS_DECIDED_V1,
@@ -252,11 +257,6 @@ async def sociacl_evaluate(
             actor_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None,
         ).to_envelope_payload(),
     )
-    if decision.decision in (
-        SociACLDecisionKind.allow,
-        SociACLDecisionKind.notify_owner,
-    ):
-        decrement_uses(eng, link.tenant_id, link.id)
     return decision
 
 
