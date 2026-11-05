@@ -1,7 +1,7 @@
 # ACL service
 
 Tenant authorization, Casbin policies and SociACL witness/keyring interfaces.
-Version 0.1.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
+Version 0.24.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
 
 ## Development
 
@@ -135,3 +135,15 @@ become accepted through a provenance label. No stable baseline is recorded until
 that release exists. Stable publication remains closed without a valid baseline;
 first stable bootstrap and coordinated release qualification remain separate.
 No stable version, approval prerequisite or deployment is introduced here.
+
+## Artifact qualification
+
+The historical qualification records the test-published 0.1.0 artifact from the current tenant
+boundary implementation, with successful main-run provenance and byte-for-byte
+Actions archive verification. The current 0.24.0 qualification changes metadata only. Its
+complete packaged runtime, policy resources and dependency declarations match
+that snapshot; CI binds the declaration to the actual candidate wheel and checks
+the sdist rebuild preserves the same contract. This conservative byte-level
+contract detects implementation changes too, without claiming semantic compatibility.
+PostgreSQL boundary regressions remain required by main package qualification;
+provider and live deployment acceptance remain separate.
