@@ -1,0 +1,87 @@
+{
+  "source": "Panopticon witness_checkpoint.sign_checkpoint_for_verified_refresh with PostgreSQL and public fixture scalars 17/18",
+  "expected": {
+    "managementRoot": "EFfgq1eA9HDe_JN40cfIdDe7TG-epVxj2TYmbb14H9o.9vFkWhXL5dyfqbff2W7lp9zBG1xe9PH3jYOzOTxqRaI",
+    "root": "R3dpBMDxzDqcCYS2b3UwGl-mhnjw1kr4uhq840c4pz4.qgBe5rW5VyhiMYVld2SOg4GygEQo1XM_MveH_3Hx_Nw",
+    "rootEpoch": 1,
+    "audience": "panopticon-test",
+    "client": "client-enrollment-1",
+    "challenge": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "minimumRevision": 8,
+    "now": 1700000000
+  },
+  "response": {
+    "type": "sociacl-witness-checkpoint-response-v1",
+    "checkpoint": "{\"type\":\"sociacl-witness-checkpoint-envelope-v1\",\"payload\":\"eyJ0eXBlIjoic29jaWFjbC13aXRuZXNzLWNoZWNrcG9pbnQtdjEiLCJhdWRpZW5jZSI6InBhbm9wdGljb24tdGVzdCIsImNsaWVudCI6ImNsaWVudC1lbnJvbGxtZW50LTEiLCJjaGFsbGVuZ2UiOiJBQUVDQXdRRkJnY0lDUW9MREEwT0R4QVJFaE1VRlJZWEdCa2FHeHdkSGg4Iiwicm9vdEVwb2NoIjoxLCJpc3N1ZWRBdCI6MTcwMDAwMDAwMCwiZXhwaXJlc0F0IjoxNzAwMDAwMTIwLCJzdGF0ZSI6eyJ0eXBlIjoic29jaWFjbC13aXRuZXNzLXBvbGljeS1zdGF0ZS12MSIsInJvb3QiOiJSM2RwQk1EeHpEcWNDWVMyYjNVd0dsLW1obmp3MWtyNHVocTg0MGM0cHo0LnFnQmU1clc1VnloaU1ZVmxkMlNPZzRHeWdFUW8xWE1fTXZlSF8zSHhfTnciLCJhdWRpZW5jZSI6InBhbm9wdGljb24tdGVzdCIsInJldmlzaW9uIjo4LCJqd2tzIjp7ImtleXMiOlt7ImtpZCI6ImtleS0yMCIsImt0eSI6IkVDIiwiY3J2IjoiUC0yNTYiLCJhbGciOiJFUzI1NiIsInVzZSI6InNpZyIsImtleV9vcHMiOlsidmVyaWZ5Il0sIngiOiJnNkFhazNnNVc2dWJ6V29LMER6RmJWYm1zWkpRUmxxVW9qVGNUR3NvMnBvIiwieSI6ImR1U2JiZUwzTWpTdWFsNjUxaEszWEo4aUFydHBJX1ZQLUNRS3FvYjJRTGciLCJub3RCZWZvcmUiOjE2OTk5OTkwMDAsIm5vdEFmdGVyIjoxNzAwMDAxMDAwfV19LCJoaXN0b3J5IjpbeyJqd2siOnsieCI6InkyMG9ZUkFzRENYT09iZkJjUWpGQjNnc1JTSlhpRWlWd2Z4N2RLc0Q3WU0iLCJ5IjoiV05kaFN5VFo3MUZjTmVjUURXMXM1S1NXY1c0dy1qNEQ0NUZRZFN2T3phbyIsImFsZyI6IkVTMjU2IiwiY3J2IjoiUC0yNTYiLCJraWQiOiJrZXktMTkiLCJrdHkiOiJFQyIsInVzZSI6InNpZyIsImtleV9vcHMiOlsidmVyaWZ5Il0sIm5vdEFmdGVyIjoxNzAwMDAxMDAwLCJub3RCZWZvcmUiOjE2OTk5OTkwMDB9LCJyZW1vdmVkIjp0cnVlfSx7Imp3ayI6eyJ4IjoiZzZBYWszZzVXNnVieldvSzBEekZiVmJtc1pKUVJscVVvalRjVEdzbzJwbyIsInkiOiJkdVNiYmVMM01qU3VhbDY1MWhLM1hKOGlBcnRwSV9WUC1DUUtxb2IyUUxnIiwiYWxnIjoiRVMyNTYiLCJjcnYiOiJQLTI1NiIsImtpZCI6ImtleS0yMCIsImt0eSI6IkVDIiwidXNlIjoic2lnIiwia2V5X29wcyI6WyJ2ZXJpZnkiXSwibm90QWZ0ZXIiOjE3MDAwMDEwMDAsIm5vdEJlZm9yZSI6MTY5OTk5OTAwMH0sInJlbW92ZWQiOmZhbHNlfV19fQ\",\"signature\":\"rPfWp4MTILhTpQe1korqgHnDOwS0q86Tv1zABfDTIShixU_qShdtyvw14qbmF47mHnPvna2DE2HUeeAjgFeUiQ\"}",
+    "policy": "{\"type\":\"sociacl-witness-policy-envelope-v1\",\"payload\":\"eyJ0eXBlIjoic29jaWFjbC13aXRuZXNzLXBvbGljeS12MSIsImF1ZGllbmNlIjoicGFub3B0aWNvbi10ZXN0IiwicmV2aXNpb24iOjgsImlzc3VlZEF0IjoxNjk5OTk5OTk5LCJleHBpcmVzQXQiOjE3MDAwMDAxMjAsImp3a3MiOnsia2V5cyI6W3sia2lkIjoia2V5LTIwIiwia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsImFsZyI6IkVTMjU2IiwidXNlIjoic2lnIiwia2V5X29wcyI6WyJ2ZXJpZnkiXSwieCI6Imc2QWFrM2c1VzZ1YnpXb0swRHpGYlZibXNaSlFSbHFVb2pUY1RHc28ycG8iLCJ5IjoiZHVTYmJlTDNNalN1YWw2NTFoSzNYSjhpQXJ0cElfVlAtQ1FLcW9iMlFMZyIsIm5vdEJlZm9yZSI6MTY5OTk5OTAwMCwibm90QWZ0ZXIiOjE3MDAwMDEwMDB9XX19\",\"signature\":\"2Ur7rpUP6d2W5vLZtI6Mn2CVUvzNXnTtJyP3vnjvwsJL2zlMVA2n6leMYx2YSmsOCfVZYayZLRaj5ZYuX183qQ\"}"
+  },
+  "canonical": {
+    "type": "sociacl-witness-checkpoint-v1",
+    "audience": "panopticon-test",
+    "client": "client-enrollment-1",
+    "challenge": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    "rootEpoch": 1,
+    "issuedAt": 1700000000,
+    "expiresAt": 1700000120,
+    "state": {
+      "type": "sociacl-witness-policy-state-v1",
+      "root": "R3dpBMDxzDqcCYS2b3UwGl-mhnjw1kr4uhq840c4pz4.qgBe5rW5VyhiMYVld2SOg4GygEQo1XM_MveH_3Hx_Nw",
+      "audience": "panopticon-test",
+      "revision": 8,
+      "jwks": {
+        "keys": [
+          {
+            "kid": "key-20",
+            "kty": "EC",
+            "crv": "P-256",
+            "alg": "ES256",
+            "use": "sig",
+            "key_ops": [
+              "verify"
+            ],
+            "x": "g6Aak3g5W6ubzWoK0DzFbVbmsZJQRlqUojTcTGso2po",
+            "y": "duSbbeL3MjSual651hK3XJ8iArtpI_VP-CQKqob2QLg",
+            "notBefore": 1699999000,
+            "notAfter": 1700001000
+          }
+        ]
+      },
+      "history": [
+        {
+          "jwk": {
+            "x": "y20oYRAsDCXOObfBcQjFB3gsRSJXiEiVwfx7dKsD7YM",
+            "y": "WNdhSyTZ71FcNecQDW1s5KSWcW4w-j4D45FQdSvOzao",
+            "alg": "ES256",
+            "crv": "P-256",
+            "kid": "key-19",
+            "kty": "EC",
+            "use": "sig",
+            "key_ops": [
+              "verify"
+            ],
+            "notAfter": 1700001000,
+            "notBefore": 1699999000
+          },
+          "removed": true
+        },
+        {
+          "jwk": {
+            "x": "g6Aak3g5W6ubzWoK0DzFbVbmsZJQRlqUojTcTGso2po",
+            "y": "duSbbeL3MjSual651hK3XJ8iArtpI_VP-CQKqob2QLg",
+            "alg": "ES256",
+            "crv": "P-256",
+            "kid": "key-20",
+            "kty": "EC",
+            "use": "sig",
+            "key_ops": [
+              "verify"
+            ],
+            "notAfter": 1700001000,
+            "notBefore": 1699999000
+          },
+          "removed": false
+        }
+      ]
+    }
+  }
+}
