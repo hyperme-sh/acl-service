@@ -8,6 +8,7 @@ from typing import Mapping
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
+from acl_service.domain.witness_policy_reader import WitnessPolicyReader
 from acl_service.infrastructure.witness_policy_export import export_signed_policy
 from acl_service.infrastructure.witness_policy_ingest import MAX_POLICY_BYTES
 
@@ -39,12 +40,12 @@ class WitnessPolicyPublication:
     root_key: ec.EllipticCurvePublicKey
     audience: str
 
-    def export(self, engine) -> dict:
+    def export(self, reader: WitnessPolicyReader) -> dict:
         # Reload signed bytes on every request; never serve a cached last-good
         # bundle after the installed revision changes or the transport expires.
         payload = read_regular_file(self.payload_file, MAX_POLICY_BYTES)
         signature = read_regular_file(self.signature_file, 64)
-        return export_signed_policy(engine, payload, signature, self.root_key, self.audience)
+        return export_signed_policy(reader, payload, signature, self.root_key, self.audience)
 
 
 def load_publication(environ: Mapping[str, str] | None = None) -> WitnessPolicyPublication | None:

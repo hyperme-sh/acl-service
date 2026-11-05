@@ -15,7 +15,7 @@ def witness_policy(request: Request) -> JSONResponse:
     if publication is None:
         return JSONResponse({"error": "not-found"}, status_code=404, headers=NO_STORE)
     try:
-        envelope = publication.export(request.app.state.sync_engine)
+        envelope = publication.export(request.app.state.witness_policy_reader)
     except Exception:
         # Fail closed on unavailable DB/files, expiry, signature or revision mismatch.
         # Do not return paths, SQL details, policy data or a stale cached response.
