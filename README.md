@@ -175,3 +175,20 @@ digests; these are not published or accepted synchronized baselines. The retaine
 artifact is qualified only when both jobs pass. Full dependency alignment and a qualified 0.24 baseline,
 PostgreSQL/RLS and container qualification remain
 separate. Preparation does not create tags, publish or deploy.
+
+### Retained runtime qualification
+
+Successful main image checks retain `tested-runtime` as a private Actions
+artifact for 30 days (subject to organization retention). It contains the exact
+checked image as `runtime.docker.tar` and `runtime-provenance.json`, which binds
+its archive checksum, image config digest, Linux/amd64 platform, source revision,
+and Actions run/attempt. Checks and export use the immutable local image ID.
+The archive config digest and embedded owner/source labels are verified before
+upload; no candidate code is imported by the recorder.
+
+This is deployment preparation. A Docker image config digest is not a registry
+manifest digest. Nothing is pushed to a registry, released or deployed by this
+step. Future publication needs the user's explicit approval, retained exact-byte
+evidence, and separate live authorization/consumer acceptance. Do not rebuild an
+expired archive and claim it is the originally qualified image. Package
+`tested-dist` evidence and its release publisher remain separate.
