@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "source_sha": "878d0687125919cf5fda035971743d7bfbd3da35",
+  "test_release": "https://github.com/hyperme-sh/acl-service/releases/tag/test-878d0687125919cf5fda035971743d7bfbd3da35",
+  "run_url": "https://github.com/hyperme-sh/acl-service/actions/runs/41951937073",
+  "artifact_id": 13381053327,
+  "actions_archive_digest": "sha256:81469022af73d27a8d75af5e3558f0c21719336a0cd3afefedb2bfbdac3c31a2",
+  "wheel_sha256": "5fdeae0b4f397b0e8326e306142a13d388c53d94bfb61558bd8cdb58e09e2e05",
+  "qualification": "Verified successful main-run source/fresh-wheel/rebuilt-sdist checks and exact immutable test-release bytes; conservative complete packaged runtime, policy resources and dependency contract. No live database or deployment acceptance claimed."
+}

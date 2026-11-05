@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "line": "0.1",
+  "components": {
+    "acl-service": {
+      "version": "0.1.0",
+      "contract": "contract.json",
+      "contract_sha256": "6d27187d589a133d43b42554d75704bb97fba18e100dc4f4f48006537159c970",
+      "artifact": {
+        "kind": "package",
+        "uri": "urn:sha256:5fdeae0b4f397b0e8326e306142a13d388c53d94bfb61558bd8cdb58e09e2e05",
+        "sha256": "5fdeae0b4f397b0e8326e306142a13d388c53d94bfb61558bd8cdb58e09e2e05"
+      }
+    }
+  }
+}
