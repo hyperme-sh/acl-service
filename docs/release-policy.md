@@ -1,77 +1,57 @@
 # Release compatibility
 
 This component targets the shared **0.24.x** release line. Components share major
-and minor versions; patch numbers advance independently and must preserve their
-accepted API contracts. Existing package versions are retained until a qualified
-release is prepared; installing this workflow does not qualify those versions.
+and minor versions; patch numbers advance independently while preserving their
+accepted API contracts. `release-policy.json` identifies the owner and owning
+package version files.
 
-`release-policy.json` identifies the owner and every owning package version file.
-The pinned Spanopticon workflow checks this configuration on pull requests.
-Version changes or a `releases/candidate/release.json` submission also require
-release admission. Every tag push and manual release request requires admission.
-A configuration-only result is not a release compatibility result.
+## Published stable baseline
 
-Before attempting a release:
+[v0.24.0](https://github.com/hyperme-sh/acl-service/releases/tag/v0.24.0) is the
+first immutable stable distribution. `releases/accepted` binds its actual GitHub
+release ID, tag source and asset digests. The wheel and source distribution match
+main validation run 42034389382 byte-for-byte. Exact-tag initial admission
+42034791412 and publication 42034791540 passed.
 
-1. Produce a real accepted bundle at `releases/accepted/release.json`, with its
-   contract files and immutable artifact references. Set the repository variable
-   `SPANOPTICON_RELEASE_BASELINE_SHA` to its full 40-character commit SHA. The first
-   baseline needs automated artifact/consumer qualification and provenance;
-   examples and invented digests are not accepted release evidence.
-2. Generate the candidate bundle at `releases/candidate/release.json` from the
-   release artifacts. It must contain exactly this component, use line `0.24`,
-   and match every declared owning package version and the requested tag/version.
-3. Run admission against the trusted baseline. Patch contracts must remain
-   unchanged; changing a published artifact at the same version is rejected.
-   Verify artifact provenance and downstream consumer behavior separately.
-4. Make successful admission and artifact/consumer validation automated
-   prerequisites of the publisher for the exact release. Select the accepted
-   baseline independently of candidate data and retain the validation evidence.
-   This is pipeline validation, not a branch protection or human approval rule.
+Historical test receipts remain under `releases/qualification`. They do not
+reserve stable versions and must never become accepted baselines. Main merges
+retain qualification artifacts in Actions; they do not publish GitHub releases.
 
-Missing baselines fail closed. This workflow neither publishes nor deploys and
-does not enable repository Actions, grant private dependency access, or prove
-that a declared artifact exists. See the [Spanopticon release policy](https://github.com/hyperme-sh/spanopticon/blob/main/docs/releases.md)
+## Subsequent releases
+
+1. Select the verified stable record independently using the repository variable
+   `SPANOPTICON_RELEASE_BASELINE_SHA`. It must identify a full commit containing
+   the accepted record; candidate data cannot select its own baseline.
+2. Generate `releases/candidate/release.json` and its contract from the actual
+   package. Owning metadata, release line, requested version, contract and wheel
+   digest must match. A published version cannot acquire different artifact bytes.
+3. Merge the candidate and qualify that exact main source. Source, fresh wheel,
+   rebuilt sdist, disposable PostgreSQL and image checks must pass. Preserve the
+   original Actions artifact for promotion; missing or expired evidence fails.
+4. Push the matching stable version tag at the qualified commit. Both inline
+   automated admission and the independent publisher validate the release. The
+   publisher promotes the original files without rebuilding, then verifies the
+   immutable release and provenance.
+5. Verify published bytes, record the actual stable provenance, and advance the
+   independently selected baseline. A package release does not establish service
+   deployment or coordinated provider/consumer acceptance.
+
+The initial-admission path is only for an owner with no stable release and no
+selected baseline. It checks complete live history and binds the explicit
+candidate to the exact main artifact. ACL has now completed that bootstrap;
+missing accepted baseline selection cannot substitute for subsequent admission.
+
+Retries of immutable publication verify original evidence and preserve assets.
+The publication workflow retains its automated admission prerequisite, so its
+baseline must stay configured after bootstrap. Configuration-only PR checks are
+not release compatibility evidence.
+
+Private jobs use debrunners. The pinned publisher provisions managed Python 3.12
+through uv without loading caller project configuration or executing caller code.
+Publication receives only its repository-scoped contents-write/actions-read token;
+validation and deployment credentials stay separate.
+
+No required reviewers, branch protections, approval rulesets, environment
+approvals, CODEOWNERS approval requirements or human release/deployment gates
+are required. See the [shared policy](https://github.com/hyperme-sh/spanopticon/blob/main/docs/releases.md)
 for the manifest format and compatibility rules.
-
-The package publisher calls the same pinned admission workflow as a prerequisite
-job for stable tag events, passing the trusted baseline and exact requested tag.
-A failed or skipped admission prevents the contents-write publication job from
-running. The reusable workflow checks the triggering commit and requested version;
-a configuration-only PR result cannot substitute for tag admission. Main test
-snapshots remain separate and do not establish stable release compatibility.
-
-Do not add required reviewers, branch protections, approval rulesets, environment
-approvals, CODEOWNERS approval requirements, or release/deployment approval gates
-unless the user explicitly requests that specific change. This includes production
-releases. Automated tests and advisory reviews are welcome; human approval
-prerequisites are not. GitHub plan upgrades are not release-adoption prerequisites.
-
-### Actions qualification and stable publication
-
-Main merges and workflow completion do not publish GitHub test releases. Exact
-qualification files remain in Actions artifacts with finite retention. The pinned
-publisher independently verifies a real immutable stable baseline and refuses
-qualification snapshots even if a caller job reports success. Missing stable
-baselines remain closed; first stable bootstrap is separate implementation work.
-This wiring publishes no release and adds no human approval prerequisite.
-
-## Test qualification and stable acceptance
-
-GitHub `test-<commit>` prereleases are development snapshots. Their embedded
-package version does not reserve a stable version. Artifact and consumer evidence
-belongs under `releases/qualification`. Owning-package and artifact validation
-remain separate from stable release admission. Future test receipts must carry
-an explicit non-stable classification.
-
-`releases/accepted` and `SPANOPTICON_RELEASE_BASELINE_SHA` are reserved for an
-actual immutable stable GitHub release. The pinned shared guard verifies the live
-release channel, stable tag source and asset digests; a test snapshot cannot
-become accepted through a provenance label. No stable baseline is recorded until
-that release exists. The merged initial-admission path validates the explicit
-candidate and checks complete live history when no baseline is selected. The
-publisher independently validates owning metadata and exact tested bytes, then
-atomically claims the initial source. Later releases require an actual stable
-baseline. Both shared pins reference merged implementations.
-Live deployment and coordinated consumer acceptance remain separate; no reviewer
-or approval gate is added.

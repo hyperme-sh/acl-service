@@ -166,3 +166,13 @@ digests; these are not published or accepted synchronized baselines. The retaine
 artifact is qualified only when both jobs pass. Full dependency alignment and a qualified 0.24 baseline,
 PostgreSQL/RLS and container qualification remain
 separate. Preparation does not create tags, publish or deploy.
+
+
+### First stable distribution
+
+[v0.24.0](https://github.com/hyperme-sh/acl-service/releases/tag/v0.24.0) is
+published and immutable. Its wheel and source archive equal the exact qualified
+main artifacts; `releases/accepted` records the actual stable source and asset
+digests. Historical test snapshots remain qualification only. Live service and
+provider deployment acceptance remain separate. See [release policy](docs/release-policy.md)
+for subsequent releases and independently selected baseline configuration.

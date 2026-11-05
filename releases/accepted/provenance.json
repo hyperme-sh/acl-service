@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "repository": "hyperme-sh/acl-service",
+  "tag": "v0.24.0",
+  "revision": "aab77814dc3f8901262827cc60f1a6b0abf47f0c",
+  "release_id": 435229969,
+  "assets": {
+    "acl_service-0.24.0-py3-none-any.whl": "sha256:473f6f996c9571eed0462b09245f7040475e09ec5bf006a0fe824af52d19c2f1",
+    "acl_service-0.24.0.tar.gz": "sha256:f3faadf13e6f71cbd9d963498d841a0079305a3f0e14dbdaddff33a0f3ca02bc",
+    "release-manifest.json": "sha256:66dd515db5780eb4dad593442244d5f76aefb64c3924289a81ff1e6aaf8d85f3"
+  },
+  "published_release_url": "https://github.com/hyperme-sh/acl-service/releases/tag/v0.24.0",
+  "qualification": "Immutable first stable distribution; published wheel and sdist equal main run 42034389382 artifacts byte-for-byte. Exact-tag initial admission 42034791412 and publication 42034791540 passed. Runtime/provider deployment acceptance remains separate."
+}
