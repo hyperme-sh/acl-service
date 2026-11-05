@@ -1,5 +1,14 @@
 # ACL service
 
+## Current version authority
+
+Current development version: `0.1.0`. The services remain before the unreleased
+0.24.0 milestone. Earlier 0.24/1.0 preparation and publication notes below are
+historical and do not authorize those versions. Existing tags and historical
+artifacts remain untouched. Development uses exact source pins and rebuilt
+artifacts; no prior release is required. Version changes, tags and publication
+require the owner's explicit authorization to the agent.
+
 Tenant authorization, Casbin policies and SociACL witness/keyring interfaces.
 Version 0.24.0. Runtime: src/acl_service; factory: acl_service.app.create_app.
 
