@@ -1,0 +1,72 @@
+{
+  "current": {
+    "action": "put",
+    "row": {
+      "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+      "rotationSeq": 0,
+      "signingPub": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+      "epub": "6mjXtv7fC3GHiTjVHXH4cp4Ky4wsbfiz156KS5CUnuA.KidEyXLJ_OeHAUqWSo6gyE1xT-qk3oI_6FoiSk3QSPo",
+      "bytesHex": "01111111111111111111111111111111111111111111111111000000000000000011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "signature": "3e1410d5ae7f91c05c8e9a11505b41c674cebba6243676e5e9502de4a550e0f2476273ee73b03e9be160c5a093a66b4e24922c5b9167c7008745aaa242186977"
+  },
+  "pending": {
+    "action": "put",
+    "row": {
+      "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+      "rotationSeq": 1,
+      "signingPub": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg.B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+      "epub": "sBoXKnakYCyS0yQsuJfd4wJMdA3rshW0xrCq6Twikak.6FwQdDI32tVv7A4t-6cDeRwA93Acfha9_XxIU4_Hf-I",
+      "bytesHex": "01111111111111111111111111111111111111111111111111010000000000000011111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "signature": "a5f8b3fced97da3dc27cc25b8c9c3c92a4d88f005c1760c5dcd0420278817d031001dc9a478faf0f60e82cccab250f3c817366e7872758d81258c3e5e0f66a00"
+  },
+  "commit": {
+    "action": "commit",
+    "signature": "b8ee855edffa376a2959ffe3eba04e34cc610f04a1b513a61c65b66dee801406590c9b4675cd4f69342a3c39bbf6a435a0998086698562b85b3a6140326851a3"
+  },
+  "deleteCurrent": {
+    "action": "delete",
+    "rotationSeq": 0,
+    "signature": "449d229f78596a1fa2803e3f8d35cf9287794dff79745d6cb23ca5ac5d759e730a8bd26b6cb01f830af1ea0f6f7498a1a9592359a62c1e94785a7ec9ad6e9c98"
+  },
+  "deleteCommitted": {
+    "action": "delete",
+    "rotationSeq": 1,
+    "signature": "9fe93f342c8a1f570826c8c91ae18bbccf86e732f4d3925561ad2750ba65edd1392655777d0a25af27804cc534acec8ce1ad49302943dddc21374aa74eb7bc14"
+  },
+  "wrap": {
+    "action": "put",
+    "row": {
+      "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+      "wrapId": "wrap_p_6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5_01010101010101010101010101010101",
+      "class": "delivery",
+      "epub": "6mjXtv7fC3GHiTjVHXH4cp4Ky4wsbfiz156KS5CUnuA.KidEyXLJ_OeHAUqWSo6gyE1xT-qk3oI_6FoiSk3QSPo",
+      "ciphertextHex": "112233",
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+    },
+    "signature": "34c0d3cda873d5da44492a86c93e2d9eebe8bc550846763ac73f7e2e5a6febb512bcc3e239a20ca4751cc58bbe9e5c23f01018d2849d8cf611c23a8d8ccae420"
+  },
+  "deleteWrap": {
+    "action": "delete",
+    "wrapId": "wrap_p_6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5_01010101010101010101010101010101",
+    "signature": "f0d5f3db220f86e8cd4098cb5b19bb47a7b911a13bc5e7c36fc8d001d542437d19d4b3853323960e5e2ca9bb0790f94ee25ec3dd579fd093cb8217e8a5eaacc9"
+  },
+  "genesisWrap": {
+    "action": "put",
+    "row": {
+      "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+      "wrapId": "wrap_p_6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5_01010101010101010101010101010101",
+      "class": "genesis",
+      "epub": "6mjXtv7fC3GHiTjVHXH4cp4Ky4wsbfiz156KS5CUnuA.KidEyXLJ_OeHAUqWSo6gyE1xT-qk3oI_6FoiSk3QSPo",
+      "ciphertextHex": "112233",
+      "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab"
+    },
+    "signature": "fa30fa7826e75dc19fa0e3d931bda40a6411e3e6ec781de4861674e195f1ce9239c3a69d4938d67ecec10005b4600f1d5edbee9d6a9c0654c4da1f29999f7163"
+  },
+  "deleteGenesis": {
+    "action": "delete",
+    "wrapId": "wrap_p_6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5_01010101010101010101010101010101",
+    "signature": "9e7d6debf2ad04c0f814107b369da80bc71ce24fa6d2b972d2ceb623fa9a57392c80ff7e963c5b1d51d087a84e33819ee69790934fcadd023f7d275cc232ee7d"
+  }
+}

@@ -4,7 +4,7 @@ from contextlib import closing
 from pathlib import Path
 
 from acl_service.domain.history_store import HistoryConflict, HistorySnapshot
-from acl_service.domain.keyring_store import MAX_GENERATION, StoreRejected
+from acl_service.domain.keyring_store import MAX_GENERATION, StoreKind, StoreRejected
 
 
 class SqliteHistoryStore:
@@ -22,6 +22,12 @@ class SqliteHistoryStore:
             db.execute("""CREATE TABLE IF NOT EXISTS history_head_floors (
                 principal TEXT PRIMARY KEY NOT NULL REFERENCES history_accounts(principal),
                 head INTEGER NOT NULL CHECK (head >= 0))""")
+
+            db.execute("""CREATE TABLE IF NOT EXISTS history_ciphertext (
+                principal TEXT NOT NULL REFERENCES history_accounts(principal),
+                kind TEXT NOT NULL CHECK(kind IN ('recovery', 'wraps')),
+                generation INTEGER NOT NULL, payload BLOB NOT NULL,
+                PRIMARY KEY(principal, kind))""")
 
     def _connect(self):
         db = sqlite3.connect(self.path)
@@ -112,3 +118,31 @@ class SqliteHistoryStore:
             return revision, {
                 p: HistorySnapshot(p, genesis, tuple(entries[p])) for p, genesis in accounts.items()
             }
+
+    def read_ciphertext(self, principal: str, kind: StoreKind) -> tuple[int, bytes]:
+        if kind not in ("recovery", "wraps"):
+            raise StoreRejected()
+        with closing(self._connect()) as db:
+            row = db.execute("SELECT generation, payload FROM history_ciphertext "
+                             "WHERE principal = ? AND kind = ?", (principal, kind)).fetchone()
+            return row if row is not None else (0, b"")
+
+    def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,
+                                  generation: int, head: int, authority_revision: int) -> None:
+        if (kind not in ("recovery", "wraps") or not isinstance(payload, bytes)
+                or type(generation) is not int or not 0 <= generation < MAX_GENERATION):
+            raise StoreRejected()
+        with closing(self._connect()) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            if authority_revision != self._authority_revision(db):
+                raise HistoryConflict("authority changed before ciphertext commit")
+            self._observe_floor(db, principal, head)
+            if generation == 0:
+                updated = db.execute("INSERT INTO history_ciphertext VALUES (?, ?, 1, ?) "
+                                     "ON CONFLICT(principal, kind) DO NOTHING", (principal, kind, payload))
+            else:
+                updated = db.execute("UPDATE history_ciphertext SET generation=generation+1, payload=? "
+                                     "WHERE principal=? AND kind=? AND generation=?",
+                                     (payload, principal, kind, generation))
+        if updated.rowcount != 1:
+            raise StoreRejected()

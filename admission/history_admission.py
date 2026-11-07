@@ -82,6 +82,10 @@ class HistoryAdmission:
 
     def observe_store_head(self, principal: str):
         """Observe committed authority for recovery and wrap; never authorize a later write."""
+        head, _ = self._observed_snapshot(principal)
+        return head
+
+    def _observed_snapshot(self, principal):
         revision, accounts = self.store.read_authority()
         snapshot = accounts.get(principal)
         if snapshot is None:
@@ -93,7 +97,23 @@ class HistoryAdmission:
             entries=[_record(row) for row in snapshot.entries], peers=_peer_inputs(principal, accounts),
         ))
         self.store.observe_head(principal, result["sequence"], authority_revision=revision)
-        return result
+        return result, revision
+
+    def apply_store_operation(self, principal: str, kind: str, operation: dict):
+        """Apply a signed ciphertext mutation once. Conflicts require a fresh signed operation."""
+        head, revision = self._observed_snapshot(principal)
+        generation, payload = self.store.read_ciphertext(principal, kind)
+        message = dict(principal=principal, kind=kind, head=head, generation=generation,
+                       rows=json.loads(payload) if payload else {}, operation=operation)
+        verified = subprocess.run(
+            ["node", Path(__file__).with_name("store-operation.mjs")],
+            input=json.dumps(message, allow_nan=False).encode(), timeout=10, stdout=subprocess.PIPE,
+        )
+        if verified.returncode or not verified.stdout:
+            raise AdmissionRejected("invalid signed store operation")
+        self.store.write_verified_ciphertext(principal, kind, verified.stdout, generation=generation,
+                                             head=head["sequence"], authority_revision=revision)
+        return generation + 1
 
     def enroll(self, principal: str, genesis: bytes, signature: str):
         now = int(self.clock())
