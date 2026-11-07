@@ -1,0 +1,9 @@
+{
+  "name": "acl-history-admission",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=24"},
+  "dependencies": {
+    "sociacl-ids": "https://github.com/FyberLabs/SociACL/releases/download/ids-test-779c4d752c1f0afadc6b1b93b7f1f2535f3b4ffd/sociacl-ids-0.10.0.tgz"
+  }
+}

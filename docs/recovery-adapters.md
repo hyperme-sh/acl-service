@@ -39,3 +39,30 @@ verifier, and serialization of the resolved snapshot revision with the final
 floor/ciphertext operation. A subsequent admission can invalidate a snapshot
 immediately after a read. No HTTP route currently grants enrollment or
 accepts caller-supplied history.
+
+### Authenticated admission qualification
+
+The internal adapter in `admission/history_admission.py` accepts an independently
+provisioned exclusive-from-genesis grant and a service-owned witness policy
+provider. Provisioning must establish that the principal was created under
+this authority. Possession of an existing signing key alone cannot establish
+exclusive history. The grant issuer supplies an unpredictable nonce and an
+expiry. The genesis key signs SociACL length-prefixed UTF-8 fields in order:
+`acl-service-history-enrollment-v1`, authority, principal, nonce, decimal
+expiry in Unix seconds, and the SociACL record ID of the witnessed genesis
+encryption-key binding. The verifier authenticates both proofs before the
+storage API creates the immutable account.
+
+The adapter admits pre-rotation wallet links, OIDC links and witnessed
+revocations. It reads one enrolled snapshot, verifies the candidate using
+the pinned SociACL package, and submits the original bytes with the expected
+revision. Storage conflicts require reverification. Link admission authenticates
+the record; cross-account wallet exclusivity requires a separate complete index.
+Rotation admission and fork handling remain pending. Keep recovery and wrap
+disabled for this qualification backend.
+
+From `admission/`, use Node 24, run `npm ci --ignore-scripts`, then
+`PYTHONPATH=../src python3 -m unittest -v test_admission`. Fixtures are
+synthetic cases from SociACL records.json at the revision pinned in the
+package lock, plus a domain-specific enrollment signature. This adapter runs
+from the checkout and has no public HTTP or container entry point yet.
