@@ -144,5 +144,5 @@ class SqliteHistoryStore:
                 updated = db.execute("UPDATE history_ciphertext SET generation=generation+1, payload=? "
                                      "WHERE principal=? AND kind=? AND generation=?",
                                      (payload, principal, kind, generation))
-        if updated.rowcount != 1:
-            raise StoreRejected()
+            if updated.rowcount != 1:
+                raise StoreRejected()
