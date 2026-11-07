@@ -25,7 +25,7 @@
     "acl_service/infrastructure/policy_repo.py": "c0f532f83648784a118498a878a8e7dadcb63d61217358687053b025e614c8bf",
     "acl_service/infrastructure/recovery_repo.py": "d34c154ea39abd6b783f4571a552e21f0856cc690756ffe46af8e8bbfb0d90cf",
     "acl_service/infrastructure/share_repo.py": "f520d47a545d1f4223650783cef53b50a4a416c9f31c75273cdcf1f01eaf8af9",
-    "acl_service/infrastructure/sqlite_history_store.py": "aca6b14dc005beebb25cfdc22a7a5bd3715c8fd2065c92ac7726ae3bc05a5266",
+    "acl_service/infrastructure/sqlite_history_store.py": "0f69861f3c19d3b2cd0d1a3fc886008ae2d3d791e641db31ac018b4fcbd27de4",
     "acl_service/infrastructure/user_created_consumer.py": "a2e067e7d1f555287eacfc11bfceb77ebee26d1200922975376c87de98b2b8ba",
     "acl_service/infrastructure/witness_checkpoint.py": "ec77677a5dcfbb61156bd8f02ab7a637b9a2ea3cf062fc3a4aacf0eb225ceebe",
     "acl_service/infrastructure/witness_checkpoint_authorization.py": "c641597946bd057d74914e525f0fdd9a0ef7c4d0c75b5f553285687f03047ae8",
