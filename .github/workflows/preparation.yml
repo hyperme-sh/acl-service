@@ -53,6 +53,13 @@ jobs:
           expected=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
           bash scripts/check-package.sh --fixtures
           (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$expected")
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Exercise signed ciphertext HTTP writes with the pinned verifier
+        run: |
+          npm ci --prefix admission --ignore-scripts --no-audit
+          PYTHONPATH=tests .venv/bin/python -m pytest -p conftest -q admission/test_signed_http.py
       - name: Check policy storage contract against owned PostgreSQL
         run: .venv/bin/python -m pytest -q integration
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

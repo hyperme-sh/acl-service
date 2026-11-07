@@ -5,14 +5,10 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from acl_service.domain.history_store import HistoryConflict, HistoryStore
+from acl_service.domain.history_store import AdmissionRejected, HistoryConflict, HistoryStore
 
 
 FORK_PREFIX = b"acl-rotation-fork-v1\x00"
-
-
-class AdmissionRejected(ValueError):
-    pass
 
 
 class RotationFork(AdmissionRejected):

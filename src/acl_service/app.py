@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from collections.abc import Mapping
+from types import MappingProxyType
+from uuid import UUID
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
@@ -37,6 +40,8 @@ from acl_service.middleware import AclServiceDbMiddleware
 from acl_service.infrastructure.witness_policy_publication import load_publication
 from acl_service.interfaces.api.witness_policy_routes import router as witness_policy_router
 
+from acl_service.interfaces.api.signed_store_routes import SignedStoreBinding, router as signed_store_router
+
 logger = get_logger(__name__)
 
 
@@ -44,6 +49,7 @@ def create_app(
     *,
     test_event_sink: list | None = None,
     service_name: str | None = None,
+    signed_store_bindings: Mapping[tuple[UUID, str], SignedStoreBinding] | None = None,
 ) -> FastAPI:
     svc_name = service_name or settings.service_name
 
@@ -147,6 +153,9 @@ def create_app(
 
     app.openapi = custom_openapi
 
+    app.state.signed_store_bindings = (MappingProxyType(dict(signed_store_bindings))
+                                       if signed_store_bindings is not None else None)
+    app.include_router(signed_store_router, prefix="/api/v1")
     app.add_middleware(AclServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
