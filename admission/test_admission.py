@@ -57,3 +57,41 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(AdmissionRejected):
             self.adapter.admit(self.principal, json.dumps(self.fixture["offline-current-key-revoke"]).encode())
         self.assertEqual(self.store.read(self.principal).revision, 3)
+
+    def test_rotation_and_durable_fork(self):
+        from history_admission import FORK_PREFIX, RotationFork
+
+        self.enroll()
+        def admit(record):
+            self.adapter.admit(self.principal, json.dumps(record).encode())
+
+        admit(self.fixture["oidc"])
+        rotation = self.fixture["probe-v3-oidc"]
+        for invalid in (dict(rotation, seq=999), dict(rotation, nextSig="invalid"),
+                        self.fixture["rotate-v4-wallet"]):
+            with self.assertRaises(AdmissionRejected):
+                admit(invalid)
+        self.assertEqual(self.store.read(self.principal).revision, 1)
+        admit(rotation)
+        with self.assertRaises(AdmissionRejected):
+            admit(rotation)
+
+        sibling = self.fixture["oidc-rotate"]
+        with self.assertRaises(AdmissionRejected):
+            admit(dict(sibling, attest="invalid"))
+        self.assertEqual(self.store.read(self.principal).revision, 2)
+        # A concurrent admission commits between sibling verification and CAS.
+        original_append = self.store.append
+        def racing_append(principal, revision, raw):
+            self.store.append = original_append
+            admit(self.fixture["oidc-after-rotation"])
+            original_append(principal, revision, raw)
+        self.store.append = racing_append
+        with self.assertRaises(RotationFork):
+            admit(sibling)
+        self.adapter.store = SqliteHistoryStore(self.store.path)
+        with self.assertRaises(RotationFork):
+            admit(rotation)
+        snapshot = self.store.read(self.principal)
+        self.assertEqual(snapshot.revision, 4)
+        self.assertEqual(snapshot.entries[-1], FORK_PREFIX + json.dumps(sibling).encode())
