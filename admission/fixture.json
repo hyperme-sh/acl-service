@@ -1,0 +1,91 @@
+{
+  "genesis": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+  "now": 1700000060,
+  "policy": {
+    "allowedDomains": [
+      "s3r.ch"
+    ],
+    "allowedUris": [
+      "https://s3r.ch/identity/link"
+    ],
+    "allowedChainIds": [
+      "1"
+    ]
+  },
+  "jwks": {
+    "keys": [
+      {
+        "kty": "EC",
+        "crv": "P-256",
+        "kid": "fixture-1",
+        "x": "UVkLelFRQNLXhMhWCGaP3--Mgv0fW-UkIVVKDcPQM-0",
+        "y": "4MF9qJBKcn2K4b82v4p5Jg0BLwDU2AiI0dC7RP2hbaQ",
+        "alg": "ES256",
+        "use": "sig",
+        "key_ops": [
+          "verify"
+        ],
+        "notBefore": 1699999000,
+        "notAfter": 1700010000
+      }
+    ]
+  },
+  "pinnedIss": [
+    "https://id.fyberlabs.com/realms/test"
+  ],
+  "binding": {
+    "v": 1,
+    "kind": "genesis-epub",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "epub": "6mjXtv7fC3GHiTjVHXH4cp4Ky4wsbfiz156KS5CUnuA.KidEyXLJ_OeHAUqWSo6gyE1xT-qk3oI_6FoiSk3QSPo",
+    "issuedAt": 1700000000,
+    "keySig": "u9iCLK5LNiXkymcEV9gc_CbZ7AvaV3nY7yS_fJObAVdWw8vJ4bSmYrmF8z8RGYAr4ZrDORJl9dfEYeYyiu0yIw",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLWdlbmVzaXMtZXB1Yi1hdHRlc3QtdjEiLCJwcmluY2lwYWwiOiJheGZSOHVFc1FrZjR2T2JsWTZSQThuY0RmWUV0NnpPZzlLRTVSZGlZd3BZLlQtTkM0djRhZjV1TzUtdEtmQS1lRml2T00xZHJNVjdPeTdaQWFEZV9VZlUiLCJlcHViIjoiNm1qWHR2N2ZDM0dIaVRqVkhYSDRjcDRLeTR3c2JmaXoxNTZLUzVDVW51QS5LaWRFeVhMSl9PZUhBVXFXU282Z3lFMXhULXFrM29JXzZGb2lTazNRU1BvIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDA2MDB9.i4sqV3K2rdEdQslNiIjOlUd_zbyY7Fux8id9AvD_nn0W4U0pFgd44uTlGbxqlGQR2d4M6U-ZJLVIaDwFi8bJ9A"
+  },
+  "wallet": {
+    "v": 1,
+    "kind": "wallet",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "address": "0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718",
+    "issuedAt": 1700000000,
+    "nonce": "fixtureNonce123",
+    "keySig": "iGXFYXbObvjtpzvvcJNRvvtTUMBsAmGZTGE7-ad8z7nRrW3jpyOLjUEBtoWqBWcx-jQ9QFDI7q9mA87wjAx9Og",
+    "siwe": {
+      "message": "s3r.ch wants you to sign in with your Ethereum account:\n0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718\n\nSociACL link: a90854a50712c3e090e4076385bec9d30c6831d5f04838c0589442ca23e74b1b\n\nURI: https://s3r.ch/identity/link\nVersion: 1\nChain ID: 1\nNonce: fixtureNonce123\nIssued At: 2023-11-14T22:13:20Z",
+      "signature": "0x84f6351b818c4597a06fbd9ae610321829dd7f9772701523c81e0023ee3738de53b9ea0083ce42b57e0bb525e6760b07cfc370a3e1d52f021f235b1acdfc0da31c"
+    },
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLXdhbGxldC1hdHRlc3QtdjEiLCJwcmluY2lwYWwiOiJheGZSOHVFc1FrZjR2T2JsWTZSQThuY0RmWUV0NnpPZzlLRTVSZGlZd3BZLlQtTkM0djRhZjV1TzUtdEtmQS1lRml2T00xZHJNVjdPeTdaQWFEZV9VZlUiLCJsaW5rSWQiOiJhOTA4NTRhNTA3MTJjM2UwOTBlNDA3NjM4NWJlYzlkMzBjNjgzMWQ1ZjA0ODM4YzA1ODk0NDJjYTIzZTc0YjFiIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE3MDAwMDA2MDB9.DbQ76adinFQJrdClbGXh_FwZd9KeYKAVSQirRzvG-4yP2xbuVLZZLkmSK3ljqUyg51AqPhdXQvvmnOb2axKcbg"
+  },
+  "signature": "jLXhXboxbOGcVuFGUbsv1sCf4VyZ8Z4Brxo9ZvrAw0zv_J3ClPP79HVgGLrD_ZG9EGDsAMYn8yzy6DIz1NNoPA",
+  "oidc": {
+    "v": 1,
+    "kind": "oidc",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "cred": {
+      "iss": "https://id.fyberlabs.com/realms/test",
+      "tenant": "01234567-89ab-cdef-0123-456789abcdef",
+      "sub": "Case-Sensitive/Subject"
+    },
+    "issuedAt": 1700000000.0,
+    "nonce": "fixtureNonce456",
+    "keySig": "ovDofjFHtz9N9S8OsQy1zNr1GpwBSUd-ENySQBEiyeUUZa4yvudlBt_u5r-z7Gasig4t83Z2uFiMygL4yJpmsQ",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLW9pZGMtYXR0ZXN0LXYxIiwiaXNzIjoiaHR0cHM6Ly9pZC5meWJlcmxhYnMuY29tL3JlYWxtcy90ZXN0IiwidGVuYW50IjoiMDEyMzQ1NjctODlhYi1jZGVmLTAxMjMtNDU2Nzg5YWJjZGVmIiwic3ViIjoiQ2FzZS1TZW5zaXRpdmUvU3ViamVjdCIsInByaW5jaXBhbCI6ImF4ZlI4dUVzUWtmNHZPYmxZNlJBOG5jRGZZRXQ2ek9nOUtFNVJkaVl3cFkuVC1OQzR2NGFmNXVPNS10S2ZBLWVGaXZPTTFkck1WN095N1pBYURlX1VmVSIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwNjAwLCJub25jZSI6ImZpeHR1cmVOb25jZTQ1NiJ9.eHXh5Cr5_HuJxOAqvuh7_mF6TKGws01yzgOklDRwgc_kzV6A-0Rze0nNQiZnV8AldeAuwZSZEGuaed_W_mM6gA"
+  },
+  "revoke": {
+    "v": 1,
+    "kind": "revoke",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "linkId": "a90854a50712c3e090e4076385bec9d30c6831d5f04838c0589442ca23e74b1b",
+    "issuedAt": 1700000020,
+    "keySig": "pHHN9eC_0UxEflRA-aUtAl-AEPJKk_r7ddAeWArvc2gNLaKKm3k6KVAS-V6Al9IjNgmw57zbvU-4c3AOZRCoFQ",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLXJldm9rZS1hdHRlc3QtdjEiLCJwcmluY2lwYWwiOiJheGZSOHVFc1FrZjR2T2JsWTZSQThuY0RmWUV0NnpPZzlLRTVSZGlZd3BZLlQtTkM0djRhZjV1TzUtdEtmQS1lRml2T00xZHJNVjdPeTdaQWFEZV9VZlUiLCJyZWNvcmRJZCI6IjlmYmNjMzM5OTk0N2FmOGY5NGExNWJiZDBkOTBjZTcyZWY4OWMxMTIxNzk5Y2Q3NzI0YTc4MmI0OTAyYmU1MjciLCJpYXQiOjE3MDAwMDAwMjAsImV4cCI6MTcwMDAwMDYyMH0.ZhzXgH608ljlJVVPAEy_e662jPZGH8fCx7wr83RB-9DXbbqw5I4L9JOMSA-hK6jQ4EfR0WGORzl1h9mkoQuoBA"
+  },
+  "offline-current-key-revoke": {
+    "v": 1,
+    "kind": "revoke",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "linkId": "a90854a50712c3e090e4076385bec9d30c6831d5f04838c0589442ca23e74b1b",
+    "issuedAt": 1700000020,
+    "keySig": "pHHN9eC_0UxEflRA-aUtAl-AEPJKk_r7ddAeWArvc2gNLaKKm3k6KVAS-V6Al9IjNgmw57zbvU-4c3AOZRCoFQ"
+  }
+}
