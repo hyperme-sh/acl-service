@@ -9,3 +9,9 @@
 !scripts/install-image-runtime.py
 **/__pycache__/
 **/*.pyc
+!admission/
+!admission/package.json
+!admission/package-lock.json
+!admission/history_admission.py
+!admission/verify.mjs
+!admission/store-operation.mjs

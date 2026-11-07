@@ -131,3 +131,9 @@ and re-sign before attempting a conflicting write. The standalone application
 returns 503 until its deployment supplies bindings and an authoritative writer.
 The HTTP acceptance fixture uses synthetic token identities and the enrolled
 SQLite ledger with actual signed recovery and wrap operations.
+
+The standalone runtime image carries the trusted Python writer, its Node runtime
+and its lockfile-verified SociACL dependencies under image ownership. Deployment
+launchers can import `history_admission` from `/opt/acl-admission`. Both the image
+build and archive replay exercise enrollment and signed writes offline. Authority
+history, witness trust and tenant/subject bindings must come from the deployment.
