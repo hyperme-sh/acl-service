@@ -73,8 +73,7 @@ whole authority. Concurrent admissions invalidate that snapshot.
 
 The SQLite qualification backend scans the enrolled ledger in one transaction.
 Only use this path for a namespace whose wallet-link evidence is complete in
-that ledger. It cannot establish ownership across independent authorities. Keep recovery and wrap
-disabled for this qualification backend.
+that ledger. It cannot establish ownership across independent authorities.
 
 From `admission/`, use Node 24, run `npm ci --ignore-scripts`, then
 `PYTHONPATH=../src python3 -m unittest -v test_admission`. Fixtures are
@@ -96,3 +95,23 @@ This qualification floor belongs to the SQLite ledger. A production adapter
 must colocate its authority fence, floor and ciphertext compare-and-swap, or
 provide equivalent atomic semantics. An observation alone cannot authorize a
 subsequent key release or ciphertext mutation.
+
+### Signed ciphertext writes
+
+The checkout adapter accepts `apply_store_operation(principal, kind, operation)`
+for the enrolled ledger. Store kinds are `recovery` and `wraps`. Recovery
+supports put, commit of a pending copy, and delete by rotation sequence. Wraps
+support put and delete by wrap ID. The request carries the action, signature,
+and row or target required for that action. Recovery envelope bytes use lowercase
+hex in `bytesHex`. See `admission/store-fixture.json` for signed examples generated
+with the pinned SociACL reference functions signStoreWrite, recoveryEnvelopeHash,
+and wrapRowHash.
+
+The adapter derives the head and current signing key from the verifier, and
+the generation and previous row hash from durable ciphertext state. SQLite
+holds its write lock while comparing the authority revision, checking the
+shared floor, comparing the store generation, and writing the new state.
+Deletion retains the generation. On a conflict, reread the authority and store
+state before signing another operation. These internal operations qualify
+ciphertext storage; opening a recovery copy requires independent decryption
+and keyring validation. Production transport and deployment remain open.

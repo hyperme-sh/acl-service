@@ -174,3 +174,105 @@ class AdmissionTests(unittest.TestCase):
             self.adapter.observe_store_head(self.principal)
         self.store.observe_head = original
         self.assertEqual(self.adapter.observe_store_head(self.principal)["sequence"], 0)
+
+    def store_operations(self):
+        return json.loads(Path(__file__).with_name("store-fixture.json").read_bytes())
+
+    def test_signed_recovery_and_wrap_lifecycle(self):
+        self.enroll()
+        ops = self.store_operations()
+        def apply(kind, name):
+            return self.adapter.apply_store_operation(self.principal, kind, ops[name])
+
+        self.assertEqual(apply("recovery", "current"), 1)
+        self.assertEqual(apply("wraps", "wrap"), 1)
+        self.assertEqual(apply("recovery", "pending"), 2)
+        self.assertEqual(apply("wraps", "deleteWrap"), 2)
+        with self.assertRaises(AdmissionRejected):
+            apply("wraps", "wrap")
+        with self.assertRaises(AdmissionRejected):
+            apply("recovery", "commit")
+        for name in ("wallet", "rotate-v4-wallet"):
+            self.adapter.admit(self.principal, json.dumps(self.fixture[name]).encode())
+        self.assertEqual(apply("recovery", "commit"), 3)
+        self.adapter.store = SqliteHistoryStore(self.store.path)
+        generation, payload = self.adapter.store.read_ciphertext(self.principal, "recovery")
+        self.assertEqual(generation, 3)
+        self.assertEqual(json.loads(payload), {"current": ops["pending"]["row"]})
+        self.assertEqual(apply("recovery", "deleteCommitted"), 4)
+        self.assertEqual(self.store.read_ciphertext(self.principal, "recovery"), (4, b"{}"))
+
+    def test_tampering_and_wrong_store_leave_ciphertext_untouched(self):
+        self.enroll()
+        ops = self.store_operations()
+        for kind, name in (("wraps", "wrap"), ("recovery", "current")):
+            op = ops[name]
+            corrupted = dict(op["row"], epub=self.principal)
+            for invalid in (dict(op, row=corrupted), dict(op, signature="00"*64),
+                            dict(op, generation=0), ops["wrap" if kind == "recovery" else "current"]):
+                with self.assertRaises(AdmissionRejected):
+                    self.adapter.apply_store_operation(self.principal, kind, invalid)
+            self.assertEqual(self.store.read_ciphertext(self.principal, kind), (0, b""))
+
+    def test_authority_change_after_signature_verification_aborts_write(self):
+        from acl_service.domain.history_store import HistoryConflict
+
+        self.enroll()
+        original = self.store.write_verified_ciphertext
+        def race(*args, **kwargs):
+            self.enroll_peer()
+            original(*args, **kwargs)
+        self.store.write_verified_ciphertext = race
+        with self.assertRaises(HistoryConflict):
+            self.adapter.apply_store_operation(self.principal, "wraps", self.store_operations()["wrap"])
+        self.assertEqual(self.store.read_ciphertext(self.principal, "wraps"), (0, b""))
+
+    def test_signed_genesis_wrap_deletion_stays_forbidden(self):
+        self.enroll()
+        ops = self.store_operations()
+        self.adapter.apply_store_operation(self.principal, "wraps", ops["genesisWrap"])
+        before = self.store.read_ciphertext(self.principal, "wraps")
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.apply_store_operation(self.principal, "wraps", ops["deleteGenesis"])
+        self.assertEqual(self.store.read_ciphertext(self.principal, "wraps"), before)
+
+    def test_concurrent_valid_signed_write_commits_once(self):
+        from acl_service.domain.keyring_store import StoreRejected
+
+        self.enroll()
+        put = self.store_operations()["current"]
+        original = self.store.write_verified_ciphertext
+        def race(*args, **kwargs):
+            self.store.write_verified_ciphertext = original
+            self.adapter.apply_store_operation(self.principal, "recovery", put)
+            original(*args, **kwargs)
+        self.store.write_verified_ciphertext = race
+        with self.assertRaises(StoreRejected):
+            self.adapter.apply_store_operation(self.principal, "recovery", put)
+        generation, payload = self.store.read_ciphertext(self.principal, "recovery")
+        self.assertEqual(generation, 1)
+        self.assertEqual(json.loads(payload), {"current": put["row"]})
+
+    def test_predecessor_and_current_signer_are_independently_verified(self):
+        self.enroll()
+        ops = self.store_operations()
+        wrap = ops["wrap"]
+        self.adapter.apply_store_operation(self.principal, "wraps", wrap)
+        before = self.store.read_ciphertext(self.principal, "wraps")
+        # Correct key, target, head and generation, but signs an absent predecessor.
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.apply_store_operation(self.principal, "wraps",
+                                               dict(wrap, signature=ops["stalePredecessor"]))
+        self.assertEqual(self.store.read_ciphertext(self.principal, "wraps"), before)
+
+        # A different enrolled ledger has the new head and an empty wrap store.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.adapter.store = SqliteHistoryStore(Path(directory.name) / "rotated.db")
+        self.enroll()
+        for name in ("wallet", "rotate-v4-wallet"):
+            self.adapter.admit(self.principal, json.dumps(self.fixture[name]).encode())
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.apply_store_operation(self.principal, "wraps",
+                                               dict(wrap, signature=ops["retiredKey"]))
+        self.assertEqual(self.adapter.store.read_ciphertext(self.principal, "wraps"), (0, b""))

@@ -7,6 +7,8 @@ orders commits and supports concurrency control; it is never a signing-key head.
 from dataclasses import dataclass
 from typing import Protocol
 
+from acl_service.domain.keyring_store import StoreKind
+
 
 @dataclass(frozen=True)
 class HistorySnapshot:
@@ -35,6 +37,15 @@ class HistoryStore(Protocol):
 
     def observe_head(self, principal: str, head: int, *, authority_revision: int) -> None:
         """Commit the shared recovery/wrap floor only for the verified authority snapshot."""
+        ...
+
+    def read_ciphertext(self, principal: str, kind: StoreKind) -> tuple[int, bytes]:
+        """Return the generation and serialized slots/rows from one committed read."""
+        ...
+
+    def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,
+                                  generation: int, head: int, authority_revision: int) -> None:
+        """Fence verified bytes against history, shared floor and store generation atomically."""
         ...
 
     def read_authority(self) -> tuple[int, dict[str, HistorySnapshot]]:
