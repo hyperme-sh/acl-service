@@ -29,8 +29,12 @@ class HistoryStore(Protocol):
         ...
 
     def append(self, principal: str, expected_revision: int, entry: bytes, *,
-               authority_revision: int | None = None) -> None:
+               authority_revision: int | None = None, verified_rotation: int | None = None) -> None:
         """Commit an admitted record only against its verified predecessor snapshot."""
+        ...
+
+    def observe_head(self, principal: str, head: int, *, authority_revision: int) -> None:
+        """Commit the shared recovery/wrap floor only for the verified authority snapshot."""
         ...
 
     def read_authority(self) -> tuple[int, dict[str, HistorySnapshot]]:

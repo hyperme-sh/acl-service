@@ -10,7 +10,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -37,7 +37,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     accounts.set(account.principal, {...account, rotations, links, ownRevokes});
   }
-  if (entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
+  if (!observe && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
 
   function contextFor(account, until) {
     const links = new Map(account.links);
@@ -81,6 +81,12 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
   const {links} = context;
   const diagnostics = [];
   const head = resolveStoreAccount(principal, rotations, context, diagnostics);
+  if (observe) {
+    if (!Array.isArray(peers) || !head.bindingEpub || rotations.some(row => row.issuedAt > now))
+      throw Error('incomplete-history');
+    return JSON.stringify({currentKey: head.currentKey, currentEpub: head.currentEpub,
+      sequence: head.rotations.at(-1)?.seq ?? 0, diagnostics});
+  }
   if (head.rotations.length !== rotations.length || !head.bindingEpub) throw Error('invalid-genesis');
   if (grant) {
     const message = requireResult(lengthPrefixed([

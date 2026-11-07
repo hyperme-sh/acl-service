@@ -93,6 +93,8 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(RotationFork):
             admit(rotation)
         snapshot = self.store.read(self.principal)
+        with self.assertRaises(RotationFork):
+            self.adapter.observe_store_head(self.principal)
         self.assertEqual(snapshot.revision, 4)
         self.assertEqual(snapshot.entries[-1], FORK_PREFIX + json.dumps(sibling).encode())
 
@@ -134,3 +136,41 @@ class AdmissionTests(unittest.TestCase):
         with self.assertRaises(AdmissionRejected):
             self.adapter.admit(self.principal, json.dumps(self.fixture["rotate-v4-wallet"]).encode())
         self.assertEqual(self.store.read(self.principal).revision, 1)
+
+    def test_observed_head_uses_verified_sequence_and_shared_floor(self):
+        from acl_service.domain.keyring_store import StoreRejected
+
+        self.enroll()
+        for name in ("wallet", "rotate-v4-wallet"):
+            self.adapter.admit(self.principal, json.dumps(self.fixture[name]).encode())
+        revision, _ = self.store.read_authority()
+        with self.assertRaises(StoreRejected):
+            self.store.observe_head(self.principal, 0, authority_revision=revision)
+        snapshot = self.store.read(self.principal)
+        # Simulate an invalid rotation in imported storage.
+        forged = dict(self.fixture["rotate-v4-wallet"], seq=999)
+        self.store.append(self.principal, snapshot.revision, json.dumps(forged).encode())
+        result = self.adapter.observe_store_head(self.principal)
+        self.assertEqual(result["sequence"], 1)
+        self.assertEqual(result["currentKey"], self.fixture["rotate-v4-wallet"]["nextKey"])
+        self.assertTrue(result["diagnostics"])
+        reopened = SqliteHistoryStore(self.store.path)
+        revision, _ = reopened.read_authority()
+        with self.assertRaises(StoreRejected):
+            reopened.observe_head(self.principal, 0, authority_revision=revision)
+
+    def test_observation_rejects_concurrent_authority_write(self):
+        from acl_service.domain.history_store import HistoryConflict
+
+        self.enroll()
+        original = self.store.observe_head
+
+        def race(principal, head, *, authority_revision):
+            self.enroll_peer()
+            original(principal, head, authority_revision=authority_revision)
+
+        self.store.observe_head = race
+        with self.assertRaises(HistoryConflict):
+            self.adapter.observe_store_head(self.principal)
+        self.store.observe_head = original
+        self.assertEqual(self.adapter.observe_store_head(self.principal)["sequence"], 0)
