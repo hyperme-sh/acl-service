@@ -21,6 +21,10 @@ class HistorySnapshot:
         return len(self.entries)
 
 
+class AdmissionRejected(ValueError):
+    """An enrolled-history verifier rejected the submitted operation."""
+
+
 class HistoryConflict(ValueError):
     """Enrollment exists or the expected history revision is no longer current."""
 

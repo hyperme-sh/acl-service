@@ -115,3 +115,19 @@ Deletion retains the generation. On a conflict, reread the authority and store
 state before signing another operation. These internal operations qualify
 ciphertext storage; opening a recovery copy requires independent decryption
 and keyring validation. Production transport and deployment remain open.
+
+### Authenticated HTTP writes
+
+`POST /api/v1/acl/sociacl/keyring/{kind}/operations` accepts the signed JSON
+operation described above. Use `recovery` or `wraps` for the store kind. The bearer
+token and matching `X-Tenant-ID` select a provisioned (tenant UUID, token subject)
+binding. The app factory copies the supplied `signed_store_bindings` mapping at
+construction. Each binding holds the enrolled principal and its trusted writer.
+The operation body cannot select the account, ledger, trust policy or verifier.
+
+A successful write returns the committed generation. A verifier rejection returns
+403; a concurrent authority or storage conflict returns 409. A client must reread
+and re-sign before attempting a conflicting write. The standalone application
+returns 503 until its deployment supplies bindings and an authoritative writer.
+The HTTP acceptance fixture uses synthetic token identities and the enrolled
+SQLite ledger with actual signed recovery and wrap operations.
