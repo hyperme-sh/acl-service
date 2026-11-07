@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from acl_service.domain.history_store import HistoryConflict, HistorySnapshot
+from acl_service.domain.keyring_store import StoreRejected
 from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
 
 
@@ -38,3 +39,23 @@ def test_competing_admissions(tmp_path):
         winners = tuple(e for e in executor.map(compete, (b"x", b"y")) if e)
     assert len(winners) == 1
     assert store.read("a").entries == winners
+
+
+@pytest.mark.parametrize("kind", ["recovery", "wraps"])
+@pytest.mark.parametrize("rejected_generation", [0, 2])
+def test_rejected_generation_rolls_back_shared_floor(tmp_path, kind, rejected_generation):
+    path = tmp_path / "ledger.db"
+    store = SqliteHistoryStore(path)
+    store.enroll("a", b"genesis")
+    revision, _ = store.read_authority()
+    store.write_verified_ciphertext("a", kind, b"first", generation=0, head=0,
+                                    authority_revision=revision)
+    with pytest.raises(StoreRejected):
+        store.write_verified_ciphertext("a", kind, b"rejected", generation=rejected_generation,
+                                        head=1, authority_revision=revision)
+
+    reopened = SqliteHistoryStore(path)
+    assert reopened.read_ciphertext("a", kind) == (1, b"first")
+    other_kind = "recovery" if kind == "wraps" else "wraps"
+    reopened.write_verified_ciphertext("a", other_kind, b"other", generation=0, head=0,
+                                       authority_revision=revision)
