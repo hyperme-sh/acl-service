@@ -60,8 +60,9 @@ SociACL sits beside those rules:
   when publication is configured, and it fails closed on expiry, signature, or
   revision mismatch.
 - `KeyringStore` (`PostgresKeyringStore`) holds verified recovery and wrap
-  ciphertext for a principal. Callers reach it through `KeyringStore` after
-  they have checked the principal, history, and signatures.
+  ciphertext for a principal. The running app wires the session store only.
+  The [recovery adapter inventory](docs/recovery-adapters.md) traces both
+  storage paths and identifies where verified chain resolution belongs.
 
 Successful policy, share, and recovery writes commit in PostgreSQL, then
 publish a control-plane event. The commit and the publish are separate. A
