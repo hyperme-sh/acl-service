@@ -252,3 +252,27 @@ class AdmissionTests(unittest.TestCase):
         generation, payload = self.store.read_ciphertext(self.principal, "recovery")
         self.assertEqual(generation, 1)
         self.assertEqual(json.loads(payload), {"current": put["row"]})
+
+    def test_predecessor_and_current_signer_are_independently_verified(self):
+        self.enroll()
+        ops = self.store_operations()
+        wrap = ops["wrap"]
+        self.adapter.apply_store_operation(self.principal, "wraps", wrap)
+        before = self.store.read_ciphertext(self.principal, "wraps")
+        # Correct key, target, head and generation, but signs an absent predecessor.
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.apply_store_operation(self.principal, "wraps",
+                                               dict(wrap, signature=ops["stalePredecessor"]))
+        self.assertEqual(self.store.read_ciphertext(self.principal, "wraps"), before)
+
+        # A different enrolled ledger has the new head and an empty wrap store.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.adapter.store = SqliteHistoryStore(Path(directory.name) / "rotated.db")
+        self.enroll()
+        for name in ("wallet", "rotate-v4-wallet"):
+            self.adapter.admit(self.principal, json.dumps(self.fixture[name]).encode())
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.apply_store_operation(self.principal, "wraps",
+                                               dict(wrap, signature=ops["retiredKey"]))
+        self.assertEqual(self.adapter.store.read_ciphertext(self.principal, "wraps"), (0, b""))
