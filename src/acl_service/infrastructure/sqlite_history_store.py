@@ -4,6 +4,7 @@ from contextlib import closing
 from pathlib import Path
 
 from acl_service.domain.history_store import HistoryConflict, HistorySnapshot
+from acl_service.domain.keyring_store import MAX_GENERATION, StoreRejected
 
 
 class SqliteHistoryStore:
@@ -17,6 +18,10 @@ class SqliteHistoryStore:
                 principal TEXT NOT NULL REFERENCES history_accounts(principal),
                 revision INTEGER NOT NULL, entry BLOB NOT NULL,
                 PRIMARY KEY (principal, revision))""")
+
+            db.execute("""CREATE TABLE IF NOT EXISTS history_head_floors (
+                principal TEXT PRIMARY KEY NOT NULL REFERENCES history_accounts(principal),
+                head INTEGER NOT NULL CHECK (head >= 0))""")
 
     def _connect(self):
         db = sqlite3.connect(self.path)
@@ -35,7 +40,7 @@ class SqliteHistoryStore:
                 raise HistoryConflict("principal already enrolled")
 
     def append(self, principal: str, expected_revision: int, entry: bytes, *,
-               authority_revision: int | None = None) -> None:
+               authority_revision: int | None = None, verified_rotation: int | None = None) -> None:
         if type(expected_revision) is not int or expected_revision < 0:
             raise ValueError("invalid revision")
         if not isinstance(entry, bytes) or not entry:
@@ -52,6 +57,8 @@ class SqliteHistoryStore:
                 raise HistoryConflict("missing account or stale revision")
             db.execute("INSERT INTO history_entries VALUES (?, ?, ?)",
                        (principal, expected_revision + 1, entry))
+            if verified_rotation is not None:
+                self._observe_floor(db, principal, verified_rotation)
 
     def read(self, principal: str) -> HistorySnapshot | None:
         with closing(self._connect()) as db, db:
@@ -65,6 +72,26 @@ class SqliteHistoryStore:
                 (principal,),
             )
             return HistorySnapshot(principal, account[0], tuple(row[0] for row in entries))
+
+    def observe_head(self, principal: str, head: int, *, authority_revision: int) -> None:
+        with closing(self._connect()) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            if authority_revision != self._authority_revision(db):
+                raise HistoryConflict("authority changed")
+            self._observe_floor(db, principal, head)
+
+    @staticmethod
+    def _observe_floor(db, principal, head):
+        if type(head) is not int or not 0 <= head <= MAX_GENERATION:
+            raise StoreRejected()
+        updated = db.execute("""
+            INSERT INTO history_head_floors(principal, head)
+            SELECT principal, ? FROM history_accounts WHERE principal = ?
+            ON CONFLICT(principal) DO UPDATE SET head = excluded.head
+            WHERE excluded.head >= history_head_floors.head
+            """, (head, principal))
+        if updated.rowcount != 1:
+            raise StoreRejected()
 
     @staticmethod
     def _authority_revision(db):

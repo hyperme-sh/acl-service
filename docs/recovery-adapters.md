@@ -81,3 +81,18 @@ From `admission/`, use Node 24, run `npm ci --ignore-scripts`, then
 synthetic cases from SociACL records.json at the revision pinned in the
 package lock, plus a domain-specific enrollment signature. This adapter runs
 from the checkout and has no public HTTP or container entry point yet.
+
+### Shared head observation
+
+The internal `observe_store_head(principal)` adapter resolves the enrolled ledger
+with service-selected time and witness policy. It returns the authenticated
+sequence, signing key, encryption key and resolver diagnostics only after the
+SQLite backend commits the principal's monotonic floor. An authority revision
+change during verification rejects the observation. A new rotation commits its
+floor in the same transaction as its admission. The first successful observation
+also initializes the floor for a ledger created before this change.
+
+This qualification floor belongs to the SQLite ledger. A production adapter
+must colocate its authority fence, floor and ciphertext compare-and-swap, or
+provide equivalent atomic semantics. An observation alone cannot authorize a
+subsequent key release or ciphertext mutation.
