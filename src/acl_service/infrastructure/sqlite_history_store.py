@@ -34,13 +34,16 @@ class SqliteHistoryStore:
             if inserted.rowcount != 1:
                 raise HistoryConflict("principal already enrolled")
 
-    def append(self, principal: str, expected_revision: int, entry: bytes) -> None:
+    def append(self, principal: str, expected_revision: int, entry: bytes, *,
+               authority_revision: int | None = None) -> None:
         if type(expected_revision) is not int or expected_revision < 0:
             raise ValueError("invalid revision")
         if not isinstance(entry, bytes) or not entry:
             raise ValueError("missing history entry")
         with closing(self._connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
+            if authority_revision is not None and authority_revision != self._authority_revision(db):
+                raise HistoryConflict("authority changed")
             row = db.execute(
                 """SELECT (SELECT MAX(revision) FROM history_entries WHERE principal = ?)
                    FROM history_accounts WHERE principal = ?""", (principal, principal)
@@ -62,3 +65,23 @@ class SqliteHistoryStore:
                 (principal,),
             )
             return HistorySnapshot(principal, account[0], tuple(row[0] for row in entries))
+
+    @staticmethod
+    def _authority_revision(db):
+        # Both tables are immutable and append-only, including pre-upgrade rows.
+        return db.execute("""SELECT (SELECT COUNT(*) FROM history_accounts) +
+                                    (SELECT COUNT(*) FROM history_entries)""").fetchone()[0]
+
+    def read_authority(self) -> tuple[int, dict[str, HistorySnapshot]]:
+        with closing(self._connect()) as db, db:
+            db.execute("BEGIN")
+            revision = self._authority_revision(db)
+            accounts = dict(db.execute("SELECT principal, genesis FROM history_accounts"))
+            entries = {p: [] for p in accounts}
+            for owner, raw in db.execute(
+                "SELECT principal, entry FROM history_entries ORDER BY principal, revision"
+            ):
+                entries[owner].append(raw)
+            return revision, {
+                p: HistorySnapshot(p, genesis, tuple(entries[p])) for p, genesis in accounts.items()
+            }

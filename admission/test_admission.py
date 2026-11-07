@@ -95,3 +95,42 @@ class AdmissionTests(unittest.TestCase):
         snapshot = self.store.read(self.principal)
         self.assertEqual(snapshot.revision, 4)
         self.assertEqual(snapshot.entries[-1], FORK_PREFIX + json.dumps(sibling).encode())
+
+    def test_wallet_rotation(self):
+        self.enroll()
+        for name in ("wallet", "rotate-v4-wallet"):
+            self.adapter.admit(self.principal, json.dumps(self.fixture[name]).encode())
+        self.assertEqual(self.store.read(self.principal).revision, 2)
+
+    def test_new_wallet_owner_wins_during_admission(self):
+        self.enroll()
+        self.adapter.admit(self.principal, json.dumps(self.fixture["wallet"]).encode())
+        peer = self.enroll_peer()
+        original_append = self.store.append
+
+        def race(principal, revision, raw, **fence):
+            self.store.append = original_append
+            self.adapter.admit(peer, json.dumps(self.fixture["peerWalletAfterRotation"]).encode())
+            original_append(principal, revision, raw, **fence)
+
+        self.store.append = race
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.admit(self.principal, json.dumps(self.fixture["rotate-v4-wallet"]).encode())
+        self.assertEqual(self.store.read(self.principal).revision, 1)
+        self.assertEqual(self.store.read(peer).revision, 1)
+
+    def enroll_peer(self):
+        peer = self.fixture["peerBinding"]["principal"]
+        self.grant = EnrollmentGrant(peer, "qualification", "peer-grant", self.now + 60)
+        self.adapter.enroll(peer, json.dumps(self.fixture["peerBinding"]).encode(),
+                            self.fixture["peerSignature"])
+        return peer
+
+    def test_equal_time_claims_deny_rotation(self):
+        self.enroll()
+        peer = self.enroll_peer()
+        self.adapter.admit(peer, json.dumps(self.fixture["peerWalletTie"]).encode())
+        self.adapter.admit(self.principal, json.dumps(self.fixture["wallet"]).encode())
+        with self.assertRaises(AdmissionRejected):
+            self.adapter.admit(self.principal, json.dumps(self.fixture["rotate-v4-wallet"]).encode())
+        self.assertEqual(self.store.read(self.principal).revision, 1)

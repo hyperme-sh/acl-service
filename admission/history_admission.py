@@ -91,9 +91,29 @@ class HistoryAdmission:
             raise AdmissionRejected("no enrolled history")
         if any(row.startswith(FORK_PREFIX) for row in snapshot.entries):
             raise RotationFork("history frozen")
+        rows = [_record(row) for row in snapshot.entries]
+        def wallet_rotation(row):
+            return (row.get("kind") == "rotate" and isinstance(row.get("authorizer"), dict)
+                    and row["authorizer"].get("kind") == "wallet")
+
+        fence = {}
+        peers = None
+        if wallet_rotation(candidate) or any(map(wallet_rotation, rows)):
+            revision, accounts = self.store.read_authority()
+            if accounts.get(principal) != snapshot:
+                raise HistoryConflict("target changed during wallet lookup")
+            fence["authority_revision"] = revision
+            peers = []
+            for owner, account in accounts.items():
+                if owner == principal:
+                    continue
+                frozen = any(row.startswith(FORK_PREFIX) for row in account.entries)
+                peers.append(dict(principal=owner, genesis=_record(account.genesis), frozen=frozen, entries=[
+                    _record(row) for row in account.entries if not row.startswith(FORK_PREFIX)
+                ]))
         outcome = self._verify(principal, int(self.clock()), genesis=_record(snapshot.genesis),
-                               entries=[_record(row) for row in snapshot.entries], record=candidate)
+                               entries=rows, record=candidate, peers=peers)
         if outcome == b"fork":
-            self.store.append(principal, snapshot.revision, FORK_PREFIX + record)
+            self.store.append(principal, snapshot.revision, FORK_PREFIX + record, **fence)
             raise RotationFork("history frozen")
-        self.store.append(principal, snapshot.revision, record)
+        self.store.append(principal, snapshot.revision, record, **fence)

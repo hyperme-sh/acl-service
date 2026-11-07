@@ -28,8 +28,13 @@ class HistoryStore(Protocol):
         """Create an exclusively managed principal once, after admission."""
         ...
 
-    def append(self, principal: str, expected_revision: int, entry: bytes) -> None:
+    def append(self, principal: str, expected_revision: int, entry: bytes, *,
+               authority_revision: int | None = None) -> None:
         """Commit an admitted record only against its verified predecessor snapshot."""
+        ...
+
+    def read_authority(self) -> tuple[int, dict[str, HistorySnapshot]]:
+        """Return every enrolled history and a revision fencing any authority write."""
         ...
 
     def read(self, principal: str) -> HistorySnapshot | None:

@@ -56,16 +56,24 @@ storage API creates the immutable account.
 The adapter admits wallet links, OIDC links and witnessed
 revocations. It reads one enrolled snapshot, verifies the candidate using
 the pinned SociACL package, and submits the original bytes with the expected
-revision. Storage conflicts require reverification. Link admission authenticates
-the record; cross-account wallet exclusivity requires a separate complete index.
+revision. Storage conflicts require reverification. Link admission authenticates the record.
 OIDC rotation admission replays committed rotations, verifies a new transition
 with the SociACL resolver and publication rules, and rechecks after a revision
 conflict. Subsequent records must postdate the last transition and verify under
 the current key. A fully verified sibling persists the exact evidence prefixed
 with the internal fork marker in one revision-checked append. Admission then
 raises RotationFork, including after restart. A reader must reject a marked
-snapshot before resolving any key. Wallet-authorized rotations still require a
-trusted cross-principal wallet index and are refused by this adapter. Keep recovery and wrap
+snapshot before resolving any key. Wallet rotations resolve competing claims across the enrolled authority at
+issuance and again before admitting a new head. The latter lookup must select
+the exact authorizing link. The verifier replays relevant competing accounts'
+chains and fails closed when their history is frozen or unavailable. A wallet
+rotation, fork observation, or subsequent admission depending on a wallet
+rotation commits against both the principal revision and the revision of the
+whole authority. Concurrent admissions invalidate that snapshot.
+
+The SQLite qualification backend scans the enrolled ledger in one transaction.
+Only use this path for a namespace whose wallet-link evidence is complete in
+that ledger. It cannot establish ownership across independent authorities. Keep recovery and wrap
 disabled for this qualification backend.
 
 From `admission/`, use Node 24, run `npm ci --ignore-scripts`, then
