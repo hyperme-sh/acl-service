@@ -59,3 +59,39 @@ def test_rejected_generation_rolls_back_shared_floor(tmp_path, kind, rejected_ge
     other_kind = "recovery" if kind == "wraps" else "wraps"
     reopened.write_verified_ciphertext("a", other_kind, b"other", generation=0, head=0,
                                        authority_revision=revision)
+
+
+@pytest.mark.parametrize("kind", ["recovery", "wraps"])
+def test_independent_ciphertext_head_survives_ledger_restore(tmp_path, kind):
+    import hashlib
+    import shutil
+    import sqlite3
+    from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+
+    path = tmp_path / "ledger"
+    store = SqliteHistoryStore(path)
+    store.enroll("a", b"genesis")
+    snapshot = tmp_path / "snapshot"
+    shutil.copyfile(path, snapshot)
+    anchor = tmp_path / "freshness"
+    initialize(snapshot, hashlib.sha256(snapshot.read_bytes()).hexdigest(), anchor)
+    with pytest.raises(FileExistsError):
+        initialize(snapshot, hashlib.sha256(snapshot.read_bytes()).hexdigest(), anchor)
+    writer = SqliteHistoryStore(path, freshness_path=anchor)
+    revision, _ = writer.read_authority()
+    writer.write_verified_ciphertext("a", kind, b"one", generation=0, head=0, authority_revision=revision)
+    assert writer.read_ciphertext("a", kind) == (1, b"one")
+    with sqlite3.connect(anchor) as db:
+        db.execute("CREATE TRIGGER reject_update BEFORE UPDATE ON ciphertext_heads "
+                   "BEGIN SELECT RAISE(ABORT, 'unavailable'); END")
+    with pytest.raises(sqlite3.IntegrityError):
+        writer.write_verified_ciphertext("a", kind, b"two", generation=1, head=1, authority_revision=revision)
+    assert writer.read_ciphertext("a", kind) == (1, b"one")
+    writer.observe_head("a", 0, authority_revision=revision)
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE history_ciphertext SET payload=?", (b"divergent",))
+    with pytest.raises(StoreRejected):
+        writer.read_ciphertext("a", kind)
+    shutil.copyfile(snapshot, path)
+    with pytest.raises(StoreRejected):
+        writer.write_verified_ciphertext("a", kind, b"replay", generation=0, head=0, authority_revision=revision)
