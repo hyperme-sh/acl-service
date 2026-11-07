@@ -5,11 +5,18 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from acl_service.domain.history_store import HistoryStore
+from acl_service.domain.history_store import HistoryConflict, HistoryStore
+
+
+FORK_PREFIX = b"acl-rotation-fork-v1\x00"
 
 
 class AdmissionRejected(ValueError):
     pass
+
+
+class RotationFork(AdmissionRejected):
+    """Conflicting authenticated rotations have frozen this account."""
 
 
 @dataclass(frozen=True)
@@ -48,10 +55,12 @@ class HistoryAdmission:
         payload = dict(principal=principal, now=now, trust=self.trust_at(now), **inputs)
         result = subprocess.run(
             ["node", Path(__file__).with_name("verify.mjs")],
-            input=json.dumps(payload, allow_nan=False).encode(), timeout=10, check=False,
+            input=json.dumps(payload, allow_nan=False).encode(), timeout=10, check=False, stdout=subprocess.PIPE,
         )
-        if result.returncode:
+        if result.returncode or result.stdout not in (b"accepted", b"fork"):
             raise AdmissionRejected("SociACL verification failed")
+
+        return result.stdout
 
     def enroll(self, principal: str, genesis: bytes, signature: str):
         now = int(self.clock())
@@ -67,9 +76,24 @@ class HistoryAdmission:
 
     def admit(self, principal: str, record: bytes):
         candidate = _record(record)
+        while True:
+            try:
+                return self._admit_once(principal, record, candidate)
+            except HistoryConflict:
+                # A verified sibling may have won the race. Re-evaluate that
+                # rotation from the new committed snapshot before deciding.
+                if candidate.get("kind") != "rotate":
+                    raise
+
+    def _admit_once(self, principal, record, candidate):
         snapshot = self.store.read(principal)
         if snapshot is None or snapshot.principal != principal:
             raise AdmissionRejected("no enrolled history")
-        self._verify(principal, int(self.clock()), genesis=_record(snapshot.genesis),
-                     entries=[_record(row) for row in snapshot.entries], record=candidate)
+        if any(row.startswith(FORK_PREFIX) for row in snapshot.entries):
+            raise RotationFork("history frozen")
+        outcome = self._verify(principal, int(self.clock()), genesis=_record(snapshot.genesis),
+                               entries=[_record(row) for row in snapshot.entries], record=candidate)
+        if outcome == b"fork":
+            self.store.append(principal, snapshot.revision, FORK_PREFIX + record)
+            raise RotationFork("history frozen")
         self.store.append(principal, snapshot.revision, record)

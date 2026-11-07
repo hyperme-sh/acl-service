@@ -87,5 +87,79 @@
     "linkId": "a90854a50712c3e090e4076385bec9d30c6831d5f04838c0589442ca23e74b1b",
     "issuedAt": 1700000020,
     "keySig": "pHHN9eC_0UxEflRA-aUtAl-AEPJKk_r7ddAeWArvc2gNLaKKm3k6KVAS-V6Al9IjNgmw57zbvU-4c3AOZRCoFQ"
+  },
+  "probe-v3-oidc": {
+    "v": 1,
+    "kind": "rotate",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "seq": 1,
+    "prevKey": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "nextKey": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg.B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+    "nextEpub": "sBoXKnakYCyS0yQsuJfd4wJMdA3rshW0xrCq6Twikak.6FwQdDI32tVv7A4t-6cDeRwA93Acfha9_XxIU4_Hf-I",
+    "issuedAt": 1700000030,
+    "retainedLinks": [
+      "d7ff77ea259836c5e94024932ffa9fddf27025a1fac573ed07df438e2a5c3fe6"
+    ],
+    "authorizer": {
+      "kind": "oidc-fresh-login",
+      "link": "d7ff77ea259836c5e94024932ffa9fddf27025a1fac573ed07df438e2a5c3fe6"
+    },
+    "nextSig": "2MngmWb-Ou5R6O5GRp0PTe1LBlEhRG_Ju7HU52C0ZJFGwlkUAlhXWTgOPhY46Fym1DOYsKR2z7qBKGx8DWYeeg",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLXJvdGF0ZS1hdHRlc3QtdjMiLCJwcmluY2lwYWwiOiJheGZSOHVFc1FrZjR2T2JsWTZSQThuY0RmWUV0NnpPZzlLRTVSZGlZd3BZLlQtTkM0djRhZjV1TzUtdEtmQS1lRml2T00xZHJNVjdPeTdaQWFEZV9VZlUiLCJuZXh0S2V5IjoiZlBKN0dJMERUMzZLVWpnREJMVWF3OENKYWVKMzhoczFwZ3RJX0VkbW1YZy5CM2RWRU51TzBFQXBQWnJHbjNRdzI3cDlyZVk4NllJcG5nUzNuU0o0YzlFIiwibmV4dEVwdWIiOiJzQm9YS25ha1lDeVMweVFzdUpmZDR3Sk1kQTNyc2hXMHhyQ3E2VHdpa2FrLjZGd1FkREkzMnRWdjdBNHQtNmNEZVJ3QTkzQWNmaGE5X1h4SVU0X0hmLUkiLCJzZXEiOjEsImlhdCI6MTcwMDAwMDAzMCwiZXhwIjoxNzAwMDAwNjMwLCJhdXRoIjoib2lkYy1mcmVzaC1sb2dpbiIsImxpbmtJZCI6ImQ3ZmY3N2VhMjU5ODM2YzVlOTQwMjQ5MzJmZmE5ZmRkZjI3MDI1YTFmYWM1NzNlZDA3ZGY0MzhlMmE1YzNmZTYiLCJyZXRhaW5lZExpbmtzIjpbImQ3ZmY3N2VhMjU5ODM2YzVlOTQwMjQ5MzJmZmE5ZmRkZjI3MDI1YTFmYWM1NzNlZDA3ZGY0MzhlMmE1YzNmZTYiXX0.rLjWyaO8H1meebYgqATwNFK-jUsS2vEBbiIqcphfMH21du4axFTC1VJ7taMFAvyYvgy8loLL6IqUmzXY6LYIQQ"
+  },
+  "oidc-rotate": {
+    "v": 1,
+    "kind": "rotate",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "seq": 1,
+    "prevKey": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "nextKey": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg.B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+    "issuedAt": 1700000030,
+    "retainedLinks": [
+      "d7ff77ea259836c5e94024932ffa9fddf27025a1fac573ed07df438e2a5c3fe6"
+    ],
+    "authorizer": {
+      "kind": "oidc-fresh-login",
+      "link": "d7ff77ea259836c5e94024932ffa9fddf27025a1fac573ed07df438e2a5c3fe6"
+    },
+    "nextSig": "FM3J0EDgI9ZILSuekzaQSXByO4mWXn01sJqoLQRuk-zhRna2c3Ac8gJCyX1deNFGrflMdIWSF8o52pysviws7A",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLXJvdGF0ZS1hdHRlc3QtdjIiLCJwcmluY2lwYWwiOiJheGZSOHVFc1FrZjR2T2JsWTZSQThuY0RmWUV0NnpPZzlLRTVSZGlZd3BZLlQtTkM0djRhZjV1TzUtdEtmQS1lRml2T00xZHJNVjdPeTdaQWFEZV9VZlUiLCJuZXh0S2V5IjoiZlBKN0dJMERUMzZLVWpnREJMVWF3OENKYWVKMzhoczFwZ3RJX0VkbW1YZy5CM2RWRU51TzBFQXBQWnJHbjNRdzI3cDlyZVk4NllJcG5nUzNuU0o0YzlFIiwic2VxIjoxLCJpYXQiOjE3MDAwMDAwMzAsImV4cCI6MTcwMDAwMDYzMCwiYXV0aCI6Im9pZGMtZnJlc2gtbG9naW4iLCJsaW5rSWQiOiJkN2ZmNzdlYTI1OTgzNmM1ZTk0MDI0OTMyZmZhOWZkZGYyNzAyNWExZmFjNTczZWQwN2RmNDM4ZTJhNWMzZmU2IiwicmV0YWluZWRMaW5rcyI6WyJkN2ZmNzdlYTI1OTgzNmM1ZTk0MDI0OTMyZmZhOWZkZGYyNzAyNWExZmFjNTczZWQwN2RmNDM4ZTJhNWMzZmU2Il19.2kuGHhuqtsu7Vz1jayenygVkRm4c6IkTibLpBGrDlCbKnmtWA4GcAVb5ECWx11Vpk73TkUowNwCzjQJocyAsXQ"
+  },
+  "oidc-after-rotation": {
+    "v": 1,
+    "kind": "oidc",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "cred": {
+      "iss": "https://id.fyberlabs.com/realms/test",
+      "tenant": "01234567-89ab-cdef-0123-456789abcdef",
+      "sub": "Case-Sensitive/Subject"
+    },
+    "issuedAt": 1700000035,
+    "nonce": "fixtureNonce456",
+    "keySig": "C9B0uitiItWocFAmAb6ftpR1yTrKnkKC6-hP3F8KId0owE7dJz0PW5HaCvYPahXkFb-bRopgfUsm-HgUacteDQ",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLW9pZGMtYXR0ZXN0LXYxIiwiaXNzIjoiaHR0cHM6Ly9pZC5meWJlcmxhYnMuY29tL3JlYWxtcy90ZXN0IiwidGVuYW50IjoiMDEyMzQ1NjctODlhYi1jZGVmLTAxMjMtNDU2Nzg5YWJjZGVmIiwic3ViIjoiQ2FzZS1TZW5zaXRpdmUvU3ViamVjdCIsInByaW5jaXBhbCI6ImF4ZlI4dUVzUWtmNHZPYmxZNlJBOG5jRGZZRXQ2ek9nOUtFNVJkaVl3cFkuVC1OQzR2NGFmNXVPNS10S2ZBLWVGaXZPTTFkck1WN095N1pBYURlX1VmVSIsImlhdCI6MTcwMDAwMDAzNSwiZXhwIjoxNzAwMDAwNjAwLCJub25jZSI6ImZpeHR1cmVOb25jZTQ1NiJ9.oc6499RLGD2JCZI-9rLZcwE9Q2TfeaOAq6BqKnyZtMKuT17vrjPVCOv4fd4bWKwCrnUsLolzACbCS-VKBLfglA"
+  },
+  "rotate-v4-wallet": {
+    "v": 1,
+    "kind": "rotate",
+    "principal": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "seq": 1,
+    "prevKey": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU",
+    "nextKey": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg.B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E",
+    "nextEpub": "sBoXKnakYCyS0yQsuJfd4wJMdA3rshW0xrCq6Twikak.6FwQdDI32tVv7A4t-6cDeRwA93Acfha9_XxIU4_Hf-I",
+    "issuedAt": 1700000030,
+    "retainedLinks": [
+      "a90854a50712c3e090e4076385bec9d30c6831d5f04838c0589442ca23e74b1b"
+    ],
+    "authorizer": {
+      "kind": "wallet",
+      "link": "a90854a50712c3e090e4076385bec9d30c6831d5f04838c0589442ca23e74b1b",
+      "siwe": {
+        "message": "s3r.ch wants you to sign in with your Ethereum account:\n0x1efF47bc3a10a45D4B230B5d10E37751FE6AA718\n\nSociACL link: 2db395ec4545bd07f9403175691e894e73dba53805b19c3076553bfb36368e8c\n\nURI: https://s3r.ch/identity/link\nVersion: 1\nChain ID: 1\nNonce: rotation1234\nIssued At: 2023-11-14T22:13:50Z",
+        "signature": "0xdd71bc36cb5a75a41aed6fb7c549e30ca50193c879e19e5502447d9004bac4f11e58d71eeb4b74c0ef5093c70774fcc889d5545e87e8940f29cbb2974c729d141c"
+      }
+    },
+    "nextSig": "OC87avdj0MlNDjYf0NVxdhBmLm-PVZKE1DuuusdHPuKBfGjmmO_JwAhcgwlUjdkdQE0CPgtaVi44bCzmvk3uTQ",
+    "attest": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImZpeHR1cmUtMSIsInR5cCI6IkpXVCJ9.eyJ0eXAiOiJzb2NpYWNsLXJvdGF0ZS1hdHRlc3QtdjQiLCJwcmluY2lwYWwiOiJheGZSOHVFc1FrZjR2T2JsWTZSQThuY0RmWUV0NnpPZzlLRTVSZGlZd3BZLlQtTkM0djRhZjV1TzUtdEtmQS1lRml2T00xZHJNVjdPeTdaQWFEZV9VZlUiLCJuZXh0S2V5IjoiZlBKN0dJMERUMzZLVWpnREJMVWF3OENKYWVKMzhoczFwZ3RJX0VkbW1YZy5CM2RWRU51TzBFQXBQWnJHbjNRdzI3cDlyZVk4NllJcG5nUzNuU0o0YzlFIiwibmV4dEVwdWIiOiJzQm9YS25ha1lDeVMweVFzdUpmZDR3Sk1kQTNyc2hXMHhyQ3E2VHdpa2FrLjZGd1FkREkzMnRWdjdBNHQtNmNEZVJ3QTkzQWNmaGE5X1h4SVU0X0hmLUkiLCJzZXEiOjEsImlhdCI6MTcwMDAwMDAzMCwiZXhwIjoxNzAwMDAwNjMwLCJhdXRoIjoid2FsbGV0IiwibGlua0lkIjoiYTkwODU0YTUwNzEyYzNlMDkwZTQwNzYzODViZWM5ZDMwYzY4MzFkNWYwNDgzOGMwNTg5NDQyY2EyM2U3NGIxYiIsInJldGFpbmVkTGlua3MiOlsiYTkwODU0YTUwNzEyYzNlMDkwZTQwNzYzODViZWM5ZDMwYzY4MzFkNWYwNDgzOGMwNTg5NDQyY2EyM2U3NGIxYiJdLCJzaXdlSGFzaCI6ImQ0MDMyMzJjMzNiOWQwMGQzYzgwY2ExNDYwZWJlMjA5ZTAzMjdiYTExZGQ2NGRmNzA4OTYwYjc2NTdjYmM0ZjMifQ.f--CoYm5FnTTAcvzam8QG2lUo2bipnLTDqKzWQ6HQ_HUuvT6IiseiYhzpWq6QPAX-kNBQ2QgYcLVHkGnsNzfyQ"
   }
 }
