@@ -18,7 +18,10 @@ RUN --mount=type=secret,id=dependency_read_token,required=true \
     python /tmp/install-image-runtime.py
 
 FROM python:3.13-slim-bookworm AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=verifier /usr/local/bin/node /usr/local/bin/node
+RUN node --version
 COPY --from=verifier /opt/acl-admission /opt/acl-admission
 COPY --from=build /build/.venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" \
