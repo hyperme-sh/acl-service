@@ -21,3 +21,25 @@ PY
 docker run --rm --network none --read-only --tmpfs /tmp \
   --mount "type=bind,src=$PWD/tests/container_http.py,dst=/checks/container_http.py,readonly" \
   "$image" python -I /checks/container_http.py
+
+# Exercise the image-owned writer offline, with only public test vectors on stdin.
+python3 - <<'PY' | docker run --rm -i --read-only --network none --tmpfs /tmp "$image" python -I -c '
+import json, sys
+from pathlib import Path
+sys.path.insert(0, "/opt/acl-admission")
+from history_admission import EnrollmentGrant, HistoryAdmission
+from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
+f, operations = json.load(sys.stdin)
+p = f["genesis"]
+grant = EnrollmentGrant(p, "qualification", "one-use-grant", f["now"] + 60)
+writer = HistoryAdmission(SqliteHistoryStore(Path("/tmp/history.sqlite")), grant_for=lambda _: grant,
+                          trust_at=lambda _: {k: f[k] for k in ("policy","jwks","pinnedIss")}, clock=lambda: f["now"])
+writer.enroll(p, json.dumps(f["binding"]).encode(), f["signature"])
+assert writer.apply_store_operation(p, "recovery", operations["current"]) == 1
+assert writer.apply_store_operation(p, "wraps", operations["wrap"]) == 1
+'
+import json
+from pathlib import Path
+print(json.dumps([json.loads(path.read_bytes()) for path in
+                  (Path("admission/fixture.json"), Path("admission/store-fixture.json"))]))
+PY
