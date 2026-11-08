@@ -1,15 +1,20 @@
 """Single-host durable history backend. Each operation owns its transaction."""
 import hashlib
 import sqlite3
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 
+from acl_service.infrastructure.authority_checkpoint import authority_digest
 from acl_service.domain.history_store import HistoryConflict, HistorySnapshot
 from acl_service.domain.keyring_store import MAX_GENERATION, StoreKind, StoreRejected
 
 
 class SqliteHistoryStore:
-    def __init__(self, path: Path, *, freshness_path: Path | None = None):
+    def __init__(self, path: Path, *, freshness_path: Path | None = None,
+                 require_authority_checkpoint: bool = False):
+        if require_authority_checkpoint and freshness_path is None:
+            raise ValueError("authority checkpoint requires separate freshness storage")
+        self.require_authority_checkpoint = require_authority_checkpoint
         self.path = path
         self.freshness_path = freshness_path
         with closing(self._connect()) as db, db:
@@ -36,16 +41,34 @@ class SqliteHistoryStore:
         db.execute("PRAGMA foreign_keys = ON")
         return db
 
+    @contextmanager
+    def _transaction(self, *, write, ciphertext=False):
+        with closing(self._connect()) as db, db:
+            if ciphertext or self.require_authority_checkpoint:
+                self._attach_freshness(db)
+            db.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+            if self.require_authority_checkpoint:
+                expected = db.execute("SELECT digest FROM freshness.authority_checkpoint WHERE id=1").fetchone()
+                if expected != (authority_digest(db),):
+                    raise StoreRejected()
+            yield db
+            if write and self.require_authority_checkpoint:
+                db.execute("UPDATE freshness.authority_checkpoint SET digest=? WHERE id=1",
+                           (authority_digest(db),))
+
     def enroll(self, principal: str, genesis: bytes) -> None:
         if not principal or not isinstance(genesis, bytes) or not genesis:
             raise ValueError("missing principal or genesis")
-        with closing(self._connect()) as db, db:
+        with self._transaction(write=True) as db:
             inserted = db.execute(
                 "INSERT INTO history_accounts VALUES (?, ?) ON CONFLICT(principal) DO NOTHING",
                 (principal, genesis),
             )
             if inserted.rowcount != 1:
                 raise HistoryConflict("principal already enrolled")
+            if self.require_authority_checkpoint:
+                db.executemany("INSERT INTO freshness.ciphertext_heads VALUES(?,?,0,?)",
+                               [(principal, kind, hashlib.sha256(b"").digest()) for kind in ("recovery", "wraps")])
 
     def append(self, principal: str, expected_revision: int, entry: bytes, *,
                authority_revision: int | None = None, verified_rotation: int | None = None) -> None:
@@ -53,8 +76,7 @@ class SqliteHistoryStore:
             raise ValueError("invalid revision")
         if not isinstance(entry, bytes) or not entry:
             raise ValueError("missing history entry")
-        with closing(self._connect()) as db, db:
-            db.execute("BEGIN IMMEDIATE")
+        with self._transaction(write=True) as db:
             if authority_revision is not None and authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed")
             row = db.execute(
@@ -69,8 +91,7 @@ class SqliteHistoryStore:
                 self._observe_floor(db, principal, verified_rotation)
 
     def read(self, principal: str) -> HistorySnapshot | None:
-        with closing(self._connect()) as db, db:
-            db.execute("BEGIN")
+        with self._transaction(write=False) as db:
             account = db.execute("SELECT genesis FROM history_accounts WHERE principal = ?",
                                  (principal,)).fetchone()
             if account is None:
@@ -82,8 +103,7 @@ class SqliteHistoryStore:
             return HistorySnapshot(principal, account[0], tuple(row[0] for row in entries))
 
     def observe_head(self, principal: str, head: int, *, authority_revision: int) -> None:
-        with closing(self._connect()) as db, db:
-            db.execute("BEGIN IMMEDIATE")
+        with self._transaction(write=True) as db:
             if authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed")
             self._observe_floor(db, principal, head)
@@ -108,8 +128,7 @@ class SqliteHistoryStore:
                                     (SELECT COUNT(*) FROM history_entries)""").fetchone()[0]
 
     def read_authority(self) -> tuple[int, dict[str, HistorySnapshot]]:
-        with closing(self._connect()) as db, db:
-            db.execute("BEGIN")
+        with self._transaction(write=False) as db:
             revision = self._authority_revision(db)
             accounts = dict(db.execute("SELECT principal, genesis FROM history_accounts"))
             entries = {p: [] for p in accounts}
@@ -146,9 +165,7 @@ class SqliteHistoryStore:
     def read_ciphertext(self, principal: str, kind: StoreKind) -> tuple[int, bytes]:
         if kind not in ("recovery", "wraps"):
             raise StoreRejected()
-        with closing(self._connect()) as db, db:
-            self._attach_freshness(db)
-            db.execute("BEGIN")
+        with self._transaction(write=False, ciphertext=True) as db:
             return self._ciphertext_snapshot(db, principal, kind)
 
     def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,
@@ -156,9 +173,7 @@ class SqliteHistoryStore:
         if (kind not in ("recovery", "wraps") or not isinstance(payload, bytes)
                 or type(generation) is not int or not 0 <= generation < MAX_GENERATION):
             raise StoreRejected()
-        with closing(self._connect()) as db, db:
-            self._attach_freshness(db)
-            db.execute("BEGIN IMMEDIATE")
+        with self._transaction(write=True, ciphertext=True) as db:
             if self.freshness_path is not None:
                 self._ciphertext_snapshot(db, principal, kind)
             if authority_revision != self._authority_revision(db):

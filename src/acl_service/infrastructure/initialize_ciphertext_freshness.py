@@ -7,6 +7,8 @@ from pathlib import Path
 import sqlite3
 import tempfile
 
+from acl_service.infrastructure.authority_checkpoint import authority_digest
+
 
 def initialize(snapshot: Path, expected: str, output: Path):
     with tempfile.TemporaryDirectory(dir=output.parent) as directory:
@@ -23,6 +25,8 @@ def initialize(snapshot: Path, expected: str, output: Path):
                 closing(sqlite3.connect(new)) as target, target:
             target.execute("CREATE TABLE ciphertext_heads(principal TEXT NOT NULL, kind TEXT NOT NULL, "
                            "generation INTEGER NOT NULL, digest BLOB NOT NULL, PRIMARY KEY(principal, kind))")
+            target.execute("CREATE TABLE authority_checkpoint(id INTEGER PRIMARY KEY CHECK(id=1), digest BLOB NOT NULL)")
+            target.execute("INSERT INTO authority_checkpoint VALUES(1,?)", (authority_digest(source),))
             for principal, in source.execute("SELECT principal FROM history_accounts"):
                 for kind in ("recovery", "wraps"):
                     row = source.execute("SELECT generation,payload FROM history_ciphertext "

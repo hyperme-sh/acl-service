@@ -157,3 +157,26 @@ single attached-database transaction. An unprovisioned principal fails closed.
 Keep the freshness file outside the ledger restore scope. Rolling both files
 back together is outside this guarantee, as is rollback of authority history
 alone. The TEST startup checkpoint remains a separate deployment control.
+
+### Authority snapshot freshness
+
+For a bounded single-host ledger, `require_authority_checkpoint=True` enables
+authority verification on the same store. The initializer records a canonical
+digest of every principal's genesis bytes, ordered history entries (including
+fork markers), and durable head floor. Reads check the digest inside their
+snapshot. Writes check it again under the write lock and update the checkpoint
+in the transaction that commits the change. This includes the final ciphertext
+commit and changes to another principal's history. Cost scales with the full
+authority history on each checked transaction.
+
+Existing ciphertext-only deployments continue in their configured mode. Before
+enabling authority checks, quiesce writers and independently establish that a
+new standalone ledger backup has current, complete authority history and matches
+the advancing ciphertext heads. Initialize a **new** freshness file from its
+pinned digest and retain the old one for reconciliation. A legacy freshness
+file lacks the authority checkpoint and cannot serve authority-checked requests.
+All writers to the ledger must then use authority checking.
+
+The checkpoint authenticates continuity after that trusted baseline. The
+verifier's witness keys, issuer and admission policy still need a separately
+authenticated source; changes in those inputs are not ledger entries.

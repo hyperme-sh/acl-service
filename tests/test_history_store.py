@@ -95,3 +95,51 @@ def test_independent_ciphertext_head_survives_ledger_restore(tmp_path, kind):
     shutil.copyfile(snapshot, path)
     with pytest.raises(StoreRejected):
         writer.write_verified_ciphertext("a", kind, b"replay", generation=0, head=0, authority_revision=revision)
+
+
+def test_authority_checkpoint_rejects_rollback_and_peer_divergence(tmp_path):
+    import hashlib
+    import shutil
+    import sqlite3
+    from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+
+    path, snapshot, anchor = (tmp_path / name for name in ("ledger", "snapshot", "anchor"))
+    original = SqliteHistoryStore(path)
+    original.enroll("account", b"genesis")
+    shutil.copyfile(path, snapshot)
+    initialize(snapshot, hashlib.sha256(snapshot.read_bytes()).hexdigest(), anchor)
+    store = SqliteHistoryStore(path, freshness_path=anchor, require_authority_checkpoint=True)
+    store.enroll("peer", b"peer-genesis")
+    store.append("peer", 0, b"record", verified_rotation=1)
+    revision, _ = store.read_authority()
+    store.write_verified_ciphertext("peer", "wraps", b"payload", generation=0, head=1, authority_revision=revision)
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE history_entries SET entry=? WHERE principal='peer'", (b"other",))
+    with pytest.raises(StoreRejected):
+        store.read("account")
+    with pytest.raises(StoreRejected):
+        store.write_verified_ciphertext("account", "recovery", b"data", generation=0, head=0, authority_revision=revision)
+    shutil.copyfile(snapshot, path)
+    with pytest.raises(StoreRejected):
+        store.enroll("third", b"genesis")
+    with pytest.raises(StoreRejected):
+        store.read_authority()
+
+
+def test_checkpoint_update_failure_rolls_back_admission(tmp_path):
+    import hashlib
+    import sqlite3
+    from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+
+    path, anchor = tmp_path / "ledger", tmp_path / "anchor"
+    SqliteHistoryStore(path).enroll("a", b"genesis")
+    initialize(path, hashlib.sha256(path.read_bytes()).hexdigest(), anchor)
+    store = SqliteHistoryStore(path, freshness_path=anchor, require_authority_checkpoint=True)
+    with sqlite3.connect(anchor) as db:
+        db.execute("CREATE TRIGGER reject_checkpoint BEFORE UPDATE ON authority_checkpoint "
+                   "BEGIN SELECT RAISE(ABORT, 'unavailable'); END")
+    with pytest.raises(sqlite3.IntegrityError):
+        store.append("a", 0, b"rotation", verified_rotation=1)
+    assert store.read("a").entries == ()
+    with sqlite3.connect(path) as db:
+        assert db.execute("SELECT * FROM history_head_floors").fetchall() == []
