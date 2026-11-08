@@ -143,3 +143,16 @@ def test_checkpoint_update_failure_rolls_back_admission(tmp_path):
     assert store.read("a").entries == ()
     with sqlite3.connect(path) as db:
         assert db.execute("SELECT * FROM history_head_floors").fetchall() == []
+
+
+@pytest.mark.parametrize("kind", ["recovery", "wraps"])
+def test_readback_fences_peer_authority_changes(tmp_path, kind):
+    store = SqliteHistoryStore(tmp_path / "ledger.db")
+    store.enroll("a", b"genesis")
+    revision, _ = store.read_authority()
+    store.write_verified_ciphertext("a", kind, b"row", generation=0, head=0,
+                                    authority_revision=revision)
+    assert store.read_ciphertext("a", kind, authority_revision=revision) == (1, b"row")
+    store.enroll("peer", b"peer genesis")
+    with pytest.raises(HistoryConflict):
+        store.read_ciphertext("a", kind, authority_revision=revision)

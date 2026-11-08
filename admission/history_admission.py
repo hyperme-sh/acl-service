@@ -95,6 +95,18 @@ class HistoryAdmission:
         self.store.observe_head(principal, result["sequence"], authority_revision=revision)
         return result, revision
 
+    def read_store_row(self, principal: str, kind: str, target: str):
+        """Read one ciphertext row and its generation against verified account history."""
+        if kind == "recovery" and target not in ("current", "pending"):
+            raise AdmissionRejected("invalid recovery slot")
+        if kind not in ("recovery", "wraps") or not target or len(target) > 512:
+            raise AdmissionRejected("invalid ciphertext target")
+        head, revision = self._observed_snapshot(principal)
+        generation, payload = self.store.read_ciphertext(principal, kind, authority_revision=revision)
+        rows = json.loads(payload) if payload else {}
+        return {"generation": generation, "head": {k: head[k] for k in ("sequence", "currentKey", "currentEpub")},
+                "row": rows.get(target)}
+
     def apply_store_operation(self, principal: str, kind: str, operation: dict):
         """Apply a signed ciphertext mutation once. Conflicts require a fresh signed operation."""
         head, revision = self._observed_snapshot(principal)

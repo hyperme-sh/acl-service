@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
+from fastapi.responses import JSONResponse
+
 from auth_service.schemas import AuthMeResponse
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -18,6 +20,8 @@ MAX_OPERATION_BYTES = 2 * 1024 * 1024
 
 
 class SignedWriter(Protocol):
+    def read_store_row(self, principal: str, kind: StoreKind, target: str) -> dict: ...
+
     def apply_store_operation(self, principal: str, kind: StoreKind, operation: dict) -> int: ...
 
 
@@ -38,6 +42,18 @@ def _invalid_constant(value):
     raise ValueError("non-finite number")
 
 
+def _binding(request, tenant, user):
+    bindings = request.app.state.signed_store_bindings
+    if bindings is None:
+        raise HTTPException(503, "Signed storage is unavailable")
+    binding = bindings.get((tenant, user.sub))
+    if binding is None:
+        raise HTTPException(403, "No signed storage binding")
+    if not request.app.state.rate_limiter.allow(tenant, user.sub):
+        raise HTTPException(429, "Rate limit exceeded")
+    return binding
+
+
 @router.post("/{kind}/operations", openapi_extra={
     "security": [{"BearerAuth": []}],
     "parameters": [{"name": "X-Tenant-ID", "in": "header", "required": True,
@@ -53,14 +69,7 @@ async def apply_signed_operation(
     tenant: UUID = Depends(require_matched_tenant),
     user: AuthMeResponse = Depends(get_current_user),
 ) -> dict[str, int]:
-    bindings = request.app.state.signed_store_bindings
-    if bindings is None:
-        raise HTTPException(503, "Signed storage is unavailable")
-    binding = bindings.get((tenant, user.sub))
-    if binding is None:
-        raise HTTPException(403, "No signed storage binding")
-    if not request.app.state.rate_limiter.allow(tenant, user.sub):
-        raise HTTPException(429, "Rate limit exceeded")
+    binding = _binding(request, tenant, user)
     if request.headers.get("content-type", "").split(";")[0].strip().lower() != "application/json":
         raise HTTPException(415, "Expected application/json")
     data = bytearray()
@@ -87,3 +96,19 @@ async def apply_signed_operation(
     except (HistoryConflict, StoreRejected) as exc:
         raise HTTPException(409, "Store state changed; reread before signing again") from exc
     return {"generation": generation}
+
+
+@router.get("/{kind}/rows/{target}")
+async def read_signed_row(
+    kind: StoreKind, target: str, request: Request,
+    tenant: UUID = Depends(require_matched_tenant),
+    user: AuthMeResponse = Depends(get_current_user),
+):
+    binding = _binding(request, tenant, user)
+    try:
+        result = await asyncio.to_thread(binding.writer.read_store_row, binding.principal, kind, target)
+    except AdmissionRejected as exc:
+        raise HTTPException(403, "Store read rejected") from exc
+    except (HistoryConflict, StoreRejected) as exc:
+        raise HTTPException(409, "Store state changed; reread before signing again") from exc
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})

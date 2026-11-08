@@ -187,7 +187,12 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(apply("recovery", "current"), 1)
         self.assertEqual(apply("wraps", "wrap"), 1)
         self.assertEqual(apply("recovery", "pending"), 2)
+        target = ops["wrap"]["row"]["wrapId"]
+        reread = self.adapter.read_store_row(self.principal, "wraps", target)
+        self.assertEqual((reread["generation"], reread["row"]), (1, ops["wrap"]["row"]))
         self.assertEqual(apply("wraps", "deleteWrap"), 2)
+        reread = self.adapter.read_store_row(self.principal, "wraps", target)
+        self.assertEqual((reread["generation"], reread["row"]), (2, None))
         with self.assertRaises(AdmissionRejected):
             apply("wraps", "wrap")
         with self.assertRaises(AdmissionRejected):
