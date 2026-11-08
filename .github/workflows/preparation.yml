@@ -56,9 +56,19 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
+      - name: Check out the matching SociACL recipient contract
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: FyberLabs/SociACL
+          ref: 779c4d752c1f0afadc6b1b93b7f1f2535f3b4ffd
+          path: sociacl-client
+          persist-credentials: false
       - name: Exercise signed ciphertext HTTP writes with the pinned verifier
+        env:
+          SOCIACL_SOURCE: ${{ github.workspace }}/sociacl-client
         run: |
           npm ci --prefix admission --ignore-scripts --no-audit
+          npm ci --prefix "$SOCIACL_SOURCE/typescript" --ignore-scripts --no-audit
           PYTHONPATH=tests .venv/bin/python -m pytest -p conftest -q admission/test_signed_http.py
       - name: Check policy storage contract against owned PostgreSQL
         run: .venv/bin/python -m pytest -q integration
