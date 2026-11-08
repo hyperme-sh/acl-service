@@ -145,3 +145,36 @@ async def test_lost_recovery_responses_across_application_restarts(tmp_path, mig
         await lost(client, "deleteCommitted")
     async with restart() as (client, _):
         await expect(client, 4, None, None)
+
+
+@pytest.mark.asyncio
+async def test_genesis_wrap_recipient_opens_http_readback(tmp_path, migrated_sync_url, monkeypatch):
+    import subprocess
+
+    base = Path(__file__).parent
+    identity = json.loads((base / "fixture.json").read_bytes())
+    principal = identity["genesis"]
+    store = SqliteHistoryStore(tmp_path / "genesis-wrap.sqlite")
+    grant = EnrollmentGrant(principal, "qualification", "one-use-grant", identity["now"] + 60)
+    writer = HistoryAdmission(store, grant_for=lambda _: grant, clock=lambda: identity["now"],
+                              trust_at=lambda _: {k: identity[k] for k in ("policy", "jwks", "pinnedIss")})
+    writer.enroll(principal, json.dumps(identity["binding"]).encode(), identity["signature"])
+    tenant = uuid4()
+    monkeypatch.setattr(api_config.settings, "database_url", migrated_sync_url.replace("+psycopg", ""))
+    app = create_app(test_event_sink=[], signed_store_bindings={
+        (tenant, "owner"): SignedStoreBinding(principal, writer)})
+    app.dependency_overrides[deps.get_current_user] = lambda: AuthMeResponse(sub="owner", tenant_id=tenant)
+    app.dependency_overrides[deps.get_current_tenant_from_token] = lambda: tenant
+    harness = ["node", str(base / "genesis-wrap-client.mjs")]
+    operation = json.loads(subprocess.check_output([*harness, "seal"]))
+    async with LifespanManager(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://acl/api/v1/acl/sociacl/keyring/wraps/",
+        headers={"X-Tenant-ID": str(tenant)},
+    ) as client:
+        write = await client.post("operations", json=operation)
+        assert write.status_code == 200 and write.json() == {"generation": 1}
+        readback = await client.get("rows/" + operation["row"]["wrapId"])
+        assert readback.status_code == 200
+        state = readback.json()
+        assert state["generation"] == 1 and state["row"] == operation["row"]
+        subprocess.run([*harness, "open"], input=json.dumps(state["row"]).encode(), check=True)
