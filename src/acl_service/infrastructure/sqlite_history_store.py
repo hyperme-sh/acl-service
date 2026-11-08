@@ -1,4 +1,5 @@
 """Single-host durable history backend. Each operation owns its transaction."""
+import hashlib
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -8,8 +9,9 @@ from acl_service.domain.keyring_store import MAX_GENERATION, StoreKind, StoreRej
 
 
 class SqliteHistoryStore:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, freshness_path: Path | None = None):
         self.path = path
+        self.freshness_path = freshness_path
         with closing(self._connect()) as db, db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("""CREATE TABLE IF NOT EXISTS history_accounts (
@@ -30,7 +32,7 @@ class SqliteHistoryStore:
                 PRIMARY KEY(principal, kind))""")
 
     def _connect(self):
-        db = sqlite3.connect(self.path)
+        db = sqlite3.connect(self.path.resolve().as_uri(), uri=True)
         db.execute("PRAGMA foreign_keys = ON")
         return db
 
@@ -119,13 +121,35 @@ class SqliteHistoryStore:
                 p: HistorySnapshot(p, genesis, tuple(entries[p])) for p, genesis in accounts.items()
             }
 
+    def _attach_freshness(self, db):
+        if self.freshness_path is None:
+            return
+        if self.path.samefile(self.freshness_path):
+            raise StoreRejected()
+        db.execute("ATTACH DATABASE ? AS freshness", (self.freshness_path.resolve().as_uri() + "?mode=rw",))
+        for name in ("main", "freshness"):
+            if db.execute(f"PRAGMA {name}.journal_mode").fetchone()[0] != "delete":
+                raise StoreRejected()
+            db.execute(f"PRAGMA {name}.synchronous=EXTRA")
+
+    def _ciphertext_snapshot(self, db, principal, kind):
+        row = db.execute("SELECT generation, payload FROM main.history_ciphertext "
+                         "WHERE principal=? AND kind=?", (principal, kind)).fetchone()
+        generation, payload = row if row is not None else (0, b"")
+        if self.freshness_path is not None:
+            expected = db.execute("SELECT generation, digest FROM freshness.ciphertext_heads "
+                                  "WHERE principal=? AND kind=?", (principal, kind)).fetchone()
+            if expected != (generation, hashlib.sha256(payload).digest()):
+                raise StoreRejected()
+        return generation, payload
+
     def read_ciphertext(self, principal: str, kind: StoreKind) -> tuple[int, bytes]:
         if kind not in ("recovery", "wraps"):
             raise StoreRejected()
-        with closing(self._connect()) as db:
-            row = db.execute("SELECT generation, payload FROM history_ciphertext "
-                             "WHERE principal = ? AND kind = ?", (principal, kind)).fetchone()
-            return row if row is not None else (0, b"")
+        with closing(self._connect()) as db, db:
+            self._attach_freshness(db)
+            db.execute("BEGIN")
+            return self._ciphertext_snapshot(db, principal, kind)
 
     def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,
                                   generation: int, head: int, authority_revision: int) -> None:
@@ -133,7 +157,10 @@ class SqliteHistoryStore:
                 or type(generation) is not int or not 0 <= generation < MAX_GENERATION):
             raise StoreRejected()
         with closing(self._connect()) as db, db:
+            self._attach_freshness(db)
             db.execute("BEGIN IMMEDIATE")
+            if self.freshness_path is not None:
+                self._ciphertext_snapshot(db, principal, kind)
             if authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed before ciphertext commit")
             self._observe_floor(db, principal, head)
@@ -146,3 +173,7 @@ class SqliteHistoryStore:
                                      (payload, principal, kind, generation))
             if updated.rowcount != 1:
                 raise StoreRejected()
+            if self.freshness_path is not None:
+                db.execute("UPDATE freshness.ciphertext_heads SET generation=?, digest=? "
+                           "WHERE principal=? AND kind=?",
+                           (generation + 1, hashlib.sha256(payload).digest(), principal, kind))

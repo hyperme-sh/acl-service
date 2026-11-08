@@ -137,3 +137,23 @@ and its lockfile-verified SociACL dependencies under image ownership. Deployment
 launchers can import `history_admission` from `/opt/acl-admission`. Both the image
 build and archive replay exercise enrollment and signed writes offline. Authority
 history, witness trust and tenant/subject bindings must come from the deployment.
+
+For a single-host deployment with separately restored ciphertext freshness state,
+initialize the record once with writers stopped, from an independently pinned,
+standalone backup of the current ledger:
+
+```sh
+python -m acl_service.infrastructure.initialize_ciphertext_freshness \
+  --snapshot /backup/history.sqlite --sha256 "$CHECKPOINT_SHA256" \
+  --output /freshness/ciphertext.sqlite
+```
+
+Give the service write access to the freshness file and its journal directory.
+Construct the store with `freshness_path` pointing to that file. Both databases
+must support SQLite rollback journals and durable local filesystem locking.
+Recovery and wrap reads compare generation and payload digest. Writes repeat
+the comparison under the SQLite write lock and advance both records in a
+single attached-database transaction. An unprovisioned principal fails closed.
+Keep the freshness file outside the ledger restore scope. Rolling both files
+back together is outside this guarantee, as is rollback of authority history
+alone. The TEST startup checkpoint remains a separate deployment control.
