@@ -69,3 +69,79 @@ async def test_scoped_signed_write_http(tmp_path, migrated_sync_url, monkeypatch
         app.dependency_overrides.clear()
         response = await client.post(path + "/wraps/operations", json=ops["deleteWrap"])
         assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_lost_recovery_responses_across_application_restarts(tmp_path, migrated_sync_url, monkeypatch):
+    """Only HTTP read-back tells the caller whether each ambiguous commit persisted."""
+    from contextlib import asynccontextmanager
+    from hashlib import sha256
+
+    from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+
+    base = Path(__file__).parent
+    identity = json.loads((base / "fixture.json").read_bytes())
+    operations = json.loads((base / "store-fixture.json").read_bytes())
+    principal = identity["genesis"]
+    tenant = uuid4()
+    database = tmp_path / "history.sqlite"
+    anchor = tmp_path / "freshness.sqlite"
+    grant = EnrollmentGrant(principal, "qualification", "one-use-grant", identity["now"] + 60)
+    trust = {k: identity[k] for k in ("policy", "jwks", "pinnedIss")}
+    def writer(store):
+        return HistoryAdmission(store, grant_for=lambda _: grant, clock=lambda: identity["now"],
+                                trust_at=lambda _: trust)
+
+    initial = writer(SqliteHistoryStore(database))
+    initial.enroll(principal, json.dumps(identity["binding"]).encode(), identity["signature"])
+    initialize(database, sha256(database.read_bytes()).hexdigest(), anchor)
+    monkeypatch.setattr(api_config.settings, "database_url", migrated_sync_url.replace("+psycopg", ""))
+
+    class LoseWriteResponse(httpx.ASGITransport):
+        async def handle_async_request(self, request):
+            response = await super().handle_async_request(request)
+            if request.method == "POST":
+                await response.aclose()
+                raise httpx.ReadError("synthetic return-path loss", request=request)
+            return response
+
+    @asynccontextmanager
+    async def restart():
+        adapter = writer(SqliteHistoryStore(database, freshness_path=anchor, require_authority_checkpoint=True))
+        app = create_app(test_event_sink=[], signed_store_bindings={
+            (tenant, "owner"): SignedStoreBinding(principal, adapter)})
+        app.dependency_overrides[deps.get_current_user] = lambda: AuthMeResponse(sub="owner", tenant_id=tenant)
+        app.dependency_overrides[deps.get_current_tenant_from_token] = lambda: tenant
+        async with LifespanManager(app), httpx.AsyncClient(
+            transport=LoseWriteResponse(app=app), base_url="http://acl/api/v1/acl/sociacl/keyring/recovery/",
+            headers={"X-Tenant-ID": str(tenant)},
+        ) as client:
+            yield client, adapter
+
+    async def lost(client, name):
+        with pytest.raises(httpx.ReadError, match="synthetic return-path loss"):
+            await client.post("operations", json=operations[name])
+
+    async def expect(client, generation, current, pending):
+        for slot, name in (("current", current), ("pending", pending)):
+            response = await client.get("rows/" + slot)
+            assert response.status_code == 200
+            state = response.json()
+            assert state["generation"] == generation
+            assert state["row"] == (operations[name]["row"] if name else None)
+
+    async with restart() as (client, _):
+        await lost(client, "current")
+    async with restart() as (client, _):
+        await expect(client, 1, "current", None)
+        await lost(client, "pending")
+    async with restart() as (client, adapter):
+        await expect(client, 2, "current", "pending")
+        for name in ("wallet", "rotate-v4-wallet"):
+            adapter.admit(principal, json.dumps(identity[name]).encode())
+        await lost(client, "commit")
+    async with restart() as (client, _):
+        await expect(client, 3, "pending", None)
+        await lost(client, "deleteCommitted")
+    async with restart() as (client, _):
+        await expect(client, 4, None, None)
