@@ -43,6 +43,10 @@ async def test_scoped_signed_write_http(tmp_path, migrated_sync_url, monkeypatch
         actor = AuthMeResponse(sub="stranger", tenant_id=tenant)
         assert (await client.post(path + "/wraps/operations", json=ops["wrap"])).status_code == 403
         actor = AuthMeResponse(sub="owner", tenant_id=tenant)
+        target = ops["wrap"]["row"]["wrapId"]
+        actor = AuthMeResponse(sub="stranger", tenant_id=tenant)
+        assert (await client.get(f"{path}/wraps/rows/{target}")).status_code == 403
+        actor = AuthMeResponse(sub="owner", tenant_id=tenant)
         for raw, code in ((b'{"action":"put","action":"delete"}', 400),
                           (b'{"n":1e999}', 400), (b"x" * (2 * 1024 * 1024 + 1), 413)):
             response = await client.post(path + "/wraps/operations", content=raw,
@@ -54,6 +58,10 @@ async def test_scoped_signed_write_http(tmp_path, migrated_sync_url, monkeypatch
         for kind, name in (("wraps", "wrap"), ("recovery", "current")):
             response = await client.post(f"{path}/{kind}/operations", json=ops[name])
             assert response.status_code == 200 and response.json() == {"generation": 1}
+            slot = target if kind == "wraps" else "current"
+            reread = await client.get(f"{path}/{kind}/rows/{slot}")
+            assert reread.status_code == 200 and reread.headers["cache-control"] == "no-store"
+            assert reread.json()["row"] == ops[name]["row"] and reread.json()["generation"] == 1
             assert (await client.post(f"{path}/{kind}/operations", json=ops[name])).status_code == 403
             assert store.read_ciphertext(principal, kind)[0] == 1
         app.state.signed_store_bindings = None

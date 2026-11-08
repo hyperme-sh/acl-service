@@ -162,10 +162,12 @@ class SqliteHistoryStore:
                 raise StoreRejected()
         return generation, payload
 
-    def read_ciphertext(self, principal: str, kind: StoreKind) -> tuple[int, bytes]:
+    def read_ciphertext(self, principal: str, kind: StoreKind, *, authority_revision: int | None = None) -> tuple[int, bytes]:
         if kind not in ("recovery", "wraps"):
             raise StoreRejected()
         with self._transaction(write=False, ciphertext=True) as db:
+            if authority_revision is not None and authority_revision != self._authority_revision(db):
+                raise HistoryConflict("authority changed before ciphertext read")
             return self._ciphertext_snapshot(db, principal, kind)
 
     def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,

@@ -43,8 +43,8 @@ class HistoryStore(Protocol):
         """Commit the shared recovery/wrap floor only for the verified authority snapshot."""
         ...
 
-    def read_ciphertext(self, principal: str, kind: StoreKind) -> tuple[int, bytes]:
-        """Return the generation and serialized slots/rows from one committed read."""
+    def read_ciphertext(self, principal: str, kind: StoreKind, *, authority_revision: int | None = None) -> tuple[int, bytes]:
+        """Return one committed generation and payload, rejecting a supplied stale authority revision."""
         ...
 
     def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,

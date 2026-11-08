@@ -180,3 +180,17 @@ All writers to the ledger must then use authority checking.
 The checkpoint authenticates continuity after that trusted baseline. The
 verifier's witness keys, issuer and admission policy still need a separately
 authenticated source; changes in those inputs are not ledger entries.
+
+### Read back a signed operation
+
+Use the same authenticated tenant and subject binding for
+`GET /api/v1/acl/sociacl/keyring/{kind}/rows/{target}` as for a signed write.
+Recovery targets are `current` or `pending`; wrap targets are wrap IDs.
+The response carries the verified head, store generation and requested row.
+A missing row is JSON null and retains the store generation.
+
+After an ambiguous write, compare the exact ciphertext row, head and expected
+generation before deciding whether the operation committed. A changed or
+ambiguous result requires reconciliation with the current state. Acquire all
+signing inputs again before making a new signed operation. For a genesis wrap,
+retain the recipient's test-open step before treating it as usable.
