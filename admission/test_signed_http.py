@@ -178,3 +178,86 @@ async def test_genesis_wrap_recipient_opens_http_readback(tmp_path, migrated_syn
         state = readback.json()
         assert state["generation"] == 1 and state["row"] == operation["row"]
         subprocess.run([*harness, "open"], input=json.dumps(state["row"]).encode(), check=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["recovery", "wraps"])
+async def test_last_generation_contention_and_ledger_rollback(tmp_path, migrated_sync_url, monkeypatch, kind):
+    import asyncio
+    import hashlib
+    import shutil
+    import sqlite3
+
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+    from acl_service.domain.keyring_store import MAX_GENERATION
+    from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+
+    base = Path(__file__).parent
+    identity = json.loads((base / "fixture.json").read_bytes())
+    ops = json.loads((base / "store-fixture.json").read_bytes())
+    principal = identity["genesis"]
+    db = tmp_path / "ledger.sqlite"
+    anchor = tmp_path / "freshness.sqlite"
+    snapshot = tmp_path / "penultimate.sqlite"
+    grant = EnrollmentGrant(principal, "qualification", "one-use-grant", identity["now"] + 60)
+    writer = HistoryAdmission(SqliteHistoryStore(db), grant_for=lambda _: grant, clock=lambda: identity["now"],
+                              trust_at=lambda _: {k: identity[k] for k in ("policy", "jwks", "pinnedIss")})
+    writer.enroll(principal, json.dumps(identity["binding"]).encode(), identity["signature"])
+    writer.observe_store_head(principal)
+    # Seed the disposable fixture immediately before exhaustion. All subsequent
+    # writes, races and observations go through the application.
+    with sqlite3.connect(db) as cx:
+        cx.execute("INSERT INTO history_ciphertext VALUES(?,?,?,?)", (principal, kind, MAX_GENERATION - 1, b"{}"))
+    shutil.copyfile(db, snapshot)
+    initialize(snapshot, hashlib.sha256(snapshot.read_bytes()).hexdigest(), anchor)
+    writer.store = SqliteHistoryStore(db, freshness_path=anchor, require_authority_checkpoint=True)
+    row = ops["wrap" if kind == "wraps" else "current"]["row"]
+
+    def encode(*fields):
+        parts = [str(field).encode() for field in fields]
+        return b"".join(len(part).to_bytes(4, "little") + part for part in parts)
+
+    if kind == "wraps":
+        slot = target = row["wrapId"]
+        category = row["class"]
+        content = encode("sociacl-wrap-row-v1", principal, target, row["epub"], category,
+                         row["ciphertextHex"], row["signature"])
+    else:
+        slot, target, category = "current", row["rotationSeq"], "none"
+        content = encode(principal, target, row["signingPub"], row["epub"], row["bytesHex"])
+    digest = hashlib.sha256(content).hexdigest()
+
+    def put(generation, predecessor):
+        message = encode("sociacl-store-write-v1", principal, "put", target, digest, 0, predecessor, category, generation)
+        key = ec.derive_private_key(1, ec.SECP256R1())  # Public admission fixture.
+        r, s = utils.decode_dss_signature(key.sign(message, ec.ECDSA(hashes.SHA256())))
+        order = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+        return dict(action="put", row=row, signature=f"{r:064x}{min(s, order-s):064x}")
+
+    tenant = uuid4()
+    monkeypatch.setattr(api_config.settings, "database_url", migrated_sync_url.replace("+psycopg", ""))
+    app = create_app(test_event_sink=[], signed_store_bindings={
+        (tenant, "owner"): SignedStoreBinding(principal, writer)})
+    app.dependency_overrides[deps.get_current_user] = lambda: AuthMeResponse(sub="owner", tenant_id=tenant)
+    app.dependency_overrides[deps.get_current_tenant_from_token] = lambda: tenant
+    async with LifespanManager(app), httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url=f"http://acl/api/v1/acl/sociacl/keyring/{kind}/",
+        headers={"X-Tenant-ID": str(tenant)},
+    ) as client:
+        operation = put(MAX_GENERATION - 1, "none")
+        responses = await asyncio.gather(*(client.post("operations", json=operation) for _ in range(2)))
+        success, rejected = sorted(responses, key=lambda result: result.status_code)
+        assert success.status_code == 200 and success.json() == {"generation": MAX_GENERATION}
+        assert rejected.status_code in (403, 409)
+        final = await client.get("rows/" + slot)
+        assert final.status_code == 200
+        assert (final.json()["generation"], final.json()["row"]) == (MAX_GENERATION, row)
+        assert (await client.post("operations", json=put(MAX_GENERATION, digest))).status_code == 403
+        assert (await client.get("rows/" + slot)).json() == final.json()
+
+        # Restore only the closed ledger file. The independent anchor still
+        # records the winning commit and must prevent the old write being reused.
+        shutil.copyfile(snapshot, db)
+        assert (await client.get("rows/" + slot)).status_code == 409
+        assert (await client.post("operations", json=operation)).status_code == 409
