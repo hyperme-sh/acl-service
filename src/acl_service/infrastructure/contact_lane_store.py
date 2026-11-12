@@ -4,7 +4,7 @@ import re
 
 from sqlalchemy import text
 
-LANE_PATH = re.compile(r"/api/v1/acl/sociacl/contact-lanes/[0-9a-f]{64}/messages")
+LANE_PATH = re.compile(r"/api/v1/acl/sociacl/(?:contact-lanes|first-contact)/[0-9a-f]{64}/messages")
 MAX_CIPHERTEXT = 65536
 MAX_LANE_BYTES = 1024 * 1024
 MAX_LANE_MESSAGES = 128
