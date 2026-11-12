@@ -78,10 +78,15 @@ class HistoryAdmission:
 
     def observe_store_head(self, principal: str):
         """Observe committed authority for recovery and wrap; never authorize a later write."""
-        head, _ = self._observed_snapshot(principal)
+        head, _, _ = self._observed_snapshot(principal)
         return head
 
+    def _require_evaluation(self, at):
+        if int(self.clock()) != at:
+            raise AdmissionRejected("history evaluation expired")
+
     def _observed_snapshot(self, principal):
+        at = int(self.clock())
         revision, accounts = self.store.read_authority()
         snapshot = accounts.get(principal)
         if snapshot is None:
@@ -89,11 +94,13 @@ class HistoryAdmission:
         if any(row.startswith(FORK_PREFIX) for row in snapshot.entries):
             raise RotationFork("history frozen")
         result = json.loads(self._run_verifier(
-            principal, int(self.clock()), observe=True, genesis=_record(snapshot.genesis),
+            principal, at, observe=True, genesis=_record(snapshot.genesis),
             entries=[_record(row) for row in snapshot.entries], peers=_peer_inputs(principal, accounts),
         ))
+        self._require_evaluation(at)
         self.store.observe_head(principal, result["sequence"], authority_revision=revision)
-        return result, revision
+        self._require_evaluation(at)
+        return result, revision, at
 
     def read_store_row(self, principal: str, kind: str, target: str):
         """Read one ciphertext row and its generation against verified account history."""
@@ -101,15 +108,16 @@ class HistoryAdmission:
             raise AdmissionRejected("invalid recovery slot")
         if kind not in ("recovery", "wraps") or not target or len(target) > 512:
             raise AdmissionRejected("invalid ciphertext target")
-        head, revision = self._observed_snapshot(principal)
+        head, revision, at = self._observed_snapshot(principal)
         generation, payload = self.store.read_ciphertext(principal, kind, authority_revision=revision)
         rows = json.loads(payload) if payload else {}
+        self._require_evaluation(at)
         return {"generation": generation, "head": {k: head[k] for k in ("sequence", "currentKey", "currentEpub")},
                 "row": rows.get(target)}
 
     def apply_store_operation(self, principal: str, kind: str, operation: dict):
         """Apply a signed ciphertext mutation once. Conflicts require a fresh signed operation."""
-        head, revision = self._observed_snapshot(principal)
+        head, revision, at = self._observed_snapshot(principal)
         generation, payload = self.store.read_ciphertext(principal, kind)
         message = dict(principal=principal, kind=kind, head=head, generation=generation,
                        rows=json.loads(payload) if payload else {}, operation=operation)
@@ -119,8 +127,10 @@ class HistoryAdmission:
         )
         if verified.returncode or not verified.stdout:
             raise AdmissionRejected("invalid signed store operation")
+        self._require_evaluation(at)
         self.store.write_verified_ciphertext(principal, kind, verified.stdout, generation=generation,
-                                             head=head["sequence"], authority_revision=revision)
+                                             head=head["sequence"], authority_revision=revision,
+                                             before_commit=lambda: self._require_evaluation(at))
         return generation + 1
 
     def enroll(self, principal: str, genesis: bytes, signature: str):

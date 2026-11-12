@@ -1,4 +1,5 @@
 """Single-host durable history backend. Each operation owns its transaction."""
+from collections.abc import Callable
 import hashlib
 import sqlite3
 from contextlib import closing, contextmanager
@@ -42,7 +43,7 @@ class SqliteHistoryStore:
         return db
 
     @contextmanager
-    def _transaction(self, *, write, ciphertext=False):
+    def _transaction(self, *, write, ciphertext=False, before_commit=None):
         with closing(self._connect()) as db, db:
             if ciphertext or self.require_authority_checkpoint:
                 self._attach_freshness(db)
@@ -55,6 +56,8 @@ class SqliteHistoryStore:
             if write and self.require_authority_checkpoint:
                 db.execute("UPDATE freshness.authority_checkpoint SET digest=? WHERE id=1",
                            (authority_digest(db),))
+            if before_commit is not None:
+                before_commit()
 
     def enroll(self, principal: str, genesis: bytes) -> None:
         if not principal or not isinstance(genesis, bytes) or not genesis:
@@ -171,15 +174,18 @@ class SqliteHistoryStore:
             return self._ciphertext_snapshot(db, principal, kind)
 
     def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,
-                                  generation: int, head: int, authority_revision: int) -> None:
+                                  generation: int, head: int, authority_revision: int,
+                                  before_commit: Callable[[], None] | None = None) -> None:
         if (kind not in ("recovery", "wraps") or not isinstance(payload, bytes)
                 or type(generation) is not int or not 0 <= generation < MAX_GENERATION):
             raise StoreRejected()
-        with self._transaction(write=True, ciphertext=True) as db:
+        with self._transaction(write=True, ciphertext=True, before_commit=before_commit) as db:
             if self.freshness_path is not None:
                 self._ciphertext_snapshot(db, principal, kind)
             if authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed before ciphertext commit")
+            if before_commit is not None:
+                before_commit()
             self._observe_floor(db, principal, head)
             if generation == 0:
                 updated = db.execute("INSERT INTO history_ciphertext VALUES (?, ?, 1, ?) "

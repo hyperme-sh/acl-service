@@ -194,3 +194,13 @@ generation before deciding whether the operation committed. A changed or
 ambiguous result requires reconciliation with the current state. Acquire all
 signing inputs again before making a new signed operation. For a genesis wrap,
 retain the recipient's test-open step before treating it as usable.
+
+### Evaluation time fence
+
+History-head observations and ciphertext readback must finish in the same
+service-selected whole second in which verification began. Crossing that boundary
+rejects the operation and requires a fresh read. Signed writes recheck after the
+operation verifier and again inside the storage transaction before changing
+ciphertext or its generation, and once more immediately before transaction commit. Waiting for a storage lock cannot extend an old
+verification's lifetime. The optional storage callback preserves callers that
+already supply their own transaction-bound authorization guard.
