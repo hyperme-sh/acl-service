@@ -83,3 +83,9 @@ class ExplicitGrantTests(unittest.TestCase):
     def test_peer_cannot_replace_a_declared_organization_id(self):
         c,p=fixture();p['organizations'][0]['id']='00000000-0000-4000-8000-000000009999'
         with self.assertRaises(ValueError):desired(c,p)
+
+    def test_login_alias_respects_storage_width(self):
+        c,p=fixture();p['broker_subject']='s'*250
+        self.assertEqual(len(desired(c,p)[1][-1][1][0]),255)
+        p['broker_subject']='s'*251
+        with self.assertRaises(ValueError):desired(c,p)

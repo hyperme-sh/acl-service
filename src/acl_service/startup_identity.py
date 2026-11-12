@@ -11,7 +11,7 @@ def desired(config, person):
         raise ValueError('Auth startup mapping differs')
     person_id = str(UUID(person['person_id']))
     subject = person.get('broker_subject')
-    if not isinstance(subject,str) or not subject.strip() or len(subject)>255:
+    if not isinstance(subject,str) or not subject.strip() or len('user:'+subject)>255:
         raise ValueError('Bound broker subject required')
     organizations = person.get('organizations',[])
     expected = [{'slug':slug, 'id':org['organization_id'], 'tenant_id':org['tenant_id'], 'roles':org['roles']}

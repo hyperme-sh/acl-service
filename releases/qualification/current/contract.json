@@ -55,7 +55,7 @@
     "acl_service/resources/model_abac.conf": "03670786b5d37116340f9e9735b00df9594724dd2923a64319a61cc9f8a076c6",
     "acl_service/resources/model_rbac.conf": "82a4b3db1ef656a981d175656b16a1c72488a8d9d0729ab2b705e8c33c94490e",
     "acl_service/startup_contract_source.json": "5cd2de887b662e73a9459e9514a05da3a2cac5ebfa0abe14e0f738cadfe1bde8",
-    "acl_service/startup_identity.py": "ee378015817438c0044d43d570760f9cf0e53fbbf7b558175d073629a48e0f5d",
+    "acl_service/startup_identity.py": "a3f3e68842ff3951cae62de0979865c38fefa430a2d2364f7ec443e3c45f89d0",
     "acl_service/startup_routes.py": "479a4b56e633f2ca9348c89638452e45eec4b14cbadc40a034fec6a559a373b3",
     "acl_service/witness_policy_cli.py": "70ff30df75bf2668ed43030aa2990819352a39d8daa24ad06143c433f7adc43b"
   },
