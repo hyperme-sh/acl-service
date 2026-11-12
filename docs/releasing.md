@@ -120,3 +120,12 @@ idempotent redelivery. Loaded images and temporary files are removed afterward.
 Read-only retrieval and staging of a retained runtime is documented in
 [Preparing a retained ACL runtime](runtime-preparation.md). That tool checks
 live GitHub qualification evidence and stages the bytes for a later load.
+
+Development package checks compare source, wheel, and rebuilt source-archive
+contents and test the fresh immutable candidate produced by CI. Historical files
+under `releases/qualification` remain historical records; their wheel digest is
+not the expected digest of every future development build. Tag-context checks,
+or an explicit `VERIFY_RELEASE_CANDIDATE=1`, additionally bind the build to
+`releases/candidate/release.json` with the existing exact-byte verifier. A missing
+or mismatched declared candidate still fails. Stable publication retains its
+independent shared admission workflow and explicit version authorization.
