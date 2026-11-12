@@ -19,6 +19,14 @@ jobs:
           python-version: '3.13'
       - name: Build candidate before running repository validators
         run: uv build --out-dir "$RUNNER_TEMP/acl-candidate"
+      - name: Export the exact candidate contract for source reconciliation
+        run: python3 scripts/export_release_contract.py "$RUNNER_TEMP"/acl-candidate/*.whl --output "$RUNNER_TEMP/acl-candidate-contract"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: prepared-contract
+          path: ${{ runner.temp }}/acl-candidate-contract/*
+          if-no-files-found: error
+          retention-days: 30
       - id: candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
