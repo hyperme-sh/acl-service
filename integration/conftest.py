@@ -2,6 +2,7 @@
 import subprocess
 import time
 import uuid
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +13,21 @@ from controlplane_db.migrations import upgrade
 
 @pytest.fixture(scope="session")
 def migrated_sync_url():
+    if os.environ.get("NIGHTLY_SUITE") == "acl-service-installed":
+        # Infra provisions, checks and removes this job-owned loopback database.
+        # Never substitute a shared TEST URL or create another host fixture.
+        from sqlalchemy.engine import make_url
+        if not (os.environ.get("GITHUB_ACTIONS") == "true"
+                and os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+                and os.environ.get("INFRA_CI_RUN")):
+            pytest.fail("Nightly database requires the scheduled Infra job")
+        raw = os.environ.get("TEST_DATABASE_URL", "")
+        url = make_url(raw)
+        if url.host != "127.0.0.1" or not url.port or url.database != "postgres" or url.get_backend_name() != "postgresql":
+            pytest.fail("Nightly database must be the Infra-owned loopback PostgreSQL fixture")
+        upgrade(raw)
+        yield raw
+        return
     name = "acl-boundaries-" + uuid.uuid4().hex
     password = uuid.uuid4().hex
     subprocess.run(["docker", "run", "--detach", "--name", name,
