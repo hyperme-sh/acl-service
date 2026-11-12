@@ -4,7 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 schema_checkout=$(mktemp -d)
 trap 'rm -rf "$schema_checkout"' EXIT
-git clone --quiet --depth 1 https://github.com/hyperme-sh/controlplane-db.git "$schema_checkout"
+git -C "$schema_checkout" init --quiet
+git -C "$schema_checkout" remote add origin https://github.com/hyperme-sh/controlplane-db.git
+git -C "$schema_checkout" fetch --quiet --depth 1 origin fa3db3c95305a1c559b7f05f0e2161606e5901c3
+git -C "$schema_checkout" checkout --quiet --detach fa3db3c95305a1c559b7f05f0e2161606e5901c3
 export SOCIACL_CONTACT_SCHEMA="$schema_checkout/src/controlplane_db/migration_chains/platform/versions/0086_contact_lanes.py"
 unset PYTHONPATH UV_NO_SYNC
 uv sync --frozen --no-editable
