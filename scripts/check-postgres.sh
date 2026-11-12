@@ -6,8 +6,8 @@ schema_checkout=$(mktemp -d)
 trap 'rm -rf "$schema_checkout"' EXIT
 git -C "$schema_checkout" init --quiet
 git -C "$schema_checkout" remote add origin https://github.com/hyperme-sh/controlplane-db.git
-git -C "$schema_checkout" fetch --quiet --depth 1 origin main
-git -C "$schema_checkout" checkout --quiet --detach FETCH_HEAD
+git -C "$schema_checkout" fetch --quiet --depth 1 origin 30efb83649e2ff4db7b3d568ea06a81a2b04468d
+git -C "$schema_checkout" checkout --quiet --detach 30efb83649e2ff4db7b3d568ea06a81a2b04468d
 export SOCIACL_CONTACT_SCHEMA="$schema_checkout/src/controlplane_db/migration_chains/platform/versions/0086_contact_lanes.py"
 export SOCIACL_FIRST_CONTACT_SCHEMA="$schema_checkout/src/controlplane_db/migration_chains/platform/versions/0087_first_contact.py"
 unset PYTHONPATH UV_NO_SYNC

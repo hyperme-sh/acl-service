@@ -11,6 +11,9 @@ from acl_service.infrastructure.contact_lane_store import PostgresContactLaneSto
 from acl_service.infrastructure.first_contact_store import PostgresFirstContactStore, LaneCapacity
 
 
+@pytest.mark.skipif(os.environ.get('GITHUB_EVENT_NAME') != 'schedule' or
+                    os.environ.get('NIGHTLY_SUITE') != 'acl-service-installed',
+                    reason='Public request database checks belong to central scheduled CI')
 def test_lane_atomic_quota_retry_and_expiry(migrated_sync_url):
     engine = create_engine(migrated_sync_url)
     store = PostgresFirstContactStore(engine)
