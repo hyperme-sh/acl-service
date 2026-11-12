@@ -41,6 +41,8 @@ from acl_service.infrastructure.witness_policy_publication import load_publicati
 from acl_service.interfaces.api.witness_policy_routes import router as witness_policy_router
 
 from acl_service.interfaces.api.signed_store_routes import SignedStoreBinding, router as signed_store_router
+from acl_service.interfaces.api.contact_lane_routes import router as contact_lane_router
+from acl_service.infrastructure.contact_lane_store import PostgresContactLaneStore
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,8 @@ def create_app(
     signed_store_bindings: Mapping[tuple[UUID, str], SignedStoreBinding] | None = None,
 ) -> FastAPI:
     svc_name = service_name or settings.service_name
+    from acl_service.lane_access_log import install_lane_log_filter
+    install_lane_log_filter()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -63,6 +67,7 @@ def create_app(
         app.state.async_engine = engine
         sync_eng = create_engine(sync_database_url(settings.database_url), pool_pre_ping=True)
         app.state.sync_engine = sync_eng
+        app.state.contact_lane_store = PostgresContactLaneStore(sync_eng)
         app.state.policy_store = PostgresPolicyStore(sync_eng)
         app.state.recovery_store = PostgresRecoveryStore(sync_eng)
         app.state.membership_reader = PostgresMembershipReader(sync_eng)
@@ -156,6 +161,7 @@ def create_app(
     app.state.signed_store_bindings = (MappingProxyType(dict(signed_store_bindings))
                                        if signed_store_bindings is not None else None)
     app.include_router(signed_store_router, prefix="/api/v1")
+    app.include_router(contact_lane_router)
     app.add_middleware(AclServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
