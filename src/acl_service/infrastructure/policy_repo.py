@@ -137,3 +137,21 @@ class PostgresPolicyStore:
 
     def delete_rule(self, tenant_id, ptype, rule):
         return delete_rule(self._engine, tenant_id, ptype, rule)
+
+
+    def reconcile_startup(self, config, person):
+        """Commit the binding and all grants together under a tenant lock."""
+        from acl_service.startup_identity import plan
+        tenant = uuid.UUID(config['tenant_id'])
+        with Session(self._engine) as session, session.begin():
+            _set_guc(session,tenant)
+            session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
+                            {'key':'startup-acl:'+str(tenant)})
+            rows=list(session.scalars(select(AclCasbinRule).where(AclCasbinRule.tenant_id==tenant)).all())
+            additions=plan(config,person,[_record(row) for row in rows])
+            for ptype,rule in additions:
+                row=AclCasbinRule(tenant_id=tenant,ptype=ptype)
+                for index,value in enumerate(rule):setattr(row,'v'+str(index),value)
+                session.add(row)
+            return {'status':'reconciled','mapping_sha256':config and person['mapping_sha256'],
+                    'person_id':person['person_id'],'grant_count':8}

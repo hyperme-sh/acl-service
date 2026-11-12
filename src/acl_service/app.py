@@ -170,6 +170,8 @@ def create_app(
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
     app.include_router(acl_router, prefix="/api/v1")
+    from acl_service.startup_routes import router as startup_router
+    app.include_router(startup_router, prefix="/api/v1")
     app.include_router(sociacl_router, prefix="/api/v1")
     app.include_router(witness_policy_router)
     add_optional_service_cors(app, env_var="ACL_SERVICE_CORS_ORIGINS")
