@@ -4,6 +4,7 @@ Enrollment is only for identities under exclusive ACL admission from genesis.
 The caller authenticates the principal and verifies each admission. A revision
 orders commits and supports concurrency control; it is never a signing-key head.
 """
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -48,7 +49,8 @@ class HistoryStore(Protocol):
         ...
 
     def write_verified_ciphertext(self, principal: str, kind: StoreKind, payload: bytes, *,
-                                  generation: int, head: int, authority_revision: int) -> None:
+                                  generation: int, head: int, authority_revision: int,
+                                  before_commit: Callable[[], None] | None = None) -> None:
         """Fence verified bytes against history, shared floor and store generation atomically."""
         ...
 

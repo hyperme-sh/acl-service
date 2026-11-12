@@ -17,5 +17,5 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --no-audit
         working-directory: admission
-      - run: PYTHONPATH=../src python3 -m unittest -v test_admission
+      - run: PYTHONPATH=../src python3 -m unittest -v test_admission test_history_freshness
         working-directory: admission
