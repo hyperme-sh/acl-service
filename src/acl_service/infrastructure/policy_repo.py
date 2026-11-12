@@ -141,8 +141,8 @@ class PostgresPolicyStore:
 
     def reconcile_startup(self, config, person):
         """Commit the binding and all grants together under a tenant lock."""
-        from acl_service.startup_identity import plan
-        tenant = uuid.UUID(config['tenant_id'])
+        from acl_service.startup_identity import plan, desired
+        tenant = uuid.UUID(config['owner']['tenant_id'])
         with Session(self._engine) as session, session.begin():
             _set_guc(session,tenant)
             session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
@@ -154,4 +154,4 @@ class PostgresPolicyStore:
                 for index,value in enumerate(rule):setattr(row,'v'+str(index),value)
                 session.add(row)
             return {'status':'reconciled','mapping_sha256':config and person['mapping_sha256'],
-                    'person_id':person['person_id'],'grant_count':8}
+                    'person_id':person['person_id'],'grant_count':sum(kind=='p' for kind,_ in desired(config,person)[1])}

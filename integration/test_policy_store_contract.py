@@ -41,14 +41,16 @@ class TestPostgresPolicyStore(contract.PolicyStoreContract):
 def test_startup_grants_concurrent_replay_and_conflict(store,tenants):
     import json
     from concurrent.futures import ThreadPoolExecutor
-    from acl_service._startup_contract import fingerprint
+    from acl_service._startup_contract import fingerprint,binding_fingerprint
     from acl_service.infrastructure.enforcer_factory import enforce_rbac
     c=json.loads((Path(__file__).parents[1]/'tests/fixtures/startup-identity.json').read_text())
-    c['tenant_id']=str(tenants[0])
+    c['owner']['tenant_id']=str(tenants[0])
+    for org in c['binding']['organizations'].values():org['tenant_id']=str(tenants[0])
+    c['binding_sha256']=binding_fingerprint(c['binding'])
     person={'schema_version':1,'mapping_sha256':fingerprint(c),'status':'bound','permissions':[],
         'person_id':str(uuid.uuid4()),'broker_subject':'startup-'+uuid.uuid4().hex,
-        'tenant_id':c['tenant_id'],'network_id':c['network_id'],
-        'organizations':[{'slug':slug,'id':str(uuid.uuid4()),'roles':['owner','admin']} for slug in c['organizations']]}
+        'tenant_id':c['owner']['tenant_id'],'network_id':c['owner']['network_id'],
+        'organizations':[{'slug':slug,'id':org['organization_id'],'tenant_id':org['tenant_id'],'roles':org['roles']} for slug,org in sorted(c['binding']['organizations'].items())]}
     store.add_rule(tenants[0],'p',['unrelated','/unchanged','read'])
     with ThreadPoolExecutor(max_workers=8) as pool:
         results=list(pool.map(lambda _:store.reconcile_startup(c,person),range(8)))
@@ -64,7 +66,12 @@ def test_startup_grants_concurrent_replay_and_conflict(store,tenants):
     # Fail during flush: transaction rollback leaves no partial grants.
     from sqlalchemy import event
     from sqlalchemy.orm import Session
-    c2=dict(c,tenant_id=str(tenants[1]));p2=dict(person,tenant_id=str(tenants[1]),mapping_sha256=fingerprint(c2))
+    import copy
+    c2=copy.deepcopy(c);c2['owner']['tenant_id']=str(tenants[1])
+    for org in c2['binding']['organizations'].values():org['tenant_id']=str(tenants[1])
+    c2['binding_sha256']=binding_fingerprint(c2['binding'])
+    p2=copy.deepcopy(person);p2.update(tenant_id=str(tenants[1]),mapping_sha256=fingerprint(c2))
+    for org in p2['organizations']:org['tenant_id']=str(tenants[1])
     def interrupt(*args):raise RuntimeError('interrupted flush')
     event.listen(Session,'before_flush',interrupt)
     try:

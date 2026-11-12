@@ -19,7 +19,7 @@ class RouteTests(unittest.IsolatedAsyncioTestCase):
         import tempfile
         config=json.loads((ROOT/'tests/fixtures/startup-identity.json').read_text())
         with tempfile.TemporaryDirectory() as directory:
-            path=Path(directory)/'config.json';path.write_text(json.dumps(config))
+            path=Path(directory)/'config.json';path.write_text(json.dumps(config));path.chmod(0o600)
             env={'STARTUP_IDENTITY_ENABLED':'1','STARTUP_IDENTITY_CONFIG_FILE':str(path),'ACL_STARTUP_TOKEN':'writer',
                 'STARTUP_AUTH_URL':'https://auth.example.invalid','AUTH_STARTUP_READ_TOKEN':'reader'}
             app=FastAPI();app.include_router(router)

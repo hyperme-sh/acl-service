@@ -16,8 +16,8 @@ def fixture():
     c=json.loads((ROOT/'tests/fixtures/startup-identity.json').read_text())
     person={'schema_version':1,'mapping_sha256':fingerprint(c),'status':'bound','permissions':[],
         'person_id':'00000000-0000-4000-8000-000000000110','broker_subject':'opaque-person',
-        'tenant_id':c['tenant_id'],'network_id':c['network_id'],
-        'organizations':[{'slug':s,'id':f'00000000-0000-4000-8000-{i:012d}','roles':['owner','admin']} for i,s in enumerate(c['organizations'],200)]}
+        'tenant_id':c['owner']['tenant_id'],'network_id':c['owner']['network_id'],
+        'organizations':[{'slug':s,'id':o['organization_id'],'tenant_id':o['tenant_id'],'roles':o['roles']} for s,o in sorted(c['binding']['organizations'].items())]}
     return c,person
 
 
@@ -26,7 +26,7 @@ class StartupTests(unittest.TestCase):
         c,p=fixture();marker,grants=desired(c,p)
         self.assertEqual(len(grants),9)
         self.assertEqual(len({tuple(rule) for kind,rule in grants if kind=='p'}),8)
-        self.assertEqual(grants[-1],('g',['user:opaque-person',c['sea_public_key']]))
+        self.assertEqual(grants[-1],('g',['user:opaque-person',c['binding']['sea_public_key']]))
         self.assertFalse(any('keycloak' in str(rule) or '*' in str(rule) for _,rule in grants))
 
     def test_replay_and_unrelated_rows_untouched(self):
@@ -55,12 +55,31 @@ class StartupTests(unittest.TestCase):
         c,p=fixture()
         rows=[PolicyRecord(i+1,kind,*rule) for i,(kind,rule) in enumerate(plan(c,p,[]))]
         class Store:
-            def list_rules(self,tenant):return rows if str(tenant)==c['tenant_id'] else []
+            def list_rules(self,tenant):return rows if str(tenant)==c['owner']['tenant_id'] else []
         from uuid import UUID
-        store=Store();tenant=UUID(c['tenant_id'])
+        store=Store();tenant=UUID(c['owner']['tenant_id'])
         for org in p['organizations']:
             self.assertTrue(enforce_rbac(store,tenant,'user:'+p['broker_subject'],'/organizations/'+org['id'],'admin'))
             self.assertFalse(enforce_rbac(store,tenant,'other-company-member','/organizations/'+org['id'],'admin'))
         self.assertFalse(enforce_rbac(store,tenant,'user:'+p['broker_subject'],'/keycloak','admin'))
         self.assertFalse(enforce_rbac(store,tenant,'user:'+p['broker_subject'],'/platform/spanopticon','owner'))
         self.assertFalse(enforce_rbac(store,UUID('00000000-0000-4000-8000-000000000999'),p['broker_subject'],'/platform/spanopticon','admin'))
+
+
+class ExplicitGrantTests(unittest.TestCase):
+    def test_admin_booleans_and_each_declared_role_are_independent(self):
+        from acl_service._startup_contract import binding_fingerprint
+        c,p=fixture()
+        c['binding']['platform_admin']={'spanopticon':False,'hyperme.sh':True}
+        c['binding']['organizations']['fyberlabs']['roles']=['owner']
+        c['binding_sha256']=binding_fingerprint(c['binding'])
+        p['mapping_sha256']=fingerprint(c)
+        p['organizations'][0]['roles']=['owner']
+        _,grants=desired(c,p)
+        self.assertNotIn(('p',[c['binding']['sea_public_key'],'/platform/spanopticon','admin']),grants)
+        self.assertNotIn(('p',[c['binding']['sea_public_key'],'/organizations/'+p['organizations'][0]['id'],'admin']),grants)
+        self.assertIn(('p',[c['binding']['sea_public_key'],'/platform/hyperme.sh','admin']),grants)
+
+    def test_peer_cannot_replace_a_declared_organization_id(self):
+        c,p=fixture();p['organizations'][0]['id']='00000000-0000-4000-8000-000000009999'
+        with self.assertRaises(ValueError):desired(c,p)

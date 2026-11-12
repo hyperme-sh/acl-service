@@ -4,24 +4,24 @@ from ._startup_contract import validate, fingerprint
 
 
 def desired(config, person):
-    validate(config)
+    config=validate(config)
     if (person.get('schema_version') != 1 or person.get('mapping_sha256') != fingerprint(config) or
-        person.get('status') != 'bound' or person.get('tenant_id') != config['tenant_id'] or
-        person.get('network_id') != config['network_id'] or person.get('permissions') != []):
+        person.get('status') != 'bound' or person.get('tenant_id') != config['owner']['tenant_id'] or
+        person.get('network_id') != config['owner']['network_id'] or person.get('permissions') != []):
         raise ValueError('Auth startup mapping differs')
     person_id = str(UUID(person['person_id']))
     subject = person.get('broker_subject')
     if not isinstance(subject,str) or not subject.strip() or len(subject)>255:
         raise ValueError('Bound broker subject required')
     organizations = person.get('organizations',[])
-    if [o['slug'] for o in organizations] != config['organizations']:
-        raise ValueError('Organization scope inventory differs')
-    ids=[str(UUID(o['id'])) for o in organizations]
-    if len(set(ids)) != 3 or any(o['roles'] != ['owner','admin'] for o in organizations):
-        raise ValueError('Explicit owner/admin memberships required')
-    sea=config['sea_public_key']
-    grants=[('p',[sea,'/platform/spanopticon','admin']), ('p',[sea,'/platform/hyperme.sh','admin'])]
-    grants += [('p',[sea,'/organizations/'+oid,role]) for oid in ids for role in ['owner','admin']]
+    expected = [{'slug':slug, 'id':org['organization_id'], 'tenant_id':org['tenant_id'], 'roles':org['roles']}
+                for slug,org in sorted(config['binding']['organizations'].items())]
+    if organizations != expected or any(o['tenant_id'] != config['owner']['tenant_id'] for o in organizations):
+        raise ValueError('Explicit organization scopes and roles required')
+    sea=config['binding']['sea_public_key']
+    grants=[('p',[sea,'/platform/'+platform,'admin'])
+            for platform,enabled in sorted(config['binding']['platform_admin'].items()) if enabled]
+    grants += [('p',[sea,'/organizations/'+org['id'],role]) for org in organizations for role in org['roles']]
     # SEA remains the account identity. This explicit login alias is not a role
     # wildcard, Keycloak administration, or an email-derived identity.
     grants.append(('g',['user:'+subject,sea]))

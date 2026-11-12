@@ -29,7 +29,7 @@ async def reconcile(command:Command,request:Request):
         url=os.environ.get('STARTUP_AUTH_URL','').rstrip('/')
         token=os.environ.get('AUTH_STARTUP_READ_TOKEN','')
         parsed=urlsplit(url)
-        local=config['environment']=='isolated' and parsed.hostname in ('localhost','127.0.0.1','::1')
+        local=parsed.hostname in ('localhost','127.0.0.1','::1')
         if (not token or not parsed.hostname or (parsed.scheme!='https' and not (local and parsed.scheme=='http')) or
             parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment):raise ValueError('Auth owner endpoint unavailable')
         async with httpx.AsyncClient(timeout=10,follow_redirects=False) as client:
