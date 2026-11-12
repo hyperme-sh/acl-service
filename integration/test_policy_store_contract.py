@@ -56,8 +56,8 @@ def test_startup_grants_concurrent_replay_and_conflict(store,tenants):
     assert len(store.list_rules(tenants[0]))==11
     assert len(store.list_rules(tenants[1]))==0
     for org in person['organizations']:
-        assert enforce_rbac(store,tenants[0],person['broker_subject'],'/organizations/'+org['id'],'admin')
-    assert not enforce_rbac(store,tenants[0],person['broker_subject'],'/keycloak','admin')
+        assert enforce_rbac(store,tenants[0],'user:'+person['broker_subject'],'/organizations/'+org['id'],'admin')
+    assert not enforce_rbac(store,tenants[0],'user:'+person['broker_subject'],'/keycloak','admin')
     before=store.list_rules(tenants[0])
     with pytest.raises(ValueError):store.reconcile_startup(c,dict(person,broker_subject='attacker'))
     assert store.list_rules(tenants[0])==before

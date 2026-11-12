@@ -16,4 +16,4 @@ jobs:
           version: '0.11.26'
           python-version: '3.13'
       - name: Test contract and candidate integrity without private dependencies
-        run: uv run --no-project --with pytest==9.0.2 --with casbin==1.43.0 python -m pytest -c /dev/null tests_tools
+        run: uv run --no-project --with pytest==9.0.2 --with casbin==1.43.0 --with fastapi==0.135.0 --with httpx==0.28.1 python -m pytest -c /dev/null tests_tools

@@ -26,7 +26,7 @@ class StartupTests(unittest.TestCase):
         c,p=fixture();marker,grants=desired(c,p)
         self.assertEqual(len(grants),9)
         self.assertEqual(len({tuple(rule) for kind,rule in grants if kind=='p'}),8)
-        self.assertEqual(grants[-1],('g',['opaque-person',c['sea_public_key']]))
+        self.assertEqual(grants[-1],('g',['user:opaque-person',c['sea_public_key']]))
         self.assertFalse(any('keycloak' in str(rule) or '*' in str(rule) for _,rule in grants))
 
     def test_replay_and_unrelated_rows_untouched(self):
@@ -59,8 +59,8 @@ class StartupTests(unittest.TestCase):
         from uuid import UUID
         store=Store();tenant=UUID(c['tenant_id'])
         for org in p['organizations']:
-            self.assertTrue(enforce_rbac(store,tenant,p['broker_subject'],'/organizations/'+org['id'],'admin'))
+            self.assertTrue(enforce_rbac(store,tenant,'user:'+p['broker_subject'],'/organizations/'+org['id'],'admin'))
             self.assertFalse(enforce_rbac(store,tenant,'other-company-member','/organizations/'+org['id'],'admin'))
-        self.assertFalse(enforce_rbac(store,tenant,p['broker_subject'],'/keycloak','admin'))
-        self.assertFalse(enforce_rbac(store,tenant,p['broker_subject'],'/platform/spanopticon','owner'))
+        self.assertFalse(enforce_rbac(store,tenant,'user:'+p['broker_subject'],'/keycloak','admin'))
+        self.assertFalse(enforce_rbac(store,tenant,'user:'+p['broker_subject'],'/platform/spanopticon','owner'))
         self.assertFalse(enforce_rbac(store,UUID('00000000-0000-4000-8000-000000000999'),p['broker_subject'],'/platform/spanopticon','admin'))

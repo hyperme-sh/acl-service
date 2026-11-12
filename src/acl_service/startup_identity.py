@@ -24,7 +24,7 @@ def desired(config, person):
     grants += [('p',[sea,'/organizations/'+oid,role]) for oid in ids for role in ['owner','admin']]
     # SEA remains the account identity. This explicit login alias is not a role
     # wildcard, Keycloak administration, or an email-derived identity.
-    grants.append(('g',[subject,sea]))
+    grants.append(('g',['user:'+subject,sea]))
     marker=('startup_binding',['startup-v1',fingerprint(config),person_id,sea,subject])
     return marker,grants
 
