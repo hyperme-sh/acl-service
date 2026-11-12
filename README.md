@@ -301,3 +301,21 @@ in [Release compatibility](docs/release-policy.md).
 
 First-party code is [Apache-2.0](LICENSE). Dependency packages keep their own
 licenses.
+
+## Configured startup grants
+
+The default-disabled startup endpoint is POST `/api/v1/internal/startup/reconcile`.
+It requires `STARTUP_IDENTITY_ENABLED=1`, a private `STARTUP_IDENTITY_CONFIG_FILE`,
+`ACL_STARTUP_TOKEN`, and the configuration's `mapping_sha256`. It reads the
+already-bound person from `STARTUP_AUTH_URL` using `AUTH_STARTUP_READ_TOKEN`.
+No body-supplied identity, email, membership or administrator flag is accepted.
+
+The existing tenant policy store commits the mapping and eight explicit grants
+in one transaction under a tenant lock: separate Spanopticon/hyperme.sh platform
+admin rows and owner/admin rows for each organization ID. SEA remains the
+canonical subject; one explicit broker-subject alias enables the same login.
+Keycloak administration is never an ACL policy. No wildcard or cross-tenant
+rule is created. Replays preserve unrelated rows; conflicting mappings and
+removed committed grants fail closed. Unit contracts verify exact resource
+separation. The existing scheduled PostgreSQL storage harness covers concurrent
+replay and rollback/retry; registration belongs to FyberLabs/infra#923.

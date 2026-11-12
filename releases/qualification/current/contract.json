@@ -2,7 +2,8 @@
   "coverage": "conservative complete packaged ACL runtime and dependency declarations; implementation changes require compatibility assessment",
   "packaged_file_sha256": {
     "acl_service/__init__.py": "73b42ece7d88163835994cab792ad871381d021a6d3b6f5e0bdf6fbde95f9f03",
-    "acl_service/app.py": "e00643149871439a74370c3499e5f1bea6220624e05fd39ce093fdf0160bf9db",
+    "acl_service/_startup_contract.py": "0297031c46708bd81cc80d6074fd7eca61c4bfc336844beb06c2d71060541c79",
+    "acl_service/app.py": "29c7b009a83d61f016da76cdf3a43155bdcf661e8322902547282eaf3a08ddf4",
     "acl_service/deps.py": "18f098a0313e80e355dc480e53617c1a6f665718e7d5a6174120a0e173f8b7a2",
     "acl_service/domain/checkpoint_replay_store.py": "5ee71554b1cefd7edec6ec9a8cf866579da888f401546dec2a969590bc5ec3a7",
     "acl_service/domain/dtos.py": "9d0a9cf18e97ad140d0058a3ff46661a62b8fbeca32c3aae1e04fe8d417e5692",
@@ -26,7 +27,7 @@
     "acl_service/infrastructure/initialize_ciphertext_freshness.py": "340192869d801d98081c3bfc9b63654d95fb72f78226058a47b712dbe8a4840c",
     "acl_service/infrastructure/keyring_state_repo.py": "86e5bc016d958e510ae07646a8e154d02b307aca2590d67ae0edbad6b91654fb",
     "acl_service/infrastructure/membership_reader.py": "20f1b63dd583776f4094ef7b86bb77f0671422d9e1247cffab5baa0fa69dd7f0",
-    "acl_service/infrastructure/policy_repo.py": "c0f532f83648784a118498a878a8e7dadcb63d61217358687053b025e614c8bf",
+    "acl_service/infrastructure/policy_repo.py": "f5b2edfb242e1c9e577ef69ebb6929ee1d567f8f4d8931fa6dfeb0f90fa08c2e",
     "acl_service/infrastructure/recovery_repo.py": "d34c154ea39abd6b783f4571a552e21f0856cc690756ffe46af8e8bbfb0d90cf",
     "acl_service/infrastructure/share_repo.py": "f520d47a545d1f4223650783cef53b50a4a416c9f31c75273cdcf1f01eaf8af9",
     "acl_service/infrastructure/sqlite_history_store.py": "efad5b70e86cfeb32492de5436596a69488df6eb8bac063fc2a46889003cde7f",
@@ -53,6 +54,9 @@
     "acl_service/middleware.py": "f24aece1bb33d42bca583ca70154a02e253d8fcda6322644a8eb65e51b1b7ad8",
     "acl_service/resources/model_abac.conf": "03670786b5d37116340f9e9735b00df9594724dd2923a64319a61cc9f8a076c6",
     "acl_service/resources/model_rbac.conf": "82a4b3db1ef656a981d175656b16a1c72488a8d9d0729ab2b705e8c33c94490e",
+    "acl_service/startup_contract_source.json": "5cd2de887b662e73a9459e9514a05da3a2cac5ebfa0abe14e0f738cadfe1bde8",
+    "acl_service/startup_identity.py": "a3f3e68842ff3951cae62de0979865c38fefa430a2d2364f7ec443e3c45f89d0",
+    "acl_service/startup_routes.py": "479a4b56e633f2ca9348c89638452e45eec4b14cbadc40a034fec6a559a373b3",
     "acl_service/witness_policy_cli.py": "70ff30df75bf2668ed43030aa2990819352a39d8daa24ad06143c433f7adc43b"
   },
   "requires_dist": [
