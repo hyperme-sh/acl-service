@@ -25,6 +25,17 @@ class WrapReadPermit:
     expires_at: int
 
 
+@dataclass(frozen=True)
+class DeliveredWrap:
+    """Only the committed consumer context; no storage location or owner fence."""
+    payload: bytes
+    object: str
+    epoch: int
+    revision_id: str
+    reader_epub: str
+    expires_at: int
+
+
 class WrapAuthority(Protocol):
     async def authorize_read(self, tenant: str, reader: str, object: str) -> WrapReadPermit:
         """Current Check, enrolled reader binding, epoch and private record.
@@ -44,8 +55,8 @@ class WrapAuthority(Protocol):
         ...
 
 
-async def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: str,
-                         object: str, *, clock=time.time, cancel=lambda: None) -> bytes:
+async def deliver_private_wrap_context(authority: WrapAuthority, store, tenant: str, reader: str,
+                         object: str, *, clock=time.time, cancel=lambda: None) -> DeliveredWrap:
     """A trusted internal operation; the public transport must authenticate reader.
 
     The owner source is mandatory. No implementation or default permissive source
@@ -79,6 +90,15 @@ async def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, rea
             cancel()
             if not clock() < permit.expires_at:
                 raise ValueError()
-            return payload
+            return DeliveredWrap(payload, permit.object, permit.epoch, permit.revision_id,
+                                 permit.reader_epub, permit.expires_at)
     except Exception:
         raise WrapDeliveryRejected('private wrap delivery refused') from None
+
+
+async def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: str,
+                         object: str, *, clock=time.time, cancel=lambda: None) -> bytes:
+    """Compatibility adapter for internal consumers needing only the bytes."""
+    result = await deliver_private_wrap_context(authority, store, tenant, reader, object,
+                                               clock=clock, cancel=cancel)
+    return result.payload
