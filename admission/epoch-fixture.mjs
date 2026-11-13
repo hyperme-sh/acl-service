@@ -33,8 +33,18 @@ const rows = [0,1].map(stated => {
     manifest.deviceId,manifest.keyCommitment,'3600000',aclSnapshot]);
   manifest.signature = Buffer.from(p256.sign(canonical(['s3rch-epoch-manifest-sig-v1',
     manifest.revisionId]),key,{prehash:true,lowS:true,format:'compact'})).toString('hex');
-  return {proof,expected:{ownerPub,...context},manifest:{manifest,snapshot},
-    manifestExpected:{ownerPub,object:manifest.object,epoch:1,revisionId:manifest.revisionId}};
+  const manifestExpected = {ownerPub,object:manifest.object,epoch:1,revisionId:manifest.revisionId};
+  const finalizationId = digest(['s3rch-epoch-finalization-v1',manifest.object,'1','0',
+    manifest.revisionId,'',manifest.revisionId]);
+  const finalization = {object:manifest.object,epoch:1,previousEpoch:0,revisionId:manifest.revisionId,
+    candidateRevisionIds:[manifest.revisionId],previousFinalizationId:'',finalizationId,
+    signature:Buffer.from(p256.sign(canonical(['s3rch-epoch-finalization-sig-v1',finalizationId]),
+      key,{prehash:true,lowS:true,format:'compact'})).toString('hex')};
+  const selection = {object:manifest.object,
+    manifests:[{document:{manifest,snapshot},expected:manifestExpected}],
+    finalizations:[{proof:finalization,ownerPub,seenAt:100}],current:snapshot,nowMs:3600100,
+    anchorFinalizationId:finalizationId,minimumEpoch:1,expectedEpoch:1,expectedRevisionId:manifest.revisionId};
+  return {proof,expected:{ownerPub,...context},manifest:{manifest,snapshot},manifestExpected,selection};
 });
 key.fill(0);
 console.log(JSON.stringify(rows));
