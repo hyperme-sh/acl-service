@@ -80,7 +80,7 @@ class DelegationContracts(unittest.TestCase):
         self.assertEqual(self.read()['fence'],fence)
 
     def test_rollback_policy_change_and_missing_scope_deny(self):
-        before = self.path.read_bytes(); fence = self.read()['fence']
+        fence = self.read()['fence']; before = self.path.read_bytes()
         self.append(self.rows['delegations'][:1])
         with self.assertRaises(HistoryConflict): self.source.append('agents',self.now,fence,self.rows['delegations'][1:2])
         self.path.write_bytes(before)
