@@ -4,7 +4,7 @@ import {statementGraph} from './statement-graph.mjs';
 import {delegationGraph} from './delegation-graph.mjs';
 import {
   checkRotationPublish, historyState, lengthPrefixed, linkId, resolveCurrentKey, MAX_RESOLUTION_INPUT, resolveStoreAccount, resolveWalletLink, verifyKeySignature,
-  verifyOidcLink, verifyRevoke, verifyWalletLink,
+  verifyOidcLink, verifyRevoke, verifyWalletLink, objectPrincipal,
 } from 'sociacl-ids';
 
 function requireResult(result) {
@@ -12,7 +12,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, mediaObject}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -39,7 +39,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     accounts.set(account.principal, {...account, rotations, links, ownRevokes});
   }
-  if (!observe && !graph && !agentGraph && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
+  if (!observe && !graph && !agentGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
 
   function contextFor(account, until) {
     const links = new Map(account.links);
@@ -79,6 +79,18 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
 
   if (graph) return JSON.stringify(statementGraph(accounts, contextFor, now, graph));
   if (agentGraph) return JSON.stringify(delegationGraph(accounts, contextFor, now, agentGraph));
+  if (mediaObject) {
+    const owner = requireResult(objectPrincipal(mediaObject)), bindings = {};
+    if (!accounts.has(owner) || accounts.size > 64) throw Error('unknown-media-owner');
+    for (const [id, value] of accounts) {
+      if (value.frozen || value.entries.some(row => row.issuedAt > now)) throw Error('frozen-history');
+      const diagnostics = [], head = resolveStoreAccount(id, value.rotations, contextFor(value, now), diagnostics);
+      if (diagnostics.length || !head.bindingEpub || head.rotations.length !== value.rotations.length)
+        throw Error('invalid-media-identity');
+      bindings[id] = {pub:head.currentKey, epub:head.currentEpub, head:head.rotations.at(-1)?.seq ?? 0};
+    }
+    return JSON.stringify({owner, bindings});
+  }
 
   const account = accounts.get(principal);
   const {rotations} = account;

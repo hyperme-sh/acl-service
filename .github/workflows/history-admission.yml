@@ -28,6 +28,11 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
       - name: Statement quota unit coverage
         run: node --test --test-isolation=none --experimental-test-coverage admission/statement-quota.test.mjs
+      - name: Protected media transaction contracts and coverage (CI only)
+        working-directory: admission
+        run: |
+          PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=media_source -m unittest test_media_source
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=90 -m
       - name: Delegation verifier contract coverage (CI only)
         run: >-
           node --test --test-isolation=none --experimental-test-coverage

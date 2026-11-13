@@ -11,6 +11,26 @@ from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
 from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
 
 class GraphContracts(unittest.TestCase):
+    def test_media_identity_view_uses_the_same_complete_enrolled_history(self):
+        f=self.f
+        payload={'principal':f['genesis'],'now':f['now'],
+            'trust':{k:f[k] for k in ('jwks','policy','pinnedIss')},
+            'genesis':f['binding'],'entries':[],'peers':[],
+            'mediaObject':self.rows['forum'].replace('forum_','media_',1)}
+        def resolve():
+            return subprocess.run(['node','verify.mjs'],input=json.dumps(payload).encode(),stdout=subprocess.PIPE)
+        result=resolve()
+        self.assertEqual(result.returncode,0)
+        view=json.loads(result.stdout)
+        self.assertEqual(view['owner'],f['genesis'])
+        self.assertEqual(set(view['bindings']),{f['genesis']})
+        self.assertEqual(view['bindings'][f['genesis']]['head'],0)
+        self.assertTrue(view['bindings'][f['genesis']]['epub'])
+        payload['peers']=[{'principal':'foreign','genesis':{},'entries':[],'frozen':True}]
+        self.assertNotEqual(resolve().returncode,0)
+        payload['peers']=[]; payload['mediaObject']='media_unknown_bad'
+        self.assertNotEqual(resolve().returncode,0)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         path = Path(self.tmp.name) / 'ledger.db'

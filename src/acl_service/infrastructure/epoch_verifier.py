@@ -118,3 +118,21 @@ class PrivateGrantVerifier:
             return self._verify(proof_buffer, len(proof), expected_buffer, len(expected)) == 1
         except (OSError, ValueError, ctypes.ArgumentError):
             return False
+
+
+class EpochHistoryVerifier:
+    """Signature admission only; this deliberately does not select a read key."""
+    def __init__(self):
+        self._library = ctypes.CDLL(LIBRARY)
+        self._verify = self._library.sociacl_verify_epoch_history
+        self._verify.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
+        self._verify.restype = ctypes.c_int
+
+    def verifies_history(self, history: bytes) -> bool:
+        if type(history) is not bytes or not 0 < len(history) <= MAX_EPOCH_HISTORY:
+            return False
+        buffer = ctypes.create_string_buffer(history)
+        try:
+            return self._verify(buffer, len(history)) == 1
+        except (OSError, ValueError, ctypes.ArgumentError):
+            return False
