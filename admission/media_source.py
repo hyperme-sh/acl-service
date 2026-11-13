@@ -114,11 +114,11 @@ class MediaSource:
         return current
 
     def _snapshot(self, doc):
-        # The exclusive journal's signed monotonic grant revision is its logical
-        # HAM clock. The owner signs this exact projection in epoch manifests.
+        # Direct private grants have no public HAM edge. SociACL requires zero;
+        # the signed grantRevision orders the protected journal independently.
         return {'entries':[{'accessor':who,'grantRevision':row['claims']['grantRevision'],
             'stated':row['claims']['stated'],'from':row['claims']['from'],'until':row['claims']['until'],
-            'scope':'direct','setId':'','hamState':row['claims']['grantRevision']}
+            'scope':'direct','setId':'','hamState':0}
             for who,row in sorted(self._latest(doc).items())]}
 
     def _history(self, object, doc, at, fin):

@@ -18,8 +18,8 @@ function grant(stated,grantRevision){
   const bytes=canonical(['s3rch-grant-payload-v1',object,f.genesis,'0',String(until),String(stated),'1',f.genesis,String(grantRevision),claims.itemCiphertextDigest]);
   return {claims,proof:{grantBytes:Buffer.from(bytes).toString('hex'),signature:sign(bytes)}};
 }
-const snapshot={entries:[{accessor:f.genesis,grantRevision:1,stated:1,from:0,until,scope:'direct',setId:'',hamState:1}]};
-const aclSnapshot=hash(['s3rch-acl-snapshot-v1','0','','','','',f.genesis,'1','1','0',String(until),'direct','','1']);
+const snapshot={entries:[{accessor:f.genesis,grantRevision:1,stated:1,from:0,until,scope:'direct',setId:'',hamState:0}]};
+const aclSnapshot=hash(['s3rch-acl-snapshot-v1','0','','','','',f.genesis,'1','1','0',String(until),'direct','','0']);
 const manifest={object,previousEpoch:0,epoch:1,deviceId:'fixture',keyCommitment:'fixture-commitment',settleWindowMs:3600000,aclSnapshot};
 manifest.revisionId=hash(['s3rch-epoch-revision-v1',object,'1','0','fixture','fixture-commitment','3600000',aclSnapshot]);
 manifest.signature=sign(canonical(['s3rch-epoch-manifest-sig-v1',manifest.revisionId]));

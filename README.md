@@ -6,8 +6,9 @@ freshness database. Objects start empty under an operator-verified exclusive
 admission grant; there is no history import or implicit identity enrollment.
 It retains signed private grants and cancellations, freezes authenticated
 same-revision conflicts, and authenticates pending epoch history before retaining
-service first-seen times. The direct ACL projection uses each signed monotonic
-grant revision as its logical HAM value; owners sign that exact snapshot.
+service first-seen times. The direct ACL projection preserves the signed monotonic
+grant revision and uses SociACL's required zero HAM value for direct grants;
+owners sign that exact snapshot.
 Group snapshots are refused by this source.
 
 Delivery re-resolves all enrolled keys and complete history in one protected

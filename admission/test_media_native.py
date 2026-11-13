@@ -29,6 +29,8 @@ class NativeMediaContracts(TestCase):
         self.mutate('grant',self.f['grant']);self.mutate('epoch',self.f['epoch']);self.mutate('wrap',self.f['wrap'])
 
     def mutate(self,operation,payload):
+        if operation == 'epoch':
+            self.assertEqual(self.source.read_view(self.object,self.now)['snapshot']['entries'][0]['hamState'],0)
         return self.source.mutate(self.tenant,self.owner,self.object,self.now,
             self.source.read_view(self.object,self.now)['fence'],operation,payload)
 
