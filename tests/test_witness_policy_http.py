@@ -170,6 +170,8 @@ def test_route_rechecks_expiry_under_policy_lock(engine, tmp_path, monkeypatch):
 
 def test_real_app_lifespan_loads_publication_and_restart_keeps_policy(engine, tmp_path, monkeypatch):
     from controlplane_api.config import settings
+    from acl_service.migrate import install
+    install(engine)
     signed = configure(tmp_path, monkeypatch)[:2]; installed(engine, signed)
     monkeypatch.setattr(settings, 'database_url', engine.url.render_as_string(hide_password=False))
     for _ in range(2):
