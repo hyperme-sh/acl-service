@@ -4,10 +4,12 @@ import json
 from types import SimpleNamespace
 from pathlib import Path
 import tempfile
+import sys
+from uuid import UUID
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 from acl_service.infrastructure.statement_bindings import (
-    CONFIG_NAME, MAX_CONFIG_BYTES, _private_file, load_statement_bindings, parse_settings,
+    CONFIG_NAME, MAX_CONFIG_BYTES, _private_file, _source, BindingSettings, load_statement_bindings, parse_settings,
 )
 
 TENANT = 'a5ed86d0-cb50-4404-a5ac-410aab086a82'
@@ -97,6 +99,33 @@ class BindingSettingsTests(unittest.TestCase):
                 load_statement_bindings({CONFIG_NAME: '/private/config.json'})
             provisioned.assert_not_called()
         self.assertTrue(stream.closed)
+
+    def test_rejects_cached_verifier_from_any_other_path(self):
+        binding = BindingSettings(UUID(TENANT), 'service', 'forum', Path('/history'), Path('/freshness'))
+        with patch.dict(sys.modules, {'history_admission': SimpleNamespace(__file__='/tmp/history_admission.py')}):
+            with self.assertRaisesRegex(ValueError, 'unexpected verifier module'):
+                _source(binding)
+
+    def test_image_owned_verifiers_require_independent_checkpoint_store(self):
+        binding = BindingSettings(UUID(TENANT), 'service', 'forum', Path('/history'), Path('/freshness'))
+        store_factory = Mock(return_value=object()); source_factory = Mock(return_value=object())
+        modules = {'history_admission': SimpleNamespace(__file__='/opt/acl-admission/history_admission.py'),
+                   'statement_source': SimpleNamespace(__file__='/opt/acl-admission/statement_source.py', StatementSource=source_factory),
+                   'acl_service.infrastructure.sqlite_history_store': SimpleNamespace(SqliteHistoryStore=store_factory)}
+        with patch.dict(sys.modules, modules):
+            self.assertIs(_source(binding), source_factory.return_value)
+        store_factory.assert_called_once_with(binding.history, freshness_path=binding.freshness, require_authority_checkpoint=True)
+        source_factory.assert_called_once_with(store_factory.return_value, TENANT)
+
+    def test_failed_verifier_import_cannot_poison_later_attempts(self):
+        binding = BindingSettings(UUID(TENANT), 'service', 'forum', Path('/history'), Path('/freshness'))
+        loader = SimpleNamespace(exec_module=Mock(side_effect=RuntimeError('broken verifier')))
+        with patch.dict(sys.modules), \
+                patch('importlib.util.spec_from_file_location', return_value=SimpleNamespace(loader=loader)), \
+                patch('importlib.util.module_from_spec', return_value=SimpleNamespace()):
+            sys.modules.pop('history_admission', None)
+            with self.assertRaisesRegex(RuntimeError, 'broken verifier'): _source(binding)
+            self.assertNotIn('history_admission', sys.modules)
 
 
 if __name__ == '__main__': unittest.main()
