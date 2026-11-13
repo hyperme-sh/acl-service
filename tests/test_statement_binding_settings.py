@@ -1,4 +1,5 @@
 """Isolated configuration units: no database, HTTP or verifier operations."""
+import io
 import json
 from types import SimpleNamespace
 from pathlib import Path
@@ -89,12 +90,13 @@ class BindingSettingsTests(unittest.TestCase):
             finally: Path(directory).chmod(0o700)
 
     def test_configuration_is_bounded_and_errors_do_not_expose_contents(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'binding.json'; path.write_bytes(b'private-subject' * MAX_CONFIG_BYTES); path.chmod(0o600)
-            with patch('acl_service.infrastructure.statement_bindings._provisioned') as provisioned:
-                with self.assertRaisesRegex(RuntimeError, '^Invalid statement source binding configuration$'):
-                    load_statement_bindings({CONFIG_NAME: str(path)})
-                provisioned.assert_not_called()
+        stream = io.BytesIO(b'private-subject' * MAX_CONFIG_BYTES)
+        with patch('acl_service.infrastructure.statement_bindings._private_file', return_value=stream), \
+                patch('acl_service.infrastructure.statement_bindings._provisioned') as provisioned:
+            with self.assertRaisesRegex(RuntimeError, '^Invalid statement source binding configuration$'):
+                load_statement_bindings({CONFIG_NAME: '/private/config.json'})
+            provisioned.assert_not_called()
+        self.assertTrue(stream.closed)
 
 
 if __name__ == '__main__': unittest.main()
