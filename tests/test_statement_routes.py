@@ -7,11 +7,14 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from acl_service.interfaces.api.statement_routes import router, StatementBinding
+from acl_service.interfaces.api.delegation_routes import router as delegation_router
 from acl_service.deps import get_current_user, require_matched_tenant
 
 @pytest.mark.asyncio
-async def test_binding_body_and_source_contract():
-    tenant = uuid4(); calls = []; actor = SimpleNamespace(sub='service', scopes=['acl:statements:read','acl:statements:write'])
+@pytest.mark.parametrize("kind", ["statement", "delegation"])
+async def test_binding_body_and_source_contract(kind):
+    permissions = [f"acl:{kind}s:read", f"acl:{kind}s:write"]
+    tenant = uuid4(); calls = []; actor = SimpleNamespace(sub='service', scopes=permissions)
     class Source:
         production_ready = True
         def read(self, scope, at, guard):
@@ -19,13 +22,16 @@ async def test_binding_body_and_source_contract():
         def append(self, scope, at, fence, rows, guard):
             guard(); calls.append((scope, at, fence, rows)); return True
     source = Source(); source.tenant = str(tenant)
-    app = FastAPI(); app.include_router(router)
+    app = FastAPI(); app.include_router(router if kind == "statement" else delegation_router)
     app.state.statement_bindings = {(tenant, 'service', 'forum'): StatementBinding('forum', source)}
     app.state.statement_slots = asyncio.Semaphore(2)
     app.state.rate_limiter = SimpleNamespace(allow=lambda *a: True)
     app.dependency_overrides[get_current_user] = lambda: actor
     app.dependency_overrides[require_matched_tenant] = lambda: tenant
-    path = '/acl/sociacl/statements/forum/'
+    if kind == 'delegation':
+        app.state.delegation_bindings = app.state.statement_bindings
+        app.state.delegation_slots = app.state.statement_slots
+    path = f'/acl/sociacl/{kind}s/forum/'
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://owner') as client:
         actor.sub = 'browser'
         assert (await client.post(path+'snapshot', json={'evaluatedAt':100})).status_code == 403
@@ -33,9 +39,9 @@ async def test_binding_body_and_source_contract():
         source.production_ready = False
         assert (await client.post(path+'snapshot', json={'evaluatedAt':100})).status_code == 503
         source.production_ready = True
-        actor.scopes = []
+        actor.scopes = ["acl:delegations:read" if kind == "statement" else "acl:statements:read"]
         assert (await client.post(path+'snapshot', json={'evaluatedAt':100})).status_code == 403
-        actor.scopes = ['acl:statements:read','acl:statements:write']
+        actor.scopes = permissions
         for raw in [b'{"evaluatedAt":100,"evaluatedAt":101}', b'{"evaluatedAt":true}', b'{"evaluatedAt":100,"history":{}}']:
             assert (await client.post(path+'snapshot', content=raw, headers={'Content-Type':'application/json'})).status_code == 400
         assert not calls
@@ -46,24 +52,29 @@ async def test_binding_body_and_source_contract():
         assert (await client.post(path+'snapshot', json={'evaluatedAt':100})).status_code == 403
 
 @pytest.mark.asyncio
-async def test_timed_out_threads_keep_capacity_until_stopped():
+@pytest.mark.parametrize("kind", ["statement", "delegation"])
+async def test_timed_out_threads_keep_capacity_until_stopped(kind):
+    permissions = [f"acl:{kind}s:read", f"acl:{kind}s:write"]
     tenant = uuid4(); release = threading.Event(); started = threading.Event()
     class Source:
         production_ready = True
         def read(self, scope, at, guard):
             started.set(); release.wait(5); guard(); return {}
     source = Source(); source.tenant = str(tenant)
-    app = FastAPI(); app.include_router(router)
+    app = FastAPI(); app.include_router(router if kind == "statement" else delegation_router)
     app.state.statement_bindings = {(tenant,'service','forum'):StatementBinding('forum',source)}
     app.state.statement_slots = asyncio.Semaphore(1)
     app.state.rate_limiter = SimpleNamespace(allow=lambda *a:True)
-    app.dependency_overrides[get_current_user] = lambda:SimpleNamespace(sub='service', scopes=['acl:statements:read','acl:statements:write'])
+    app.dependency_overrides[get_current_user] = lambda:SimpleNamespace(sub='service', scopes=permissions)
     app.dependency_overrides[require_matched_tenant] = lambda:tenant
+    if kind == 'delegation':
+        app.state.delegation_bindings = app.state.statement_bindings
+        app.state.delegation_slots = app.state.statement_slots
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://owner') as client:
         try:
-            response = await client.post('/acl/sociacl/statements/forum/snapshot',json={'evaluatedAt':100})
+            response = await client.post(f'/acl/sociacl/{kind}s/forum/snapshot',json={'evaluatedAt':100})
             assert response.status_code == 503 and started.is_set()
-            assert (await client.post('/acl/sociacl/statements/forum/snapshot',json={'evaluatedAt':100})).status_code == 429
+            assert (await client.post(f'/acl/sociacl/{kind}s/forum/snapshot',json={'evaluatedAt':100})).status_code == 429
         finally: release.set()
         for _ in range(100):
             if not app.state.statement_slots.locked(): break

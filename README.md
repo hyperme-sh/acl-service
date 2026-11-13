@@ -10,8 +10,17 @@ as delegation history. At most 64 delegations per owner and 512 per scope reserv
 space for one permanent cancellation of every delegation. This journal does not
 prove agent possession or grant object access. Agent login must still verify
 current delegation authority and challenge the agent key on every exchange.
-No HTTP route or startup binding exposes this source yet; runtime activation and
-the s3r.ch consumer are separate work under FyberLabs/s3r.ch#277.
+Private HTTP transport is default-off. Set `SOCIACL_DELEGATION_BINDINGS_FILE`
+to an owner-only version-1 binding file with the same tenant, subject, scope,
+historyFile and freshnessFile fields described for statement bindings below.
+Its scope must already be provisioned as a delegation journal. The loader never
+enrolls identities or creates scopes. Authenticated callers use
+`POST /api/v1/acl/sociacl/delegations/{scope}/{snapshot|append}` with separate
+`acl:delegations:read` / `acl:delegations:write` scopes and an exact tenant/subject
+binding. Bodies, timeouts and fences match statement transport, and both routes
+share one two-worker budget. Statement permissions do not grant delegation access.
+The s3r.ch consumer and deployment activation remain separate work under
+FyberLabs/s3r.ch#277.
 
 Tenant authorization for the Hypermesh control plane. This service stores
 per-tenant [Casbin](https://casbin.org/) policies and evaluates them over HTTP,
