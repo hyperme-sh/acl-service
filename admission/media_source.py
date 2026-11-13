@@ -414,6 +414,35 @@ class MediaSource:
     async def owner_view(self, tenant, writer, object):
         return await self._work(self._owner_view, tenant, writer, object)
 
+    def _owner_status_view(self, tenant, writer, object, reader, cancel):
+        at = int(self.clock()); self._guard(at, cancel)
+        if tenant != self.tenant or type(reader) is not str:
+            raise AdmissionRejected('invalid media status request')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer != identities['owner']:
+                raise AdmissionRejected('media owner required')
+            grant=self._latest(doc).get(reader)
+            if reader in doc['frozen'] or reader not in identities['bindings'] or not grant:
+                raise AdmissionRejected('private grant unavailable')
+            claims=grant['claims']; owner_pub=identities['bindings'][writer]['pub']
+            if claims['owner']!=writer or claims['stated']!=1 or not claims['from']<=at*1000<claims['until']:
+                raise AdmissionRejected('private grant inactive')
+            if not self.native[0].matches_grant(encoded(grant['proof']),encoded({**claims,'ownerPub':owner_pub})):
+                raise AdmissionRejected('private grant owner changed')
+            selected=self._selected(object,doc,at)
+            if claims['epoch']!=selected['epoch']:
+                raise AdmissionRejected('private grant epoch changed')
+            status={'object':object,'epoch':selected['epoch'],'revisionId':selected['revisionId'],
+                'accessor':reader,'grantRevision':claims['grantRevision'],'stated':1,
+                'signedAt':at*1000,'maxAgeMs':min(60_000,(doc['policyUntil']-at)*1000,claims['until']-at*1000),
+                'zookie':{'object':object,'objectVersion':doc['objectVersion'],'snapshotHash':selected['aclSnapshot']}}
+            return {'at':at,'fence':self._fence(db,object,row,at),'ownerPub':owner_pub,'status':status}
+
+    async def owner_status_view(self, tenant, writer, object, reader):
+        return await self._work(self._owner_status_view,tenant,writer,object,reader)
+
     async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
         return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)
 
