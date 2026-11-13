@@ -49,7 +49,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
 RUN useradd --uid 10001 --create-home acl \
     && python -I -c "import acl_service.app; from pathlib import Path; import acl_service; assert str(Path(acl_service.__file__).resolve()).startswith('/opt/venv/')" \
     && python -I -c "from acl_service.infrastructure.epoch_verifier import EpochStatusVerifier; assert not EpochStatusVerifier().matches_status(b'{}', b'{}', now_ms=0, skew_ms=0, policy_max_age_ms=0)" \
-    && python -I -c "from acl_service.infrastructure.epoch_verifier import EpochManifestVerifier; assert not EpochManifestVerifier().matches_manifest(b'{}', b'{}')"
+    && python -I -c "from acl_service.infrastructure.epoch_verifier import EpochManifestVerifier; assert not EpochManifestVerifier().matches_manifest(b'{}', b'{}')" \
+    && python -I -c "from acl_service.infrastructure.epoch_verifier import SettledEpochVerifier; assert not SettledEpochVerifier().matches_settled(b'{}')"
 WORKDIR /home/acl
 USER 10001:10001
 EXPOSE 8000

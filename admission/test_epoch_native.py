@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier
+from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier, SettledEpochVerifier
 
 
 def encode(value):
@@ -14,6 +14,7 @@ class NativeEpochTests(TestCase):
     def setUp(self):
         self.verifier = EpochStatusVerifier()
         self.manifests = EpochManifestVerifier()
+        self.selection = SettledEpochVerifier()
         self.rows = json.loads(Path('epoch-fixture.json').read_bytes())
 
     def matches(self, row, *, now=10000, skew=0, maximum=1000):
@@ -70,3 +71,19 @@ class NativeEpochTests(TestCase):
             self.assertFalse(self.manifests.matches_manifest(duplicated, expected))
             other = {**row['manifestExpected'], 'ownerPub': 'wrong'}
             self.assertFalse(self.manifests.matches_manifest(encode(document), encode(other)))
+
+    def test_signed_finalization_settlement_and_current_acl(self):
+        row = self.rows[1]['selection']
+        self.assertTrue(self.selection.matches_settled(encode(row)))
+        for field, value in [('nowMs',3600099),('minimumEpoch',2),('expectedEpoch',2),
+                             ('anchorFinalizationId','a'*64),('expectedRevisionId','b'*64)]:
+            self.assertFalse(self.selection.matches_settled(encode({**row,field:value})))
+        for mutate in ['acl','signature','duplicate','future']:
+            changed = json.loads(json.dumps(row))
+            if mutate == 'acl': changed['current']['entries'][0]['stated'] = 0
+            if mutate == 'signature': changed['finalizations'][0]['proof']['signature'] = '0'*128
+            if mutate == 'duplicate': changed['finalizations'].append(changed['finalizations'][0])
+            if mutate == 'future': changed['finalizations'][0]['seenAt'] = row['nowMs']+1
+            self.assertFalse(self.selection.matches_settled(encode(changed)))
+        duplicate = encode(row).replace(b'"nowMs":3600100',b'"nowMs":3600100,"nowMs":3600100')
+        self.assertFalse(self.selection.matches_settled(duplicate))

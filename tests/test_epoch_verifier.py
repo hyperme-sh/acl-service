@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 from acl_service.infrastructure.epoch_verifier import (
     EpochStatusVerifier, EpochManifestVerifier, LIBRARY, MAX_DOCUMENT, MAX_SAFE, MAX_MANIFEST_DOCUMENT,
+    SettledEpochVerifier, MAX_EPOCH_HISTORY,
 )
 
 
@@ -89,6 +90,41 @@ class EpochManifestVerifierTests(TestCase):
         with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', side_effect=OSError()):
             with self.assertRaises(OSError):
                 EpochManifestVerifier()
+
         with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', return_value=object()):
             with self.assertRaises(AttributeError):
                 EpochManifestVerifier()
+
+
+class SettledEpochVerifierTests(TestCase):
+    def setUp(self):
+        self.native = Mock(return_value=1)
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',
+                   return_value=Mock(sociacl_match_settled_epoch=self.native)) as load:
+            self.verifier = SettledEpochVerifier()
+            load.assert_called_once_with(LIBRARY)
+
+    def test_raw_bytes_and_exact_success(self):
+        raw = b'{"epoch":1,"epoch":2}'
+        self.assertTrue(self.verifier.matches_settled(raw))
+        args = self.native.call_args.args
+        self.assertEqual(ctypes.string_at(args[0], args[1]), raw)
+        for result in [0,-1,2]:
+            self.native.return_value = result
+            self.assertFalse(self.verifier.matches_settled(raw))
+
+    def test_bounds_and_types_refuse_before_native(self):
+        for value in [None, '', bytearray(b'{}'), b'', b'x' * (MAX_EPOCH_HISTORY + 1)]:
+            self.assertFalse(self.verifier.matches_settled(value))
+        self.native.assert_not_called()
+
+    def test_native_failure_and_missing_library_refuse(self):
+        for error in [OSError(), ValueError(), ctypes.ArgumentError()]:
+            self.native.side_effect = error
+            self.assertFalse(self.verifier.matches_settled(b'{}'))
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', side_effect=OSError()):
+            with self.assertRaises(OSError):
+                SettledEpochVerifier()
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', return_value=object()):
+            with self.assertRaises(AttributeError):
+                SettledEpochVerifier()

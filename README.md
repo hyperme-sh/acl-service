@@ -54,6 +54,14 @@ object, epoch and revision must come from protected state. A valid old manifest
 can match: this is not current-history selection, settlement or Check. CI covers
 cross-language signatures, snapshot tampering and malformed representations.
 
+`SettledEpochVerifier.matches_settled` matches the latest settled reference-chain
+winner from a bounded protected history document. The source must supply complete
+history, authenticated signing-key bindings, current ACL, first-seen times, clock,
+group configuration, retained anchor and epoch floor. Client JSON is not a trusted
+input to this adapter. Pending successors refuse without falling back to old keys.
+The selection still requires current Check, enrolled recipients, rollback custody
+and a delivery fence before any private wrap can leave the service.
+
 The image also carries an operator-only `DelegationSource` in its admission
 bundle. It provisions a new exclusive scope for one canonical HTTPS audience,
 using the same tenant-bound identity store and independent rollback checkpoint
