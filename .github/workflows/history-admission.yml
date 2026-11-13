@@ -72,3 +72,11 @@ jobs:
           node admission/epoch-fixture.mjs > admission/epoch-fixture.json
           docker build --target epoch-contract -t "$image" .
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges "$image"
+      - name: Protected media source native identity contract (CI only)
+        run: |
+          set -euo pipefail
+          image="acl-media-contract:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker image rm "$image" >/dev/null 2>&1 || true; rm -f admission/media-native-fixture.json' EXIT
+          node admission/media-native-fixture.mjs > admission/media-native-fixture.json
+          docker build --target media-contract -t "$image" .
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --cap-drop ALL --security-opt no-new-privileges "$image"

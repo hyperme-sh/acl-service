@@ -23,6 +23,14 @@ COPY admission/package.json admission/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY admission/history_admission.py admission/verify.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs admission/statement-quota.mjs admission/delegation_source.py admission/delegation-graph.mjs admission/media_source.py ./
 
+FROM verifier AS media-contract
+COPY --from=epoch-verifier /source/target/release/libsociacl.so /opt/acl-admission/libsociacl.so
+COPY src /checks/src
+COPY admission/test_media_native.py admission/media-native-fixture.json /checks/
+ENV PYTHONPATH=/checks/src:/opt/acl-admission
+WORKDIR /checks
+CMD ["python3", "-m", "unittest", "-v", "test_media_native"]
+
 FROM python:3.13-slim-bookworm AS build
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
