@@ -52,6 +52,9 @@ class NativeMediaContracts(TestCase):
 
     def test_real_cancellation_revokes_before_delivery_and_rollback_refuses(self):
         permit=self.ready();backup=self.path.read_bytes()
+        draft=self.source._owner_cancel_view(self.tenant,self.owner,self.object,self.owner,lambda:None)
+        self.assertEqual(draft['grant'],self.f['cancel']['claims'])
+        self.assertEqual(draft['ownerPub'],self.owner)
         self.mutate('grant',self.f['cancel'])
         with self.assertRaises(AdmissionRejected):self.source.commit(permit)
         self.path.write_bytes(backup)

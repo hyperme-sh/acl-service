@@ -474,6 +474,34 @@ class MediaSource:
     async def owner_status_view(self, tenant, writer, object, reader):
         return await self._work(self._owner_status_view,tenant,writer,object,reader)
 
+    def _owner_cancel_view(self, tenant, writer, object, reader, cancel):
+        at = int(self.clock()); self._guard(at, cancel)
+        if tenant != self.tenant or type(reader) is not str:
+            raise AdmissionRejected('invalid media cancellation request')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer != identities['owner']:
+                raise AdmissionRejected('media owner required')
+            held=self._latest(doc).get(reader)
+            if reader in doc['frozen'] or reader not in identities['bindings'] or not held:
+                raise AdmissionRejected('private grant unavailable')
+            claims=held['claims']
+            if claims['owner'] != writer or claims['stated'] != 1:
+                raise AdmissionRejected('no live grant to cancel')
+            revision=claims['grantRevision']
+            if type(revision) is not int or not 1 <= revision < 9007199254740991:
+                raise AdmissionRejected('grant revision exhausted')
+            # The checkpoint authenticates the already admitted historical grant.
+            # A rotated current owner can cancel it without the old private key.
+            draft={**claims,'stated':0,'grantRevision':revision+1}
+            self._guard(at,cancel)
+            return {'at':at,'fence':self._fence(db,object,row,at),
+                    'ownerPub':identities['bindings'][writer]['pub'],'grant':draft}
+
+    async def owner_cancel_view(self, tenant, writer, object, reader):
+        return await self._work(self._owner_cancel_view,tenant,writer,object,reader)
+
     async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
         return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)
 

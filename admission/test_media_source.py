@@ -296,6 +296,47 @@ class MediaSourceContracts(TestCase):
         return {'reader':'reader','record':digest,'digest':digest,'epoch':1,'revisionId':'b'*64,
                 'readerEpub':'reader-epub','itemDigest':'a'*64}
 
+    def cancel_view(self, **changes):
+        args=dict(tenant=TENANT,writer='owner',object=OBJECT,reader='reader',cancel=lambda:None)
+        args.update(changes)
+        return self.source._owner_cancel_view(**args)
+
+    def test_cancellation_draft_preserves_claims_and_current_owner_key_without_writing(self):
+        self.mutate('grant',self.grant())
+        before=self.source.read_view(OBJECT,self.now)['fence']
+        self.ids['bindings']['owner']['pub']='rotated-owner-key'
+        draft=self.cancel_view()
+        self.assertEqual(draft['grant'],{**self.grant()['claims'],'stated':0,'grantRevision':2})
+        self.assertEqual(draft['ownerPub'],'rotated-owner-key')
+        self.assertEqual(draft['fence'],before)
+        self.assertEqual(self.source.read_view(OBJECT,self.now)['fence'],before)
+        self.mutate('grant',{'claims':draft['grant'],'proof':{'signature':'new-owner-signature'}})
+        with self.assertRaises(AdmissionRejected): self.cancel_view()
+
+    def test_cancellation_draft_refuses_wrong_scope_missing_and_frozen_grants(self):
+        with self.assertRaises(AdmissionRejected):self.cancel_view()
+        self.mutate('grant',self.grant())
+        for args in [{'tenant':'other'},{'writer':'reader'},{'reader':'other'},{'reader':[]}]:
+            with self.assertRaises(AdmissionRejected):self.cancel_view(**args)
+        with self.assertRaises(AdmissionRejected):self.mutate('grant',self.grant(until=9998000))
+        with self.assertRaises(AdmissionRejected):self.cancel_view()
+
+    def test_cancellation_draft_preserves_expired_claims_but_refuses_exhausted_revision(self):
+        self.mutate('grant',self.grant(until=1))
+        self.assertEqual(self.cancel_view()['grant']['until'],1)
+        self.mutate('grant',self.grant(grantRevision=9007199254740991))
+        with self.assertRaises(AdmissionRejected):self.cancel_view()
+
+    def test_cancellation_draft_refuses_cancelled_work_expired_policy_and_checkpoint_tampering(self):
+        self.mutate('grant',self.grant())
+        with self.assertRaises(AdmissionRejected):
+            self.cancel_view(cancel=lambda:(_ for _ in ()).throw(AdmissionRejected('cancelled')))
+        self.now=10000
+        with self.assertRaises(AdmissionRejected):self.cancel_view()
+        self.now=100
+        with self.store._transaction(write=True) as db:db.execute('UPDATE media_sources SET revision=revision+1')
+        with self.assertRaises(AdmissionRejected):self.cancel_view()
+
     def status_view(self, **changes):
         args={'tenant':TENANT,'writer':'owner','object':OBJECT,'reader':'reader','cancel':lambda:None}
         args.update(changes)

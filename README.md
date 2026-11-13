@@ -44,6 +44,15 @@ refuse. The owner signs this draft client-side and submits it through `mutate`
 with operation `status`; the source still verifies the signature and exact current
 fence. Reading a draft does not update history, grant access or create a signature.
 
+`POST /api/v1/acl/sociacl/media/owner/cancel-view` takes `{object, reader}`
+and returns `{at, fence, ownerPub, grant}`. The grant draft copies the protected
+latest grant, sets `stated` to zero and increments its safe integer revision.
+It is read-only: the owner must sign and submit through `mutate` with operation
+`grant`. Current owner key rotation does not require possession of the previous
+private key to cancel an already admitted grant. Missing, already cancelled,
+frozen or revision-exhausted grants refuse; policy and independent checkpoint
+checks still apply. Expired grant dates are preserved, never extended.
+
 `POST /api/v1/acl/sociacl/media/owner/publish-wrap` takes
 `{object, at, fence, metadata, wrapBase64}`. The canonical base64 encodes at most
 64 KiB of opaque encrypted wrap bytes. Metadata uses the existing `wrap` shape;

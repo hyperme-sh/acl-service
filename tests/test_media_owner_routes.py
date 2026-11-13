@@ -152,3 +152,17 @@ async def test_private_publication_reserves_then_writes_and_commits(setup):
         s.authority.prepare_wrap_write.side_effect=AdmissionRejected('quota')
         assert (await client.post(BASE+'publish-wrap',json=body)).status_code==403
         assert s.store.create_or_reconcile.await_count==1
+
+@pytest.mark.asyncio
+async def test_cancellation_draft_binds_fixed_owner_and_exact_recipient(setup):
+    s=setup;s.authority.owner_cancel_view=AsyncMock(return_value={'grant':{'stated':0}})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        body={'object':'media-object','reader':'recipient'}
+        response=await client.post(BASE+'cancel-view',json=body)
+        assert response.status_code==200
+        assert response.json()=={'grant':{'stated':0}}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_cancel_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','recipient')
+        for changes in [{'reader':[]},{'reader':'bad reader'},{'owner':'attacker'},{'grantRevision':1},{'policy':{}}]:
+            assert (await client.post(BASE+'cancel-view',json={**body,**changes})).status_code==400
+        assert s.authority.owner_cancel_view.await_count==1
