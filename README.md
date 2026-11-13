@@ -15,7 +15,18 @@ Loading does not create source grants, enroll readers, or initialize databases;
 the tenant's media sources and independent checkpoints must already exist.
 
 The same fixed subject binding may receive `acl:media:write` for its own media
-objects. `POST /api/v1/acl/sociacl/media/owner/view` takes only `{object}` and
+objects. `POST /api/v1/acl/sociacl/media/owner/catalog` takes `{page}` (integer
+0 through 15). It returns `{at, objects, nextPage}`, with at most four IDs per
+page. Canonical owner prefixes narrow candidates; native identity verification
+against current protected history and policy must still confirm each owner.
+Other owners' rows do not affect page positions. The sixteen-page envelope is
+fixed regardless of occupancy; `nextPage` is null only on page 15. Empty pages
+are valid. No recipient, storage address, digest or key is returned. Catalog
+reads do not create a grant or replace authorization on subsequent operations.
+Concurrent admissions may shift pages: clients should deduplicate IDs and
+refresh the catalog instead of treating it as a completeness proof.
+
+`POST /api/v1/acl/sociacl/media/owner/view` takes only `{object}` and
 returns the current evaluation `at`, write `fence`, direct ACL snapshot and
 bindings for the owner and that object's admitted recipients. It does not list
 unrelated enrolled identities. `POST /api/v1/acl/sociacl/media/owner/mutate` takes

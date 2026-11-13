@@ -59,6 +59,43 @@ class MediaSourceContracts(TestCase):
 
     def permit(self): return self.source.authorize(TENANT,'reader',OBJECT)
 
+    def catalog_fixture(self):
+        owner='axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY.T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU'
+        prefix='media_p_6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c2964fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5_'
+        self.ids['owner']=owner
+        self.ids['bindings'][owner]={'pub':owner,'epub':owner,'head':0}
+        objects=[prefix+format(i,'032x') for i in range(6)]
+        for object in objects:
+            self.source.provision(object,{},10000,exclusive_grant=lambda *args:True)
+        return owner,objects
+
+    def test_owner_catalog_has_fixed_pages_without_unrelated_ids_or_positions(self):
+        owner,objects=self.catalog_fixture()
+        foreign='media_p_'+'0'*128+'_'+'0'*32
+        self.source.provision(foreign,{},10000,exclusive_grant=lambda *args:True)
+        first=self.source._owner_catalog(TENANT,owner,0,lambda:None)
+        self.assertEqual(first,{'at':100,'objects':objects[:4],'nextPage':1})
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,1,lambda:None)['objects'],objects[4:])
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,15,lambda:None),{'at':100,'objects':[],'nextPage':None})
+        self.assertNotIn(OBJECT,json.dumps(first))
+        self.assertNotIn(foreign,json.dumps(first))
+        self.ids['owner']='different-owner'
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,0,lambda:None)['objects'],[])
+
+    def test_owner_catalog_rejects_scope_bounds_cancellation_and_rollback(self):
+        owner,objects=self.catalog_fixture()
+        for tenant,writer,page in [('other',owner,0),(TENANT,'bad',0),(TENANT,owner[:-1]+'V',0),
+                                  (TENANT,owner,True),(TENANT,owner,-1),(TENANT,owner,16)]:
+            with self.assertRaises(AdmissionRejected):self.source._owner_catalog(tenant,writer,page,lambda:None)
+        def cancel():raise RuntimeError('cancelled')
+        with self.assertRaises(RuntimeError):self.source._owner_catalog(TENANT,owner,0,cancel)
+        self.now=10000
+        with self.assertRaises(AdmissionRejected):self.source._owner_catalog(TENANT,owner,0,lambda:None)
+        self.now=100
+        with self.store._transaction(write=True) as db:
+            db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(objects[0],))
+        with self.assertRaises(AdmissionRejected):self.source._owner_catalog(TENANT,owner,0,lambda:None)
+
     def test_private_view_and_delivery_commit_share_protected_history(self):
         self.ready(); permit=self.permit()
         self.assertEqual((permit.reader_epub,permit.epoch,permit.revision_id),('reader-epub',1,'b'*64))

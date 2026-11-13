@@ -109,3 +109,9 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(draft['ownerPub'],self.owner)
         self.source.mutate(self.tenant,self.owner,self.object,draft['at'],draft['fence'],'status',self.f['status'])
         self.assertTrue(self.source.commit(self.source.authorize(self.tenant,self.owner,self.object)))
+
+    def test_owner_catalog_uses_native_identity_before_returning_object_ids(self):
+        async def run():
+            result=await self.source.owner_catalog(self.tenant,self.owner,0)
+            self.assertEqual(result,{'at':self.now,'objects':[self.object],'nextPage':1})
+        asyncio.run(run())

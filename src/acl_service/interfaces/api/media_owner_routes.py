@@ -21,7 +21,7 @@ router = APIRouter(prefix='/acl/sociacl/media/owner', tags=['SociACL'])
 async def owner_operation(action: str, request: Request,
                           tenant: UUID = Depends(require_matched_tenant),
                           user: AuthMeResponse = Depends(get_current_user)):
-    if action not in ('view', 'status-view', 'mutate', 'publish-wrap'):
+    if action not in ('catalog', 'view', 'status-view', 'mutate', 'publish-wrap'):
         raise refused(404, 'Unknown media operation')
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
@@ -41,7 +41,7 @@ async def owner_operation(action: str, request: Request,
             async with capacity(request.app.state.private_wrap_body_slots[(tenant, user.sub)]):
                 async with asyncio.timeout(1.0):
                     async for chunk in request.stream():
-                        limit = 2048 if action in ('view', 'status-view') else 100000 if action == 'publish-wrap' else 81920
+                        limit = 2048 if action in ('catalog', 'view', 'status-view') else 100000 if action == 'publish-wrap' else 81920
                         if len(data) + len(chunk) > limit:
                             raise refused(413, 'Request too large')
                         data.extend(chunk)
@@ -49,15 +49,20 @@ async def owner_operation(action: str, request: Request,
                 body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields,
                                   parse_constant=_invalid_constant)
                 expected = {'object'} if action == 'view' else {'object', 'at', 'fence', 'operation', 'payload'}
+                if action == 'catalog': expected = {'page'}
                 if action == 'status-view': expected = {'object', 'reader'}
                 if action == 'publish-wrap': expected = {'object', 'at', 'fence', 'metadata', 'wrapBase64'}
-                if (type(body) is not dict or set(body) != expected or type(body['object']) is not str
-                        or re.fullmatch(r'[\x21-\x7e]{1,512}', body['object']) is None):
+                if type(body) is not dict or set(body) != expected:
+                    raise ValueError()
+                if action == 'catalog':
+                    if type(body['page']) is not int or not 0 <= body['page'] < 16:
+                        raise ValueError()
+                elif (type(body['object']) is not str or re.fullmatch(r'[\x21-\x7e]{1,512}', body['object']) is None):
                     raise ValueError()
                 if action == 'status-view' and (type(body['reader']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['reader']) is None):
                     raise ValueError()
-                if action not in ('view', 'status-view') and (
+                if action not in ('catalog', 'view', 'status-view') and (
                         type(body['at']) is not int or not 0 <= body['at'] <= 9007199254740991
                         or type(body['fence']) is not str or re.fullmatch(r'[0-9a-f]{64}', body['fence']) is None):
                     raise ValueError()
@@ -74,7 +79,9 @@ async def owner_operation(action: str, request: Request,
                 raise refused(400, 'Invalid media request') from None
             async with capacity(request.app.state.private_wrap_tenant_slots[tenant]):
                 async with capacity(request.app.state.private_wrap_slots):
-                    if action == 'view':
+                    if action == 'catalog':
+                        result = await binding.authority.owner_catalog(str(tenant),binding.reader,body['page'])
+                    elif action == 'view':
                         result = await binding.authority.owner_view(str(tenant), binding.reader, body['object'])
                     elif action == 'status-view':
                         result = await binding.authority.owner_status_view(str(tenant),binding.reader,body['object'],body['reader'])

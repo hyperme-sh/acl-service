@@ -1,8 +1,10 @@
 """Protected direct-media authority, sharing identity and independent checkpoints."""
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import threading
 import time
@@ -413,6 +415,35 @@ class MediaSource:
 
     async def owner_view(self, tenant, writer, object):
         return await self._work(self._owner_view, tenant, writer, object)
+
+    def _owner_catalog(self, tenant, writer, page, cancel):
+        if tenant != self.tenant or type(writer) is not str or type(page) is not int or not 0 <= page < 16:
+            raise AdmissionRejected('invalid media catalog request')
+        if re.fullmatch(r'[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}',writer) is None:
+            raise AdmissionRejected('invalid media catalog owner')
+        coordinates = [base64.b64decode(part+'=',altchars=b'-_',validate=True) for part in writer.split('.')]
+        if any(base64.urlsafe_b64encode(raw).decode().rstrip('=') != part for raw,part in zip(coordinates,writer.split('.'))):
+            raise AdmissionRejected('invalid media catalog owner')
+        prefix = 'media_p_' + b''.join(coordinates).hex() + '_'
+        at = int(self.clock()); self._guard(at, cancel)
+        objects = []
+        with self.store._transaction(write=False, before_commit=lambda:self._guard(at,cancel)) as db:
+            # The canonical owner prefix only narrows candidates. Every returned
+            # ID still needs current native owner verification. Other owners do
+            # not affect page positions or nextPage.
+            rows = db.execute('SELECT object FROM media_sources WHERE substr(object,1,?)=? ORDER BY object LIMIT 4 OFFSET ?',
+                              (len(prefix),prefix,page*4)).fetchall()
+            for (object,) in rows:
+                self._guard(at,cancel)
+                _,doc = self._load(db,object,at)
+                identities = self.identities(db,object,doc,at)
+                if identities['owner'] == writer:
+                    objects.append(object)
+            self._guard(at,cancel)
+        return {'at':at,'objects':objects,'nextPage':page+1 if page<15 else None}
+
+    async def owner_catalog(self, tenant, writer, page):
+        return await self._work(self._owner_catalog,tenant,writer,page)
 
     def _owner_status_view(self, tenant, writer, object, reader, cancel):
         at = int(self.clock()); self._guard(at, cancel)
