@@ -11,4 +11,5 @@ function ownership(object) {
 }
 const grant = {owner, object, accessor:owner, stated:1, from:f.now, until:f.now+60, hamState:f.now, issuedAt:f.now};
 grant.sig = sign(seeGrantBytes(grant));
-console.log(JSON.stringify({maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));
+const quotaRows = Array.from({length:129}, (_,i) => ownership(`stmt_${formatPrincipalKey(owner)}_${(i+16).toString(16).padStart(32,'0')}`));
+console.log(JSON.stringify({quotaRows, maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));

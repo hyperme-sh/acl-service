@@ -1,3 +1,4 @@
+import {enforceStatementQuota} from './statement-quota.mjs';
 // Uses the same authenticated identity contexts as recovery admission.
 import {resolveStoreAccount, verifyObjectRecord, verifySeeGrant, verifyPostGrant,
   parseObjectRecord, parseSeeGrant, parsePostGrant, grantSoul, postSoul, objectPrincipal} from 'sociacl-ids';
@@ -60,6 +61,8 @@ export function statementGraph(accounts, contextFor, now, graph) {
     const key = identity(row);
     if (!seen.has(key)) { seen.add(key); novel.push(row); }
   }
+  if (graph.statementOnly && novel.length)
+    enforceStatementQuota(held, novel, proposed[0].record.owner, accounts.keys());
   const rows = [...held, ...novel].map(({kind, soul, record}) => ({kind, soul, record}));
   if (rows.length > 1024) throw Error('graph-capacity');
   const snapshot = {completeThrough: now, history, rows};

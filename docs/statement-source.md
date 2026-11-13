@@ -66,3 +66,11 @@ complete. Gun may carry the same signed records as a transport.
 Unit transaction cases use a stub verifier. Cryptographic owner/consumer and HTTP
 contracts run in CI. This adds the source contract; s3r.ch consumer activation
 and removal of the legacy assignment journal require their own changes.
+
+Statement appends also enforce a retained per-principal share under the same
+history fence: at most min(128, floor(512 / enrolled principals)) statement
+object/see rows and min(256 KiB, floor(2 MiB / enrolled principals)) encoded bytes.
+Expired and cancelled rows still count. Verified duplicate-only retries consume
+no additional share. Administrative forum/grant records use the separately
+bounded operator path. Identity enrollment changes the denominator and therefore
+invalidates old fences; existing rows are never discarded to reclaim capacity.
