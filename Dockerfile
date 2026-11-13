@@ -21,7 +21,19 @@ FROM node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703
 WORKDIR /opt/acl-admission
 COPY admission/package.json admission/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-COPY admission/history_admission.py admission/verify.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs admission/statement-quota.mjs admission/delegation_source.py admission/delegation-graph.mjs ./
+COPY admission/history_admission.py admission/verify.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs admission/statement-quota.mjs admission/delegation_source.py admission/delegation-graph.mjs admission/media_source.py ./
+
+FROM python:3.13-slim-bookworm AS media-contract
+RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=verifier /usr/local/bin/node /usr/local/bin/node
+COPY --from=verifier /opt/acl-admission /opt/acl-admission
+COPY --from=epoch-verifier /source/target/release/libsociacl.so /opt/acl-admission/libsociacl.so
+COPY src /checks/src
+COPY admission/test_media_native.py admission/media-native-fixture.json /checks/
+ENV PYTHONPATH=/checks/src:/opt/acl-admission
+WORKDIR /checks
+CMD ["python3", "-m", "unittest", "-v", "test_media_native"]
 
 FROM python:3.13-slim-bookworm AS build
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv

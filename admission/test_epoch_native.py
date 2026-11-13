@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier, SettledEpochVerifier, PrivateGrantVerifier
+from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier, SettledEpochVerifier, PrivateGrantVerifier, EpochHistoryVerifier
 
 
 def encode(value):
@@ -16,6 +16,7 @@ class NativeEpochTests(TestCase):
         self.manifests = EpochManifestVerifier()
         self.selection = SettledEpochVerifier()
         self.grants = PrivateGrantVerifier()
+        self.history = EpochHistoryVerifier()
         self.rows = json.loads(Path('epoch-fixture.json').read_bytes())
 
     def matches(self, row, *, now=10000, skew=0, maximum=1000):
@@ -102,3 +103,11 @@ class NativeEpochTests(TestCase):
             self.assertFalse(self.selection.matches_settled(encode(changed)))
         duplicate = encode(row).replace(b'"nowMs":3600100',b'"nowMs":3600100,"nowMs":3600100')
         self.assertFalse(self.selection.matches_settled(duplicate))
+
+    def test_pending_history_authenticates_without_becoming_a_read_key(self):
+        row=self.rows[1]['selection']
+        row['nowMs']=100
+        self.assertTrue(self.history.verifies_history(encode(row)))
+        self.assertFalse(self.selection.matches_settled(encode(row)))
+        row['finalizations'][0]['proof']['signature']='0'*128
+        self.assertFalse(self.history.verifies_history(encode(row)))

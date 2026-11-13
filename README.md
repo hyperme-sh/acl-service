@@ -1,5 +1,34 @@
 # acl-service
 
+`MediaSource` in the fixed admission bundle implements direct private-media
+authorization over the existing enrolled identity database and its independent
+freshness database. Objects start empty under an operator-verified exclusive
+admission grant; there is no history import or implicit identity enrollment.
+It retains signed private grants and cancellations, freezes authenticated
+same-revision conflicts, and authenticates pending epoch history before retaining
+service first-seen times. The direct ACL projection preserves the signed monotonic
+grant revision and uses SociACL's required zero HAM value for direct grants;
+owners sign that exact snapshot.
+Group snapshots are refused by this source.
+
+Delivery re-resolves all enrolled keys and complete history in one protected
+view, verifies the current private grant, latest settled epoch and bounded signed
+status, and binds the private wrap digest to the current recipient encryption
+key. After storage fetch, it repeats those checks and atomically commits the
+same fence and identity/epoch floors. Any intervening identity, policy, grant,
+epoch or wrap change refuses. Independent media checkpoints reject restored old
+databases. Cancellation stops a pending worker from committing and holds its
+source slot until that worker exits.
+
+There are at most 64 objects per tenant, 64 live grant records plus 64 reserved
+cancellation records per object, 64 authenticated epoch records, and 64 enrolled
+identities. No history is pruned to make room: exhaustion refuses new writes
+while reserving cancellation capacity. Policies and mutations have separate
+byte caps. This source is not automatically provisioned or bound to HTTP callers;
+deployment and authenticated consumer wiring must supply explicit existing
+tenant/subject mappings. Tests with substituted identity/native providers are
+marked not production-ready. No new credentials or source grants are installed.
+
 `PrivateWrapStore` reads and creates private immutable reader-wrap records through
 the configured Spanopticon tenant's `media` record namespace. Names are opaque
 64-character lowercase hexadecimal identifiers; never derive them by exposing

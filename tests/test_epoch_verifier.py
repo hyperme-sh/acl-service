@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from acl_service.infrastructure.epoch_verifier import (
     EpochStatusVerifier, EpochManifestVerifier, LIBRARY, MAX_DOCUMENT, MAX_SAFE, MAX_MANIFEST_DOCUMENT,
-    SettledEpochVerifier, MAX_EPOCH_HISTORY, PrivateGrantVerifier,
+    SettledEpochVerifier, MAX_EPOCH_HISTORY, PrivateGrantVerifier, EpochHistoryVerifier,
 )
 
 
@@ -162,3 +162,21 @@ class PrivateGrantVerifierTests(TestCase):
             with self.assertRaises(OSError): PrivateGrantVerifier()
         with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',return_value=object()):
             with self.assertRaises(AttributeError): PrivateGrantVerifier()
+
+
+class EpochHistoryVerifierTests(TestCase):
+    def test_history_admission_is_bounded_and_has_no_selection_method(self):
+        native=Mock(return_value=1)
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',return_value=Mock(sociacl_verify_epoch_history=native)):
+            verifier=EpochHistoryVerifier()
+        self.assertFalse(hasattr(verifier,'matches_settled'))
+        raw=b'{"epoch":1,"epoch":2}'
+        self.assertTrue(verifier.verifies_history(raw))
+        args=native.call_args.args
+        self.assertEqual(ctypes.string_at(args[0],args[1]),raw)
+        for value in [None,b'',bytearray(raw),b'x'*(MAX_EPOCH_HISTORY+1)]:
+            self.assertFalse(verifier.verifies_history(value))
+        native.return_value=0
+        self.assertFalse(verifier.verifies_history(raw))
+        native.side_effect=OSError()
+        self.assertFalse(verifier.verifies_history(raw))

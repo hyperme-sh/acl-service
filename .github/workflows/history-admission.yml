@@ -28,6 +28,11 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
       - name: Statement quota unit coverage
         run: node --test --test-isolation=none --experimental-test-coverage admission/statement-quota.test.mjs
+      - name: Protected media transaction contracts and coverage (CI only)
+        working-directory: admission
+        run: |
+          PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=media_source -m unittest test_media_source
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=90 -m
       - name: Delegation verifier contract coverage (CI only)
         run: >-
           node --test --test-isolation=none --experimental-test-coverage
@@ -67,3 +72,11 @@ jobs:
           node admission/epoch-fixture.mjs > admission/epoch-fixture.json
           docker build --target epoch-contract -t "$image" .
           docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges "$image"
+      - name: Protected media source native identity contract (CI only)
+        run: |
+          set -euo pipefail
+          image="acl-media-contract:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker image rm "$image" >/dev/null 2>&1 || true; rm -f admission/media-native-fixture.json' EXIT
+          node admission/media-native-fixture.mjs > admission/media-native-fixture.json
+          docker build --target media-contract -t "$image" .
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=32m --cap-drop ALL --security-opt no-new-privileges "$image"
