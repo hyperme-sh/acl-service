@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import uuid
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 from controlplane_events.envelope import ControlPlaneEventEnvelope
 from acl_service.infrastructure.atomic import MAX_DELIVERY_BYTES
 from acl_service.infrastructure.user_created_consumer import UserCreatedConsumer
@@ -17,6 +17,14 @@ class Delivery(BaseModel):
     model_config=ConfigDict(extra='forbid')
     event_id:uuid.UUID
     envelope:ControlPlaneEventEnvelope
+
+    @model_validator(mode='before')
+    @classmethod
+    def require_sender_time(cls, value):
+        envelope=value.get('envelope') if isinstance(value,dict) else None
+        if not isinstance(envelope,dict) or not envelope.get('occurred_at'):
+            raise ValueError('Sender timestamp required')
+        return value
 
 
 @router.post('/internal/events')

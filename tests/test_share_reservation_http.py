@@ -86,3 +86,27 @@ async def test_slow_store_does_not_block_event_loop(monkeypatch, operation):
     finally:
         release.set()
         await task
+
+
+@pytest.mark.asyncio
+async def test_membership_lookup_reuses_the_mutation_connection(monkeypatch):
+    from contextlib import contextmanager
+    from auth_service.schemas import AuthMeResponse
+    from acl_service.infrastructure import membership_reader
+    from memory_atomic import MemoryOperation
+    store,row,token,publisher,request=setup(monkeypatch)
+    group=uuid4()
+    store.rows[next(iter(store.rows))]=replace(row,predicate_json={'member_of_group_id':str(group)})
+    request.app.state.membership_reader=membership_reader.PostgresMembershipReader(object())
+    binds=[]
+    @contextmanager
+    def session(bind):
+        assert isinstance(bind,MemoryOperation)
+        binds.append(bind)
+        yield SimpleNamespace(execute=lambda *a,**k:None,
+            scalars=lambda *a,**k:SimpleNamespace(first=lambda:object()))
+    monkeypatch.setattr(membership_reader,'store_session',session)
+    result=await routes.sociacl_evaluate(SociACLEvaluateRequest(token=token,context={}),request,
+        AuthMeResponse(sub='verified-member',tenant_id=row.tenant_id))
+    assert result.decision.value=='allow'
+    assert len(binds)==1 and binds[0].store is store

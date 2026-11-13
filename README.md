@@ -79,6 +79,11 @@ or selects a Service Bus sender/receiver.
 
 Before starting the new runtime, deployment setup applies the additive event DDL:
 `python -m acl_service.migrate --database-url-file /run/secrets/acl-database-url`.
+Installation grants existing `controlplane` and `controlplane_app` roles read/insert
+access to transport rows and update access only to the delivery marker. For a
+dedicated runtime/relay role, repeat `--runtime-role ROLE` for each existing role.
+It does not create roles or grant row deletion. HTTP deliveries must include the
+sender's stable `occurred_at` timestamp so retries compare the same facts.
 It preserves the existing business tables and adds forced-RLS inbox/outbox tables
 plus the service tenant registry used by the standard owner HTTP relay. Configure
 that relay against this owner's database; independently deployed peers retain the

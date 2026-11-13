@@ -1,7 +1,7 @@
 """PostgreSQL implementation of the trusted membership lookup API."""
 import uuid
 from sqlalchemy import and_, select, text
-from sqlalchemy.orm import Session
+from acl_service.infrastructure.atomic import store_session
 from controlplane_db.models import Group, User, UserGroupMembership
 
 
@@ -12,7 +12,7 @@ class PostgresMembershipReader:
     def user_in_group(
         self, tenant_id: uuid.UUID, subject: str, group_id: uuid.UUID
     ) -> bool:
-        with Session(self._engine) as session:
+        with store_session(self._engine) as session:
             session.execute(
                 text("SELECT set_config('app.current_tenant_id', :tid, true)"),
                 {"tid": str(tenant_id)},
