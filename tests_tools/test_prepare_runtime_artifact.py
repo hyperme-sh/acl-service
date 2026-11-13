@@ -28,8 +28,10 @@ def qualified(tmp_path):
                 'digest': 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest(),
                 'workflow_run': {'id': 123, 'head_sha': REVISION, 'head_branch': 'main',
                                  'repository_id': 7, 'head_repository_id': 7}}
+    # Main qualification after candidate creation moved into the package job.
+    # Keep this API fixture independent of the verifier's required-job set.
     jobs = [{'id': n, 'name': name, 'status': 'completed', 'conclusion': 'success'}
-            for n, name in enumerate(sorted(prepare.REQUIRED_JOBS), 1)]
+            for n, name in enumerate(('source', 'package', 'image', 'runtime-replay'), 1)]
     return path, run, artifact, jobs
 
 
