@@ -17,7 +17,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --no-audit
         working-directory: admission
-      - run: PYTHONPATH=../src python3 -m unittest -v test_admission test_history_freshness test_statement_source test_statement_graph
+      - run: PYTHONPATH=../src NODE_V8_COVERAGE=${{ runner.temp }}/delegation-v8 python3 -m unittest -v test_admission test_history_freshness test_statement_source test_statement_graph test_delegation_source
         working-directory: admission
       - name: Statement transaction unit coverage
         working-directory: admission
