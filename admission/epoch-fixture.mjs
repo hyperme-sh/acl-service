@@ -44,7 +44,13 @@ const rows = [0,1].map(stated => {
     manifests:[{document:{manifest,snapshot},expected:manifestExpected}],
     finalizations:[{proof:finalization,ownerPub,seenAt:100}],current:snapshot,nowMs:3600100,
     anchorFinalizationId:finalizationId,minimumEpoch:1,expectedEpoch:1,expectedRevisionId:manifest.revisionId};
-  return {proof,expected:{ownerPub,...context},manifest:{manifest,snapshot},manifestExpected,selection};
+  const grantExpected = {ownerPub, object:'media-object',accessor:'reader',from:100,until:200,
+    stated,epoch:3,owner:'owner-account',grantRevision:7,itemCiphertextDigest:'a'.repeat(64)};
+  const grantBytes = canonical(['s3rch-grant-payload-v1',grantExpected.object,grantExpected.accessor,
+    '100','200',String(stated),'3',grantExpected.owner,'7',grantExpected.itemCiphertextDigest]);
+  const grant = {grantBytes:Buffer.from(grantBytes).toString('hex'),
+    signature:Buffer.from(p256.sign(grantBytes,key,{prehash:true,lowS:true,format:'compact'})).toString('hex')};
+  return {proof,expected:{ownerPub,...context},manifest:{manifest,snapshot},manifestExpected,selection,grant,grantExpected};
 });
 key.fill(0);
 console.log(JSON.stringify(rows));

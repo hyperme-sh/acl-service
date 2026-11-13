@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier, SettledEpochVerifier
+from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier, SettledEpochVerifier, PrivateGrantVerifier
 
 
 def encode(value):
@@ -15,6 +15,7 @@ class NativeEpochTests(TestCase):
         self.verifier = EpochStatusVerifier()
         self.manifests = EpochManifestVerifier()
         self.selection = SettledEpochVerifier()
+        self.grants = PrivateGrantVerifier()
         self.rows = json.loads(Path('epoch-fixture.json').read_bytes())
 
     def matches(self, row, *, now=10000, skew=0, maximum=1000):
@@ -29,6 +30,20 @@ class NativeEpochTests(TestCase):
             self.assertFalse(self.matches(row, now=9999))
             self.assertTrue(self.matches(row, now=9999, skew=1))
             self.assertFalse(self.matches(row, now=12001, maximum=5000))
+
+    def test_typescript_private_grant_signatures_and_exact_binding(self):
+        for row in self.rows:
+            proof,expected = row['grant'],row['grantExpected']
+            self.assertTrue(self.grants.matches_grant(encode(proof),encode(expected)))
+            for field,value in [('ownerPub','bad'),('object','other'),('accessor','other'),
+                ('from',101),('until',201),('stated',1-expected['stated']),('epoch',4),
+                ('owner','other'),('grantRevision',8),('itemCiphertextDigest','b'*64)]:
+                self.assertFalse(self.grants.matches_grant(encode(proof),encode({**expected,field:value})))
+            for field,value in [('signature','0'*128),('grantBytes','00')]:
+                self.assertFalse(self.grants.matches_grant(encode({**proof,field:value}),encode(expected)))
+            duplicate = encode(expected).replace(b'"epoch":3',b'"epoch":3,"epoch":3')
+            self.assertFalse(self.grants.matches_grant(encode(proof),duplicate))
+            self.assertFalse(self.grants.matches_grant(encode(list(proof.values())),encode(expected)))
 
     def test_changed_context_and_signature_refuse(self):
         original = self.rows[1]
