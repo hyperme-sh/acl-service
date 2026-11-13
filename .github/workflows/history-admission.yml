@@ -47,6 +47,14 @@ jobs:
         run: |
           PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=acl_service.infrastructure.epoch_verifier -m unittest discover -s tests -p test_epoch_verifier.py
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=100 -m
+      - name: Private wrap storage unit coverage
+        run: |
+          PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=acl_service.infrastructure.private_wrap_store -m unittest discover -s tests -p test_private_wrap_store.py
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=95 -m
+      - name: Private wrap HTTP contract (CI only)
+        run: |
+          "$RUNNER_TEMP/statement-coverage/bin/pip" install httpx==0.28.1
+          PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m unittest discover -s admission -p test_private_wrap_http.py
       - name: Rust epoch verifier cross-language contract (CI only)
         run: |
           set -euo pipefail

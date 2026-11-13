@@ -1,5 +1,20 @@
 # acl-service
 
+`PrivateWrapStore` reads and creates private immutable reader-wrap records through
+the configured Spanopticon tenant's `media` record namespace. Names are opaque
+64-character lowercase hexadecimal identifiers; never derive them by exposing
+recipient or object labels. Reads require an independently retained SHA-256
+revision and verify the returned bytes. Payloads are capped at 64 KiB. Requests
+use tenant-bound credentials, refuse redirects and compression, and have bounded
+deadlines and connection capacity. Creates use `If-None-Match: *`; conflicts and
+lost responses never cause an automatic retry or overwrite.
+
+This storage adapter is not an authorization endpoint. The owner source must
+authenticate the current reader, select the current epoch, retain the opaque
+record and digest privately, and revalidate its authorization fence after fetch
+before returning any material. Nothing initializes the adapter or publishes a
+route by default. Use the s3r.ch Spanopticon tenant, not direct Blob credentials.
+
 The image carries the shared SociACL Rust epoch-status verifier, built from the
 exact source revision in `admission/sociacl-native.rev`. The packaged
 `EpochStatusVerifier` loads only `/opt/acl-admission/libsociacl.so` and checks
