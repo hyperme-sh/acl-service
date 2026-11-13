@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import re
 import time
 from uuid import UUID
 
@@ -76,7 +77,7 @@ class StatementSource:
     def _checkpoint(self, db, scope, row, *, write=False):
         if not self.store.require_authority_checkpoint:
             return
-        digest = self._digest(*row)
+        digest = hashlib.sha256(encoded([self.tenant, scope]) + self._digest(*row)).digest()
         if write:
             db.execute("INSERT INTO freshness.statement_checkpoints VALUES(?,?) "
                        "ON CONFLICT(scope) DO UPDATE SET digest=excluded.digest", (scope, digest))
@@ -112,7 +113,7 @@ class StatementSource:
             if not exclusive_grant(scope, forum):
                 raise AdmissionRejected("no exclusive graph grant")
         guard()
-        doc = {"forum": forum, "rows": [], "policy": policy, "policyUntil": policy_until}
+        doc = {"forum": forum, "rows": [], "policy": json.loads(encoded(policy)), "policyUntil": policy_until}
         if type(policy_until) is not int or policy_until <= at or len(encoded(doc)) > MAX_BYTES:
             raise AdmissionRejected("invalid policy")
         with self.store._transaction(write=True, before_commit=guard) as db:
@@ -139,7 +140,7 @@ class StatementSource:
 
     def append(self, scope, at, fence, rows, cancel=lambda: None, *, statement_only=True):
         self._guard(at, cancel)
-        if not isinstance(fence, str) or len(fence) != 64 or not isinstance(rows, list) or not 1 <= len(rows) <= 65 or len(encoded(rows)) > 65536:
+        if not isinstance(fence, str) or not re.fullmatch(r"[0-9a-f]{64}", fence) or not isinstance(rows, list) or not 1 <= len(rows) <= 65 or len(encoded(rows)) > 65536:
             raise AdmissionRejected("invalid append")
         # Detach caller-owned input before verification or mutation.
         rows = json.loads(encoded(rows))

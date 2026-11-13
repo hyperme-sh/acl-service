@@ -98,4 +98,39 @@ class StatementUnits(unittest.TestCase):
         self.now = 200
         with self.assertRaises(AdmissionRejected): self.source.read('forum', 200)
 
+    def test_fork_and_oversized_history_rejected_before_verifier(self):
+        from history_admission import FORK_PREFIX
+        self.store.append('owner', 0, FORK_PREFIX + b'fork')
+        with self.assertRaises(AdmissionRejected): self.source.read('forum', 100)
+        other = SqliteHistoryStore(Path(self.tmp.name) / 'large.db')
+        other.enroll('owner', b'x' * (4*1024*1024 + 1))
+        source = StatementSource(other, TENANT, clock=lambda:100, verifier=self.verify)
+        with self.assertRaises(AdmissionRejected): source.provision('large', 'forum', {}, 200, exclusive_grant=lambda *a:True)
+        empty = StatementSource(SqliteHistoryStore(Path(self.tmp.name) / 'empty.db'), TENANT, clock=lambda:100, verifier=self.verify)
+        with self.assertRaises(AdmissionRejected): empty.provision('empty', 'forum', {}, 200, exclusive_grant=lambda *a:True)
+
+    def test_provision_and_policy_boundaries(self):
+        grant = lambda *a:True
+        for scope in ['', 'x'*129]:
+            with self.assertRaises(AdmissionRejected): self.source.provision(scope, 'forum', {}, 200, exclusive_grant=grant)
+        with self.assertRaises(HistoryConflict): self.source.provision('forum', 'forum', {}, 200, exclusive_grant=grant)
+        with self.assertRaises(AdmissionRejected): self.source.provision('expired', 'forum', {}, 99, exclusive_grant=grant)
+        with self.assertRaises(AdmissionRejected): self.source.replace_policy('forum', 0, {}, 99, authorize=grant)
+        with self.assertRaises(HistoryConflict): self.source.replace_policy('forum', 9, {}, 200, authorize=grant)
+        with self.assertRaises(AdmissionRejected): self.source.replace_policy('forum', 0, {'padding':'x'*(4*1024*1024)}, 200, authorize=grant)
+
+    def test_subprocess_message_contains_only_service_selected_history_and_policy(self):
+        import json
+        from unittest.mock import patch
+        from history_admission import HistoryAdmission
+        self.source.verifier = self.source._verify
+        result = {'heads':{'owner':0}, 'snapshot':{'completeThrough':100,'history':{},'rows':[]}}
+        with patch.object(HistoryAdmission, '_run_verifier', return_value=json.dumps(result).encode()) as run:
+            self.source.read('forum',100)
+        self.assertEqual(run.call_args.args, ('owner',100))
+        self.assertEqual(run.call_args.kwargs['genesis'], {})
+        self.assertEqual(run.call_args.kwargs['peers'], [])
+        self.assertEqual(run.call_args.kwargs['graph']['candidates'], [])
+        self.assertFalse(run.call_args.kwargs['graph']['statementOnly'])
+
 if __name__ == '__main__': unittest.main()
