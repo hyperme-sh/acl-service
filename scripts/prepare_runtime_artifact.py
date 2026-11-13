@@ -13,7 +13,7 @@ from record_runtime_artifact import verify
 
 REPOSITORY = 'hyperme-sh/acl-service'
 MAX_ARCHIVE = 1024 * 1024 * 1024
-REQUIRED_JOBS = {'candidate', 'source', 'package', 'image', 'runtime-replay'}
+REQUIRED_JOBS = {'source', 'package', 'image', 'runtime-replay'}
 
 
 def require(condition, message):
