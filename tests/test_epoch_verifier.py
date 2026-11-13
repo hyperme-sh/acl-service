@@ -3,7 +3,9 @@ import ctypes
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from acl_service.infrastructure.epoch_verifier import EpochStatusVerifier, LIBRARY, MAX_DOCUMENT, MAX_SAFE
+from acl_service.infrastructure.epoch_verifier import (
+    EpochStatusVerifier, EpochManifestVerifier, LIBRARY, MAX_DOCUMENT, MAX_SAFE, MAX_MANIFEST_DOCUMENT,
+)
 
 
 class EpochVerifierTests(TestCase):
@@ -53,3 +55,40 @@ class EpochVerifierTests(TestCase):
         with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', return_value=object()):
             with self.assertRaises(AttributeError):
                 EpochStatusVerifier()
+
+
+class EpochManifestVerifierTests(TestCase):
+    def setUp(self):
+        self.native = Mock(return_value=1)
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',
+                   return_value=Mock(sociacl_verify_epoch_manifest=self.native)) as load:
+            self.verifier = EpochManifestVerifier()
+            load.assert_called_once_with(LIBRARY)
+
+    def test_raw_documents_and_native_results(self):
+        raw = b'{"epoch":1,"epoch":2}'
+        self.assertTrue(self.verifier.matches_manifest(raw, b'{"expected":true}'))
+        args = self.native.call_args.args
+        self.assertEqual(ctypes.string_at(args[0], args[1]), raw)
+        self.assertEqual(ctypes.string_at(args[2], args[3]), b'{"expected":true}')
+        self.assertEqual(len(args), 4)
+        for result in [0, -1, 2]:
+            self.native.return_value = result
+            self.assertFalse(self.verifier.matches_manifest(b'{}', b'{}'))
+
+    def test_invalid_buffers_refuse_before_native(self):
+        for value in [None, '', bytearray(b'{}'), b'', b'x' * (MAX_MANIFEST_DOCUMENT + 1)]:
+            self.assertFalse(self.verifier.matches_manifest(value, b'{}'))
+            self.assertFalse(self.verifier.matches_manifest(b'{}', value))
+        self.native.assert_not_called()
+
+    def test_failures_do_not_fallback(self):
+        for error in [OSError(), ValueError(), ctypes.ArgumentError()]:
+            self.native.side_effect = error
+            self.assertFalse(self.verifier.matches_manifest(b'{}', b'{}'))
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', side_effect=OSError()):
+            with self.assertRaises(OSError):
+                EpochManifestVerifier()
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', return_value=object()):
+            with self.assertRaises(AttributeError):
+                EpochManifestVerifier()

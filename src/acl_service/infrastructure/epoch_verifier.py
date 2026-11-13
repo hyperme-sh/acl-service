@@ -4,6 +4,7 @@ import ctypes
 LIBRARY = '/opt/acl-admission/libsociacl.so'
 MAX_DOCUMENT = 16_384
 MAX_SAFE = 9_007_199_254_740_991
+MAX_MANIFEST_DOCUMENT = 65_536
 
 
 class EpochStatusVerifier:
@@ -38,5 +39,33 @@ class EpochStatusVerifier:
         try:
             return self._verify(proof_buffer, len(proof), expected_buffer, len(expected),
                                 now_ms, skew_ms, policy_max_age_ms) == 1
+        except (OSError, ValueError, ctypes.ArgumentError):
+            return False
+
+
+class EpochManifestVerifier:
+    """Authenticates a snapshot and manifest; does not select current history.
+
+    The expected owner key, object, epoch and revision must come from trusted
+    state. An old correctly signed manifest can match. Check, settlement and
+    independent rollback protection remain the consumer's responsibility.
+    """
+
+    def __init__(self):
+        self._library = ctypes.CDLL(LIBRARY)
+        self._verify = self._library.sociacl_verify_epoch_manifest
+        self._verify.argtypes = [ctypes.c_void_p, ctypes.c_size_t,
+                                ctypes.c_void_p, ctypes.c_size_t]
+        self._verify.restype = ctypes.c_int
+
+    def matches_manifest(self, document: bytes, expected: bytes) -> bool:
+        if any(type(value) is not bytes or not 0 < len(value) <= MAX_MANIFEST_DOCUMENT
+               for value in (document, expected)):
+            return False
+        document_buffer = ctypes.create_string_buffer(document)
+        expected_buffer = ctypes.create_string_buffer(expected)
+        try:
+            return self._verify(document_buffer, len(document),
+                                expected_buffer, len(expected)) == 1
         except (OSError, ValueError, ctypes.ArgumentError):
             return False
