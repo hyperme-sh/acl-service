@@ -3,7 +3,7 @@ FROM node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703
 WORKDIR /opt/acl-admission
 COPY admission/package.json admission/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-COPY admission/history_admission.py admission/verify.mjs admission/store-operation.mjs ./
+COPY admission/history_admission.py admission/verify.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs ./
 
 FROM python:3.13-slim-bookworm AS build
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv

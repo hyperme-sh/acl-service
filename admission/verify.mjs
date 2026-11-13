@@ -1,5 +1,6 @@
 // Private subprocess protocol. Policy, snapshot, clock and grant come from the adapter.
 import {readFileSync} from 'node:fs';
+import {statementGraph} from './statement-graph.mjs';
 import {
   checkRotationPublish, historyState, lengthPrefixed, linkId, resolveCurrentKey, MAX_RESOLUTION_INPUT, resolveStoreAccount, resolveWalletLink, verifyKeySignature,
   verifyOidcLink, verifyRevoke, verifyWalletLink,
@@ -10,7 +11,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -74,6 +75,8 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     return {ok: true, value: historyState(owner, verified.get(key), at, until)};
   }
+
+  if (graph) return JSON.stringify(statementGraph(accounts, contextFor, now, graph));
 
   const account = accounts.get(principal);
   const {rotations} = account;
