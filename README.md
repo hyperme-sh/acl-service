@@ -1,5 +1,19 @@
 # acl-service
 
+`SOCIACL_MEDIA_BINDINGS_FILE` enables private wrap delivery only for explicit
+authenticated tenant/subject pairs. Its private JSON file has `version: 1` and
+at most 64 `bindings`, each containing `tenant`, `subject`, `reader` (the enrolled
+SEA principal), `historyFile`, `freshnessFile`, `storageOrigin`, and
+`storageKeyFile`. All paths are absolute private regular files. The storage key
+file contains the exact credential, without a trailing newline. Each tenant
+uses one protected history/checkpoint pair and one Spanopticon storage origin
+and credential, shared by its reader bindings. The gateway/auth-service must
+authenticate the subject and grant `acl:media:read`; request JSON cannot choose
+the reader. Never bind a shared browser service credential to arbitrary users.
+Missing configuration disables delivery. Invalid configuration fails startup.
+Loading does not create source grants, enroll readers, or initialize databases;
+the tenant's media sources and independent checkpoints must already exist.
+
 `MediaSource` in the fixed admission bundle implements direct private-media
 authorization over the existing enrolled identity database and its independent
 freshness database. Objects start empty under an operator-verified exclusive
