@@ -173,6 +173,8 @@ def create_app(
     app.state.private_wrap_body_slots = {key: asyncio.Semaphore(1) for key in (private_wrap_bindings or {})}
     app.state.private_wrap_tenant_slots = {key[0]: asyncio.Semaphore(1) for key in (private_wrap_bindings or {})}
     app.include_router(private_wrap_router, prefix="/api/v1")
+    from acl_service.interfaces.api.media_owner_routes import router as media_owner_router
+    app.include_router(media_owner_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
     app.add_middleware(AclServiceDbMiddleware)

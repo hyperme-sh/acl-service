@@ -320,3 +320,23 @@ class MediaSource:
 
     async def commit_delivery(self, permit):
         return await self._work(self.commit,permit)
+
+    def _owner_view(self, tenant, writer, object, cancel):
+        if tenant != self.tenant:
+            raise AdmissionRejected('media tenant mismatch')
+        at = int(self.clock())
+        view = self.read_view(object, at, cancel)
+        if writer != view['owner']:
+            raise AdmissionRejected('media owner required')
+        # An object owner may see its own recipients, not the entire tenant's
+        # enrolled identity inventory. Admit a signed grant before wrapping it.
+        named = {writer} | {row['accessor'] for row in view['snapshot']['entries']}
+        view['bindings'] = {who: binding for who, binding in view['bindings'].items() if who in named}
+        self._guard(at, cancel)
+        return {'at': at, **view}
+
+    async def owner_view(self, tenant, writer, object):
+        return await self._work(self._owner_view, tenant, writer, object)
+
+    async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
+        return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)

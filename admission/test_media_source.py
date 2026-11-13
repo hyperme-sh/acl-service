@@ -246,6 +246,15 @@ class MediaSourceContracts(TestCase):
         self.now=10000
         with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
 
+    def test_owner_view_restricts_identity_inventory_and_requires_fixed_owner(self):
+        view=self.source._owner_view(TENANT,'owner',OBJECT,lambda:None)
+        self.assertEqual(set(view['bindings']),{'owner'})
+        self.assertEqual(view['at'],self.now)
+        self.mutate('grant',self.grant())
+        self.assertEqual(set(self.source._owner_view(TENANT,'owner',OBJECT,lambda:None)['bindings']),{'owner','reader'})
+        with self.assertRaises(AdmissionRejected):self.source._owner_view(TENANT,'reader',OBJECT,lambda:None)
+        with self.assertRaises(AdmissionRejected):self.source._owner_view('other','owner',OBJECT,lambda:None)
+
 
 class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
     async def test_async_entrypoints_keep_the_exact_commit_permit(self):
@@ -255,6 +264,10 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
         self.assertTrue(await source.commit_delivery('permit'))
         self.assertEqual(source.commit.call_args.args[0],'permit')
         self.assertFalse(source.slots.locked())
+        source._owner_view=Mock(return_value={'fence':'held'});source.mutate=Mock(return_value=True)
+        self.assertEqual(await source.owner_view(TENANT,'owner',OBJECT),{'fence':'held'})
+        self.assertTrue(await source.owner_mutate(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
+        self.assertEqual(source.mutate.call_args.args[:-1],(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
 
     async def test_cancelled_worker_keeps_slot_and_refuses_late_commit(self):
         source=object.__new__(MediaSource); source.slots=asyncio.Semaphore(1)
