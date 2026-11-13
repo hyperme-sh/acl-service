@@ -99,3 +99,13 @@ class NativeMediaContracts(TestCase):
         repeated=self.source.prepare_write(self.tenant,self.owner,self.object,self.now,view['fence'],metadata,digest,len(payload))
         self.assertTrue(self.source.commit_write(repeated))
         self.assertEqual(self.source.read_view(self.object,self.now)['objectVersion'],version)
+
+    def test_status_draft_waits_for_real_settlement_and_matches_native_signed_status(self):
+        with self.assertRaises(AdmissionRejected):
+            self.source._owner_status_view(self.tenant,self.owner,self.object,self.owner,lambda:None)
+        self.now+=3600
+        draft=self.source._owner_status_view(self.tenant,self.owner,self.object,self.owner,lambda:None)
+        self.assertEqual(draft['status'],{k:v for k,v in self.f['status'].items() if k!='signature'})
+        self.assertEqual(draft['ownerPub'],self.owner)
+        self.source.mutate(self.tenant,self.owner,self.object,draft['at'],draft['fence'],'status',self.f['status'])
+        self.assertTrue(self.source.commit(self.source.authorize(self.tenant,self.owner,self.object)))

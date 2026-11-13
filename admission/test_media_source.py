@@ -259,6 +259,38 @@ class MediaSourceContracts(TestCase):
         return {'reader':'reader','record':digest,'digest':digest,'epoch':1,'revisionId':'b'*64,
                 'readerEpub':'reader-epub','itemDigest':'a'*64}
 
+    def status_view(self, **changes):
+        args={'tenant':TENANT,'writer':'owner','object':OBJECT,'reader':'reader','cancel':lambda:None}
+        args.update(changes)
+        return self.source._owner_status_view(**args)
+
+    def test_owner_status_draft_uses_current_settled_state_without_writing(self):
+        self.ready();before=self.source.read_view(OBJECT,self.now)
+        draft=self.status_view()
+        self.assertEqual(draft['fence'],before['fence'])
+        self.assertEqual(draft['ownerPub'],'owner-key')
+        self.assertEqual(draft['status'],{'object':OBJECT,'epoch':1,'revisionId':'b'*64,
+            'accessor':'reader','grantRevision':1,'stated':1,'signedAt':100000,'maxAgeMs':60000,
+            'zookie':{'object':OBJECT,'objectVersion':3,'snapshotHash':'c'*64}})
+        self.assertEqual(self.source.read_view(OBJECT,self.now),before)
+        self.mutate('grant',self.grant(grantRevision=2,until=102500))
+        self.assertEqual(self.status_view()['status']['maxAgeMs'],2500)
+
+    def test_status_draft_refuses_unbound_owner_reader_pending_and_changed_grants(self):
+        self.ready()
+        for args in [{'tenant':'other'},{'writer':'reader'},{'reader':'unknown'},{'reader':[]}]:
+            with self.assertRaises(AdmissionRejected):self.status_view(**args)
+        self.native[3].matches_settled.return_value=False
+        with self.assertRaises(AdmissionRejected):self.status_view()
+        self.native[3].matches_settled.return_value=True
+        self.native[0].matches_grant.return_value=False
+        with self.assertRaises(AdmissionRejected):self.status_view()
+        self.native[0].matches_grant.return_value=True
+        self.mutate('grant',self.grant(grantRevision=2,epoch=2))
+        with self.assertRaises(AdmissionRejected):self.status_view()
+        self.mutate('grant',self.grant(grantRevision=3,stated=0))
+        with self.assertRaises(AdmissionRejected):self.status_view()
+
     def prepare(self, digest='1'*64, **changes):
         metadata=self.write_metadata(digest);metadata.update(changes)
         return self.source.prepare_write(TENANT,'owner',OBJECT,self.now,
@@ -322,6 +354,8 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
         source.prepare_write=Mock(return_value='write-permit');source.commit_write=Mock(return_value=True)
         self.assertEqual(await source.prepare_wrap_write(TENANT,'owner',OBJECT,100,'fence',{},'a'*64,1),'write-permit')
         self.assertTrue(await source.commit_wrap_write('write-permit'))
+        source._owner_status_view=Mock(return_value={'draft':'current'})
+        self.assertEqual(await source.owner_status_view(TENANT,'owner',OBJECT,'reader'),{'draft':'current'})
 
     async def test_cancelled_worker_keeps_slot_and_refuses_late_commit(self):
         source=object.__new__(MediaSource); source.slots=asyncio.Semaphore(1)

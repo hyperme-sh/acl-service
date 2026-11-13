@@ -37,6 +37,20 @@ WRITE={'object':'media-object','at':100,'fence':'a'*64,'operation':'grant','payl
 
 
 @pytest.mark.asyncio
+async def test_owner_status_view_only_selects_a_recipient_of_the_fixed_owner(setup):
+    s=setup;s.authority.owner_status_view=AsyncMock(return_value={'status':{'accessor':'recipient'}})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        body={'object':'media-object','reader':'recipient'}
+        response=await client.post(BASE+'status-view',json=body)
+        assert response.status_code==200
+        assert response.json()=={'status':{'accessor':'recipient'}}
+        s.authority.owner_status_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','recipient')
+        for changes in [{'reader':[]},{'reader':'bad reader'},{'writer':'attacker'},{'at':100}]:
+            assert (await client.post(BASE+'status-view',json={**body,**changes})).status_code==400
+        assert s.authority.owner_status_view.await_count==1
+
+
+@pytest.mark.asyncio
 async def test_fixed_owner_binding_and_exact_write_fence(setup):
     s=setup
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:

@@ -24,6 +24,15 @@ unrelated enrolled identities. `POST /api/v1/acl/sociacl/media/owner/mutate` tak
 subject's configured binding. Owner signatures and current identity/policy checks
 remain mandatory inside the protected source. A stale evaluation or fence returns
 409: refresh and reconcile before signing a new mutation; no automatic retry.
+`POST /api/v1/acl/sociacl/media/owner/status-view` takes `{object, reader}`
+and returns `{at, fence, ownerPub, status}` for an existing live recipient grant.
+The status draft contains the native-selected settled epoch, current grant
+revision and object version, the service clock, and a validity bounded by the
+policy and grant (at most 60 seconds). Pending epochs and changed owner signatures
+refuse. The owner signs this draft client-side and submits it through `mutate`
+with operation `status`; the source still verifies the signature and exact current
+fence. Reading a draft does not update history, grant access or create a signature.
+
 `POST /api/v1/acl/sociacl/media/owner/publish-wrap` takes
 `{object, at, fence, metadata, wrapBase64}`. The canonical base64 encodes at most
 64 KiB of opaque encrypted wrap bytes. Metadata uses the existing `wrap` shape;
