@@ -320,3 +320,35 @@ replay and rollback/retry; registration belongs to FyberLabs/infra#923.
 
 The [signed statement source](docs/statement-source.md) supplies the optional,
 explicitly provisioned s3r.ch graph snapshot and atomic append API.
+
+## Private statement source startup
+
+`SOCIACL_STATEMENT_BINDINGS_FILE` enables the private statement source routes.
+Without it, the source remains unavailable. Invalid configuration aborts startup;
+it never falls back to another tenant, graph, or storage backend.
+
+The file is a UTF-8 JSON object (at most 64 KiB):
+
+```json
+{"version":1,"bindings":[{"tenant":"a5ed86d0-cb50-4404-a5ac-410aab086a82","subject":"s3rch-service","scope":"forum","historyFile":"/var/lib/acl-private/history.db","freshnessFile":"/var/lib/acl-checkpoint/freshness.db"}]}
+```
+
+Use the authenticated subject from the exchanged service key, with dedicated
+`acl:statements:read` and `acl:statements:write` scopes. Each binding fixes its
+tenant, subject, and graph scope. Multiple subjects may share the same tenant's
+store; conflicting tenant or checkpoint assignments are rejected.
+
+Mount already-provisioned history and independent freshness databases, with
+owner-only file permissions (`0600`) and protected parent directories, readable
+and writable by the service UID 10001. The configuration must also be owner-only;
+all configured paths must be canonical absolute paths without symlinks. Keep the
+freshness store under its independent operational custody. The startup loader
+checks that the tenant, graph, identity checkpoint and graph checkpoint already
+exist. It neither creates missing stores nor enrolls identities or grants graph
+ownership. Use the existing operator admission path to establish a new exclusive
+graph; do not import an arbitrary Gun graph or claim it is complete.
+
+The loader uses only the verifier shipped at `/opt/acl-admission` in the service
+image. Signature checks and current-history/checkpoint fences remain enforced by
+the source on every operation. Package-only environments without that bundle
+cannot activate this setting. Configuration changes require a service restart.
