@@ -1,5 +1,36 @@
 # acl-service
 
+`PrivateWrapStore` reads and creates private immutable reader-wrap records through
+the configured Spanopticon tenant's `media` record namespace. Names are opaque
+64-character lowercase hexadecimal identifiers; never derive them by exposing
+recipient or object labels. Reads require an independently retained SHA-256
+revision and verify the returned bytes. Payloads are capped at 64 KiB. Requests
+use tenant-bound credentials, refuse redirects and compression, and have bounded
+deadlines and connection capacity. Creates use `If-None-Match: *`; conflicts and
+lost responses never cause an automatic retry or overwrite.
+The async adapter applies a total two-second timeout across response headers,
+streamed bytes and response cleanup, including with an injected client. Each
+request explicitly disables redirects. Use and close the client on its event
+loop; CI exercises slow headers and a body that trickles below the chunk size.
+
+This storage adapter is not an authorization endpoint. The owner source must
+authenticate the current reader, select the current epoch, retain the opaque
+record and digest privately, and revalidate its authorization fence after fetch
+before returning any material. Nothing initializes the adapter or publishes a
+route by default. Use the s3r.ch Spanopticon tenant, not direct Blob credentials.
+
+`deliver_private_wrap` enforces that ordering: it obtains an immutable permit from
+the mandatory owner authority, fetches the exact digest, then asks that authority
+to atomically revalidate and commit the same fence before returning bytes. The
+permit binds tenant, reader, object, epoch/revision, recipient key and private
+record. Expiry, cancellation, changed authority, wrong tenant or corrupt bytes
+refuse. The owner authority must cover all relevant history and policy changes
+and commit rollback floors in its transaction; this module installs no permissive
+authority and enables no endpoint. Its isolated units test the fetch/commit order
+and refusal boundaries. Protected-source and HTTP route wiring remain under #81.
+The complete async delivery operation has a three-second deadline, including
+both authority calls, so an unavailable owner source cannot hold a request forever.
+
 The image carries the shared SociACL Rust epoch-status verifier, built from the
 exact source revision in `admission/sociacl-native.rev`. The packaged
 `EpochStatusVerifier` loads only `/opt/acl-admission/libsociacl.so` and checks
