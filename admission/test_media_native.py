@@ -1,5 +1,6 @@
 """Actual enrolled identity + Rust + checkpoint contract, CI container only."""
 import hashlib
+import asyncio
 import json
 from pathlib import Path
 import tempfile
@@ -74,3 +75,14 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(loaded.tenant,self.tenant)
         key.chmod(0o644)
         with self.assertRaises(ValueError):_provisioned(binding)
+
+    def test_native_owner_entrypoints_preserve_signed_admission(self):
+        async def run():
+            view=await self.source.owner_view(self.tenant,self.owner,self.object)
+            self.assertEqual(view['at'],self.now)
+            self.assertEqual(set(view['bindings']),{self.owner})
+            self.assertTrue(await self.source.owner_mutate(self.tenant,self.owner,self.object,
+                view['at'],view['fence'],'grant',self.f['grant']))
+            with self.assertRaises(AdmissionRejected):
+                await self.source.owner_view(self.tenant,'unbound-owner',self.object)
+        asyncio.run(run())

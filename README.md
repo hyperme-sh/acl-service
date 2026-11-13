@@ -14,6 +14,20 @@ Missing configuration disables delivery. Invalid configuration fails startup.
 Loading does not create source grants, enroll readers, or initialize databases;
 the tenant's media sources and independent checkpoints must already exist.
 
+The same fixed subject binding may receive `acl:media:write` for its own media
+objects. `POST /api/v1/acl/sociacl/media/owner/view` takes only `{object}` and
+returns the current evaluation `at`, write `fence`, direct ACL snapshot and
+bindings for the owner and that object's admitted recipients. It does not list
+unrelated enrolled identities. `POST /api/v1/acl/sociacl/media/owner/mutate` takes
+`{object, at, fence, operation, payload}`; supported operations are `grant`,
+`epoch`, `status` and `wrap`. The writer always comes from the authenticated
+subject's configured binding. Owner signatures and current identity/policy checks
+remain mandatory inside the protected source. A stale evaluation or fence returns
+409: refresh and reconcile before signing a new mutation; no automatic retry.
+The routes do not provision objects, replace policy, create credentials, upload
+wrap bytes, or initialize storage. Opaque private bytes must already be stored
+before the `wrap` metadata can be used for delivery.
+
 `MediaSource` in the fixed admission bundle implements direct private-media
 authorization over the existing enrolled identity database and its independent
 freshness database. Objects start empty under an operator-verified exclusive
