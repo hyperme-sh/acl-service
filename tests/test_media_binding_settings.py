@@ -24,6 +24,51 @@ def encode(rows=None):
 
 
 class MediaBindingUnits(TestCase):
+    def test_provisioned_files_require_tenant_and_every_checkpoint(self):
+        binding=m.parse_settings(encode())[0]
+        for tenant,objects,authority,checkpoint,okay in [
+                ((TENANT,),[('object',)],('digest',),('digest',),True),
+                (('other',),[('object',)],('digest',),('digest',),False),
+                ((TENANT,),[],('digest',),('digest',),False),
+                ((TENANT,),[('object',)]*65,('digest',),('digest',),False),
+                ((TENANT,),[('object',)],None,('digest',),False),
+                ((TENANT,),[('object',)],('digest',),None,False)]:
+            history=Mock();history.execute.return_value.fetchone.return_value=tenant
+            history.execute.return_value.fetchall.return_value=objects
+            freshness=Mock();freshness.execute.return_value.fetchone.side_effect=[authority,checkpoint]
+            with patch.object(m,'_private_file',side_effect=lambda _:io.BytesIO()),\
+                    patch.object(m.os.path,'samefile',return_value=False),\
+                    patch.object(m.sqlite3,'connect',side_effect=[history,freshness]):
+                if okay:m._provisioned(binding)
+                else:
+                    with self.assertRaises(ValueError):m._provisioned(binding)
+        with patch.object(m,'_private_file',side_effect=lambda _:io.BytesIO()),\
+                patch.object(m.os.path,'samefile',return_value=True):
+            with self.assertRaises(ValueError):m._provisioned(binding)
+
+    def test_fixed_source_modules_and_checkpoint_requirement(self):
+        binding=m.parse_settings(encode())[0]
+        store=Mock();source=Mock()
+        modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
+                 for name in ('history_admission','statement_source','media_source')}
+        modules['media_source'].MediaSource=source
+        modules['acl_service.infrastructure.sqlite_history_store']=SimpleNamespace(SqliteHistoryStore=store)
+        with patch.dict(sys.modules,modules):
+            self.assertIs(m._source(binding),source.return_value)
+        store.assert_called_once_with(binding.history,freshness_path=binding.freshness,require_authority_checkpoint=True)
+        source.assert_called_once_with(store.return_value,TENANT)
+        with patch.dict(sys.modules,{'history_admission':SimpleNamespace(__file__='/tmp/other.py')}):
+            with self.assertRaises(ValueError):m._source(binding)
+
+    def test_failed_fixed_module_import_does_not_poison_retry(self):
+        binding=m.parse_settings(encode())[0]
+        loader=SimpleNamespace(exec_module=Mock(side_effect=RuntimeError('broken module')))
+        with patch.dict(sys.modules),patch.object(m.importlib.util,'spec_from_file_location',return_value=SimpleNamespace(loader=loader)),\
+                patch.object(m.importlib.util,'module_from_spec',return_value=SimpleNamespace()):
+            sys.modules.pop('history_admission',None)
+            with self.assertRaises(RuntimeError):m._source(binding)
+            self.assertNotIn('history_admission',sys.modules)
+
     def test_fixed_reader_mapping_reuses_source_and_client(self):
         source=Mock(return_value=SimpleNamespace(production_ready=True,tenant=TENANT))
         client=Mock(return_value=object())
