@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -40,6 +41,7 @@ from acl_service.middleware import AclServiceDbMiddleware
 from acl_service.infrastructure.witness_policy_publication import load_publication
 from acl_service.interfaces.api.witness_policy_routes import router as witness_policy_router
 
+from acl_service.interfaces.api.statement_routes import StatementBinding, router as statement_router
 from acl_service.interfaces.api.signed_store_routes import SignedStoreBinding, router as signed_store_router
 from acl_service.interfaces.api.contact_lane_routes import router as contact_lane_router
 from acl_service.interfaces.api.first_contact_routes import router as first_contact_router
@@ -54,6 +56,7 @@ def create_app(
     test_event_sink: list | None = None,
     service_name: str | None = None,
     signed_store_bindings: Mapping[tuple[UUID, str], SignedStoreBinding] | None = None,
+    statement_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
 ) -> FastAPI:
     svc_name = service_name or settings.service_name
     from acl_service.lane_access_log import install_lane_log_filter
@@ -164,6 +167,9 @@ def create_app(
     app.state.signed_store_bindings = (MappingProxyType(dict(signed_store_bindings))
                                        if signed_store_bindings is not None else None)
     app.include_router(signed_store_router, prefix="/api/v1")
+    app.state.statement_bindings = MappingProxyType(dict(statement_bindings)) if statement_bindings is not None else None
+    app.state.statement_slots = asyncio.Semaphore(2)
+    app.include_router(statement_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
     app.add_middleware(AclServiceDbMiddleware)

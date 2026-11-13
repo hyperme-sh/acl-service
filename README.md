@@ -319,3 +319,6 @@ rule is created. Replays preserve unrelated rows; conflicting mappings and
 removed committed grants fail closed. Unit contracts verify exact resource
 separation. The existing scheduled PostgreSQL storage harness covers concurrent
 replay and rollback/retry; registration belongs to FyberLabs/infra#923.
+
+The [signed statement source](docs/statement-source.md) supplies the optional,
+explicitly provisioned s3r.ch graph snapshot and atomic append API.
