@@ -1,0 +1,51 @@
+"""Cross-language native contract, run only in the CI contract container."""
+import json
+from pathlib import Path
+from unittest import TestCase
+
+from epoch_verifier import EpochStatusVerifier
+
+
+def encode(value):
+    return json.dumps(value, separators=(',', ':'), allow_nan=False).encode()
+
+
+class NativeEpochTests(TestCase):
+    def setUp(self):
+        self.verifier = EpochStatusVerifier()
+        self.rows = json.loads(Path('epoch-fixture.json').read_bytes())
+
+    def matches(self, row, *, now=10000, skew=0, maximum=1000):
+        return self.verifier.matches_status(encode(row['proof']), encode(row['expected']),
+            now_ms=now, skew_ms=skew, policy_max_age_ms=maximum)
+
+    def test_typescript_signed_live_and_cancelled_status_match_rust(self):
+        for row in self.rows:
+            self.assertTrue(self.matches(row))
+            self.assertTrue(self.matches(row, now=11000))
+            self.assertFalse(self.matches(row, now=11001))
+            self.assertFalse(self.matches(row, now=9999))
+            self.assertTrue(self.matches(row, now=9999, skew=1))
+            self.assertFalse(self.matches(row, now=12001, maximum=5000))
+
+    def test_changed_context_and_signature_refuse(self):
+        original = self.rows[1]
+        for field, value in [('object','other'),('accessor','other'),('epoch',4),
+                             ('grantRevision',8),('revisionId','c'*64),('stated',0),('ownerPub','bad')]:
+            row = json.loads(json.dumps(original))
+            row['expected'][field] = value
+            self.assertFalse(self.matches(row), field)
+        original['proof']['signature'] = '0' * 128
+        self.assertFalse(self.matches(original))
+
+    def test_arrays_duplicate_fields_and_malformed_input_refuse(self):
+        row = self.rows[1]
+        proof, expected = encode(row['proof']), encode(row['expected'])
+        duplicates = proof.replace(b'"epoch":3', b'"epoch":3,"epoch":3')
+        for raw in [b'{', b'\xff', duplicates, encode(list(row['proof'].values()))]:
+            self.assertFalse(self.verifier.matches_status(raw, expected,
+                now_ms=10000, skew_ms=0, policy_max_age_ms=1000))
+        for name in ['proof','expected']:
+            changed = json.loads(json.dumps(row))
+            changed[name]['zookie'] = list(changed[name]['zookie'].values())
+            self.assertFalse(self.matches(changed))

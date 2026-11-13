@@ -15,3 +15,6 @@
 !admission/history_admission.py
 !admission/verify.mjs
 !admission/store-operation.mjs
+!admission/sociacl-native.rev
+!admission/test_epoch_native.py
+!admission/epoch-fixture.json
