@@ -1,4 +1,5 @@
 """Release private wrap bytes only after the owner source commits its fence."""
+import asyncio
 from dataclasses import dataclass
 import hashlib
 import re
@@ -51,32 +52,33 @@ async def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, rea
     is installed by this module. Provider or source errors never return material.
     """
     try:
-        cancel()
-        if store.tenant != tenant:
-            raise ValueError()
-        permit = await authority.authorize_read(tenant, reader, object)
-        if type(permit) is not WrapReadPermit or (permit.tenant, permit.reader, permit.object) != (tenant, reader, object):
-            raise ValueError()
-        if any(type(value) is not str or re.fullmatch(r'[0-9a-f]{64}',value) is None
-               for value in (permit.record,permit.digest,permit.revision_id,permit.fence)):
-            raise ValueError()
-        if (type(permit.epoch) is not int or not 0 <= permit.epoch <= 9_007_199_254_740_991
-                or type(permit.expires_at) is not int or not clock() < permit.expires_at
-                or type(permit.reader_epub) is not str or not 0 < len(permit.reader_epub) <= 1024):
-            raise ValueError()
-        payload = await store.read(permit.record,permit.digest,cancel=cancel)
-        cancel()
-        if (type(payload) is not bytes or not 0 < len(payload) <= 65_536
-                or hashlib.sha256(payload).hexdigest() != permit.digest
-                or not clock() < permit.expires_at):
-            raise ValueError()
-        # Fetching bytes is not authorization. This is the delivery linearization
-        # point, after storage has returned and against the exact immutable permit.
-        if await authority.commit_delivery(permit) is not True:
-            raise ValueError()
-        cancel()
-        if not clock() < permit.expires_at:
-            raise ValueError()
-        return payload
+        async with asyncio.timeout(3.0):
+            cancel()
+            if store.tenant != tenant:
+                raise ValueError()
+            permit = await authority.authorize_read(tenant, reader, object)
+            if type(permit) is not WrapReadPermit or (permit.tenant, permit.reader, permit.object) != (tenant, reader, object):
+                raise ValueError()
+            if any(type(value) is not str or re.fullmatch(r'[0-9a-f]{64}',value) is None
+                   for value in (permit.record,permit.digest,permit.revision_id,permit.fence)):
+                raise ValueError()
+            if (type(permit.epoch) is not int or not 0 <= permit.epoch <= 9_007_199_254_740_991
+                    or type(permit.expires_at) is not int or not clock() < permit.expires_at
+                    or type(permit.reader_epub) is not str or not 0 < len(permit.reader_epub) <= 1024):
+                raise ValueError()
+            payload = await store.read(permit.record,permit.digest,cancel=cancel)
+            cancel()
+            if (type(payload) is not bytes or not 0 < len(payload) <= 65_536
+                    or hashlib.sha256(payload).hexdigest() != permit.digest
+                    or not clock() < permit.expires_at):
+                raise ValueError()
+            # Fetching bytes is not authorization. This is the delivery linearization
+            # point, after storage has returned and against the exact immutable permit.
+            if await authority.commit_delivery(permit) is not True:
+                raise ValueError()
+            cancel()
+            if not clock() < permit.expires_at:
+                raise ValueError()
+            return payload
     except Exception:
         raise WrapDeliveryRejected('private wrap delivery refused') from None

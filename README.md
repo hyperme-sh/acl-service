@@ -28,6 +28,8 @@ refuse. The owner authority must cover all relevant history and policy changes
 and commit rollback floors in its transaction; this module installs no permissive
 authority and enables no endpoint. Its isolated units test the fetch/commit order
 and refusal boundaries. Protected-source and HTTP route wiring remain under #81.
+The complete async delivery operation has a three-second deadline, including
+both authority calls, so an unavailable owner source cannot hold a request forever.
 
 The image carries the shared SociACL Rust epoch-status verifier, built from the
 exact source revision in `admission/sociacl-native.rev`. The packaged

@@ -1,6 +1,8 @@
 """HTTP client contract; executed only in CI with an in-process transport."""
 import hashlib
 import asyncio
+from unittest.mock import AsyncMock, Mock
+from acl_service.domain.private_wrap_delivery import deliver_private_wrap, WrapDeliveryRejected
 from unittest import IsolatedAsyncioTestCase
 import httpx
 from acl_service.infrastructure.private_wrap_store import PrivateWrapStore, WrapStorageUnavailable
@@ -12,6 +14,14 @@ REV=hashlib.sha256(BODY).hexdigest()
 
 
 class PrivateWrapHTTPTests(IsolatedAsyncioTestCase):
+    async def test_delivery_bounds_a_stalled_authority(self):
+        async def blocked(*args): await asyncio.sleep(10)
+        authority=Mock(authorize_read=AsyncMock(side_effect=blocked))
+        store=Mock(tenant=TENANT)
+        with self.assertRaises(WrapDeliveryRejected):
+            await asyncio.wait_for(deliver_private_wrap(authority,store,TENANT,'reader','object'),4)
+        store.read.assert_not_called()
+
     async def test_private_tenant_headers_immutable_create_and_exact_read(self):
         requests=[]
         def handler(request):
