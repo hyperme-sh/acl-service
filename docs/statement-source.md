@@ -14,7 +14,9 @@ grants are admitted using `append(..., statement_only=False)` by trusted operato
 code. There is no public bootstrap, policy-update or identity-enrollment route.
 The initial graph supports signed object, direct see and direct post records,
 including signed cancellations (`stated: 0`). Group rules are refused rather
-than treated as implicit membership. The original signed rows are retained.
+than treated as implicit membership. The original signed rows are retained. Exact signed retries are deduplicated by
+kind, canonical address and signing bytes after every candidate signature has
+been verified. A duplicate-only append preserves the fence and retained quota.
 
 Each read resolves all enrolled chains using the pinned SociACL verifier and
 service-selected policy. Valid forks, expired policy and incomplete history

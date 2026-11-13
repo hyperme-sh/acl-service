@@ -154,6 +154,8 @@ class StatementSource:
                 raise AdmissionRejected("statement capacity")
             for principal, head in result["heads"].items():
                 self.store._observe_floor(db, principal, head)
+            if doc["rows"] == snapshot["rows"]:
+                return True
             doc["rows"] = snapshot["rows"]
             next_row = (held[0] + 1, held[1], encoded(doc))
             db.execute("UPDATE statement_scopes SET revision=?,nonce=?,document=? WHERE scope=?", (*next_row, scope))

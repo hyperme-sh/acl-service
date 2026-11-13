@@ -53,7 +53,14 @@ export function statementGraph(accounts, contextFor, now, graph) {
         (row.record.stated === 1 && !allowed('see', row.record.accessor)))) throw Error('reader-denied');
   }
   // Retain every admitted cancellation and prior record. No overwriting history.
-  const rows = [...held, ...proposed].map(({kind, soul, record}) => ({kind, soul, record}));
+  const identity = row => JSON.stringify([row.kind, row.soul, Buffer.from(row.bytes).toString('base64')]);
+  const seen = new Set(held.map(identity)), novel = [];
+  // Every supplied signature was verified above, including duplicates.
+  for (const row of proposed) {
+    const key = identity(row);
+    if (!seen.has(key)) { seen.add(key); novel.push(row); }
+  }
+  const rows = [...held, ...novel].map(({kind, soul, record}) => ({kind, soul, record}));
   if (rows.length > 1024) throw Error('graph-capacity');
   const snapshot = {completeThrough: now, history, rows};
   if (Buffer.byteLength(JSON.stringify(snapshot)) > 4*1024*1024) throw Error('graph-capacity');

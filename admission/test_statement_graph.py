@@ -45,6 +45,17 @@ class GraphContracts(unittest.TestCase):
         with self.assertRaises(AdmissionRejected):
             self.source.append('test', self.f['now'], self.source.read('test', self.f['now'])['fence'], [self.rows['initial']])
 
+    def test_exact_retries_are_idempotent_but_forged_duplicates_deny(self):
+        at = self.f['now']
+        held = self.source.read('test', at)
+        self.source.append('test', at, held['fence'], self.rows['rows'] * 2)
+        held = self.source.read('test', at)
+        self.assertEqual(len(held['snapshot']['rows']), 3)
+        self.source.append('test', at, held['fence'], self.rows['rows'])
+        self.assertEqual(self.source.read('test', at)['fence'], held['fence'])
+        forged = json.loads(json.dumps(self.rows['rows'][0])); forged['record']['sig'] = 'bad'
+        with self.assertRaises(AdmissionRejected): self.source.append('test', at, held['fence'], [forged])
+
     def test_full_identity_history_still_allows_graph_reads(self):
         f = self.f
         payload = {'principal': f['genesis'], 'now': f['now'],
