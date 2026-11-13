@@ -14,6 +14,19 @@ REV=hashlib.sha256(BODY).hexdigest()
 
 
 class PrivateWrapHTTPTests(IsolatedAsyncioTestCase):
+    async def test_existing_immutable_bytes_reconcile_without_overwrite(self):
+        methods=[]
+        def handler(request):
+            methods.append(request.method)
+            if request.method=='PUT':
+                self.assertEqual(request.headers['if-none-match'],'*')
+                return httpx.Response(412)
+            return httpx.Response(200,headers={'etag':'"'+REV+'"'},stream=httpx.ByteStream(BODY))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler),trust_env=False) as client:
+            store=PrivateWrapStore('https://storage.example',TENANT,'secret',client=client)
+            self.assertEqual(await store.create_or_reconcile(NAME,BODY),REV)
+        self.assertEqual(methods,['PUT','GET'])
+
     async def test_delivery_bounds_a_stalled_authority(self):
         async def blocked(*args): await asyncio.sleep(10)
         authority=Mock(authorize_read=AsyncMock(side_effect=blocked))

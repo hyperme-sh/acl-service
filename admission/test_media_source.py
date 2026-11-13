@@ -255,6 +255,57 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(AdmissionRejected):self.source._owner_view(TENANT,'reader',OBJECT,lambda:None)
         with self.assertRaises(AdmissionRejected):self.source._owner_view('other','owner',OBJECT,lambda:None)
 
+    def write_metadata(self, digest='1'*64):
+        return {'reader':'reader','record':digest,'digest':digest,'epoch':1,'revisionId':'b'*64,
+                'readerEpub':'reader-epub','itemDigest':'a'*64}
+
+    def prepare(self, digest='1'*64, **changes):
+        metadata=self.write_metadata(digest);metadata.update(changes)
+        return self.source.prepare_write(TENANT,'owner',OBJECT,self.now,
+            self.source.read_view(OBJECT,self.now)['fence'],metadata,digest,64)
+
+    def test_write_reservation_survives_failure_and_commit_crosses_seconds_safely(self):
+        self.ready();before=self.source.read_view(OBJECT,self.now)['objectVersion']
+        permit=self.prepare()
+        with self.store._transaction(write=False) as db:
+            doc=self.source._load(db,OBJECT,self.now)[1]
+            self.assertEqual(len(doc['uploads']),1)
+            self.assertEqual(doc['objectVersion'],before)
+        self.now+=1
+        self.assertTrue(self.source.commit_write(permit))
+        current=self.source.read_view(OBJECT,self.now)['objectVersion']
+        self.assertEqual(current,before+1)
+        # Lost-response reconciliation preserves the already committed version.
+        self.assertTrue(self.source.commit_write(self.prepare()))
+        self.assertEqual(self.source.read_view(OBJECT,self.now)['objectVersion'],current)
+
+    def test_write_commit_rejects_cancellation_identity_change_and_expiry(self):
+        self.ready();permit=self.prepare()
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        with self.assertRaises(HistoryConflict):self.source.commit_write(permit)
+        self.mutate('grant',self.grant(grantRevision=3));permit=self.prepare()
+        self.store.append('owner',0,b'identity-change')
+        with self.assertRaises(HistoryConflict):self.source.commit_write(permit)
+        with self.assertRaises(AdmissionRejected):self.source.commit_write(None)
+        self.now=permit.expires_at
+        with self.assertRaises(AdmissionRejected):self.source.commit_write(permit)
+
+    def test_all_reserved_bytes_count_toward_per_object_capacity(self):
+        self.ready()
+        for n in range(128):self.prepare(f'{n:064x}')
+        before=self.source.read_view(OBJECT,self.now)['fence']
+        with self.assertRaises(AdmissionRejected):self.prepare('f'*64)
+        self.assertEqual(self.source.read_view(OBJECT,self.now)['fence'],before)
+        # An identical reserved record remains reconcilable at capacity.
+        self.assertTrue(self.source.commit_write(self.prepare('0'*64)))
+
+    def test_publication_binding_and_native_owner_signature_refusals(self):
+        self.ready()
+        for changes in [{'record':'2'*64},{'epoch':True},{'readerEpub':'wrong'}]:
+            with self.assertRaises(AdmissionRejected):self.prepare(**changes)
+        self.native[0].matches_grant.return_value=False
+        with self.assertRaises(AdmissionRejected):self.prepare()
+
 
 class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
     async def test_async_entrypoints_keep_the_exact_commit_permit(self):
@@ -268,6 +319,9 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
         self.assertEqual(await source.owner_view(TENANT,'owner',OBJECT),{'fence':'held'})
         self.assertTrue(await source.owner_mutate(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
         self.assertEqual(source.mutate.call_args.args[:-1],(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
+        source.prepare_write=Mock(return_value='write-permit');source.commit_write=Mock(return_value=True)
+        self.assertEqual(await source.prepare_wrap_write(TENANT,'owner',OBJECT,100,'fence',{},'a'*64,1),'write-permit')
+        self.assertTrue(await source.commit_wrap_write('write-permit'))
 
     async def test_cancelled_worker_keeps_slot_and_refuses_late_commit(self):
         source=object.__new__(MediaSource); source.slots=asyncio.Semaphore(1)

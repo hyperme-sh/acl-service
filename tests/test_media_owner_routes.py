@@ -1,5 +1,8 @@
 """Owner HTTP contracts, executed in CI only."""
 import asyncio
+import base64
+import hashlib
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -8,6 +11,7 @@ import pytest
 from fastapi import FastAPI
 from acl_service.deps import get_current_user, require_matched_tenant
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
+from acl_service.domain.private_wrap_publication import WrapWritePermit
 from acl_service.interfaces.api.private_wrap_routes import PrivateWrapBinding
 from acl_service.interfaces.api.media_owner_routes import router
 
@@ -98,3 +102,25 @@ async def test_body_limits_encoding_and_shared_tenant_capacity(setup):
         assert (await client.post(BASE+'view',json={'object':'media-object'})).status_code==429
         s.app.state.private_wrap_tenant_slots[s.tenant].release()
     s.authority.owner_view.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_private_publication_reserves_then_writes_and_commits(setup):
+    s=setup;payload=b'private encrypted material';digest=hashlib.sha256(payload).hexdigest()
+    permit=WrapWritePermit(str(s.tenant),'fixed-owner','media-object',digest,digest,len(payload),'held',int(time.time())+2)
+    s.authority.prepare_wrap_write=AsyncMock(return_value=permit)
+    s.authority.commit_wrap_write=AsyncMock(return_value=True)
+    s.store.create_or_reconcile=AsyncMock(return_value=digest)
+    body={'object':'media-object','at':100,'fence':'a'*64,'metadata':{'record':digest},'wrapBase64':base64.b64encode(payload).decode()}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'publish-wrap',json=body)
+        assert response.status_code==200
+        assert response.json()=={'record':digest,'digest':digest}
+        s.authority.prepare_wrap_write.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object',100,'a'*64,{'record':digest},digest,len(payload))
+        s.store.create_or_reconcile.assert_awaited_once_with(digest,payload)
+        s.authority.commit_wrap_write.assert_awaited_once_with(permit)
+        for changes in [{'wrapBase64':'!'},{'wrapBase64':''},{'metadata':[]},{'writer':'attacker'}]:
+            assert (await client.post(BASE+'publish-wrap',json={**body,**changes})).status_code==400
+        s.authority.prepare_wrap_write.side_effect=AdmissionRejected('quota')
+        assert (await client.post(BASE+'publish-wrap',json=body)).status_code==403
+        assert s.store.create_or_reconcile.await_count==1

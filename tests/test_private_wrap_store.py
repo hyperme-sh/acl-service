@@ -29,6 +29,17 @@ class Response:
 
 
 class PrivateWrapStoreTests(IsolatedAsyncioTestCase):
+    async def test_fresh_authorized_retry_reconciles_only_identical_bytes(self):
+        store=object.__new__(PrivateWrapStore)
+        store.create=AsyncMock(return_value=REV);store.read=AsyncMock(return_value=PAYLOAD)
+        self.assertEqual(await store.create_or_reconcile(NAME,PAYLOAD),REV)
+        store.read.assert_not_awaited()
+        store.create.side_effect=WrapStorageConflict('exists')
+        self.assertEqual(await store.create_or_reconcile(NAME,PAYLOAD),REV)
+        store.read.assert_awaited_once()
+        store.read.return_value=b'different'
+        with self.assertRaises(WrapStorageConflict):await store.create_or_reconcile(NAME,PAYLOAD)
+
     def setUp(self):
         self.response = Response()
         self.client = Mock(aclose=AsyncMock())

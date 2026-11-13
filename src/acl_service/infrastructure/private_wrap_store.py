@@ -124,3 +124,13 @@ class PrivateWrapStore:
             raise
         except Exception:
             raise WrapStorageUnavailable('private wrap storage unavailable') from None
+
+    async def create_or_reconcile(self, name, payload, *, cancel=lambda: None):
+        """After fresh reservation authorization, reconcile only identical bytes."""
+        try:
+            return await self.create(name, payload, cancel=cancel)
+        except WrapStorageConflict:
+            revision = hashlib.sha256(payload).hexdigest()
+            if await self.read(name, revision, cancel=cancel) != payload:
+                raise WrapStorageConflict('private wrap record differs') from None
+            return revision
