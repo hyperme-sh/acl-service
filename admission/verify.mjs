@@ -38,7 +38,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     accounts.set(account.principal, {...account, rotations, links, ownRevokes});
   }
-  if (!observe && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
+  if (!observe && !graph && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
 
   function contextFor(account, until) {
     const links = new Map(account.links);

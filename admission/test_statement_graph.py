@@ -45,4 +45,16 @@ class GraphContracts(unittest.TestCase):
         with self.assertRaises(AdmissionRejected):
             self.source.append('test', self.f['now'], self.source.read('test', self.f['now'])['fence'], [self.rows['initial']])
 
+    def test_full_identity_history_still_allows_graph_reads(self):
+        f = self.f
+        payload = {'principal': f['genesis'], 'now': f['now'],
+            'trust': {k:f[k] for k in ('jwks','policy','pinnedIss')},
+            'genesis': f['binding'], 'entries': [f['wallet']] * self.rows['maxHistory'], 'peers': [],
+            'graph': {'forum':self.rows['forum'], 'rows':[], 'candidates':[], 'statementOnly':False}}
+        result = subprocess.run(['node','verify.mjs'], input=json.dumps(payload).encode(), stdout=subprocess.PIPE)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)['snapshot']['history']['completeThrough'], f['now'])
+        del payload['graph']; payload['record'] = f['wallet']
+        self.assertNotEqual(subprocess.run(['node','verify.mjs'], input=json.dumps(payload).encode(), stdout=subprocess.PIPE).returncode, 0)
+
 if __name__ == '__main__': unittest.main()

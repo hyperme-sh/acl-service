@@ -1,5 +1,5 @@
 import {readFileSync} from 'node:fs';
-import {formatPrincipalKey, objectRecordBytes, signWithKeyring, seeGrantBytes, grantSoul} from 'sociacl-ids';
+import {MAX_RESOLUTION_INPUT, formatPrincipalKey, objectRecordBytes, signWithKeyring, seeGrantBytes, grantSoul} from 'sociacl-ids';
 const f = JSON.parse(readFileSync(new URL('./fixture.json', import.meta.url)));
 const owner = f.genesis, key = new Uint8Array(32); key[31] = 1;
 const sign = bytes => { const value = signWithKeyring(key, bytes, owner); if (!value.ok) throw Error(value.reason); return value.value; };
@@ -11,4 +11,4 @@ function ownership(object) {
 }
 const grant = {owner, object, accessor:owner, stated:1, from:f.now, until:f.now+60, hamState:f.now, issuedAt:f.now};
 grant.sig = sign(seeGrantBytes(grant));
-console.log(JSON.stringify({forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));
+console.log(JSON.stringify({maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));
