@@ -36,8 +36,11 @@ in an uncompressed JSON body capped at 2 KiB. It requires authenticated matching
 tenant claims, `acl:media:read`, and an explicit server-side tenant/subject binding
 to an enrolled reader, owner authority and tenant store. It never accepts reader,
 epoch, revision, storage location or authorization fields from that request.
-The service rate limit and two concurrent request slots apply before body reads;
-the whole request has a four-second deadline. A successful response contains
+The service rate limit applies before body reads. Each configured subject has
+one body-upload slot with a one-second deadline. Only validated bodies reserve
+backend capacity: one operation per tenant and two globally. Slow uploads cannot
+occupy another tenant's backend slots. Slot maps contain only configured bindings;
+requests cannot grow them. The whole request has a four-second deadline. A successful response contains
 `context` (`object`, `epoch`, `revisionId`), `readerEpub`, `expiresAt` (Unix seconds)
 and `wrapBase64`, all from the same committed delivery decision. Storage record
 names, owner fences and provider addresses are omitted. Responses use private,

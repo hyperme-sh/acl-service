@@ -160,6 +160,8 @@ def create_app(
     app.include_router(delegation_router, prefix="/api/v1")
     app.state.private_wrap_bindings = MappingProxyType(dict(private_wrap_bindings)) if private_wrap_bindings is not None else None
     app.state.private_wrap_slots = asyncio.Semaphore(2)
+    app.state.private_wrap_body_slots = {key: asyncio.Semaphore(1) for key in (private_wrap_bindings or {})}
+    app.state.private_wrap_tenant_slots = {key[0]: asyncio.Semaphore(1) for key in (private_wrap_bindings or {})}
     app.include_router(private_wrap_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)

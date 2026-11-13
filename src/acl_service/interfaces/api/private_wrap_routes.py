@@ -1,6 +1,7 @@
 """Private wrap transport; no source, credentials or enrollment created here."""
 import asyncio
 import base64
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import json
 import re
@@ -31,6 +32,17 @@ def refused(status, message):
     return HTTPException(status, message, headers=PRIVATE)
 
 
+@asynccontextmanager
+async def capacity(slots):
+    if slots.locked():
+        raise refused(429, 'Private wrap source busy')
+    await slots.acquire()
+    try:
+        yield
+    finally:
+        slots.release()
+
+
 @router.post('/read-wrap')
 async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_tenant),
                     user: AuthMeResponse = Depends(get_current_user)):
@@ -45,20 +57,20 @@ async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_ten
         raise refused(403, 'Private wrap access refused')
     if not request.app.state.rate_limiter.allow(tenant, user.sub):
         raise refused(429, 'Rate limit exceeded')
-    slots = request.app.state.private_wrap_slots
-    if slots.locked():
-        raise refused(429, 'Private wrap source busy')
-    await slots.acquire()
     try:
         async with asyncio.timeout(4.0):
             if (request.headers.get('content-type', '').split(';')[0] != 'application/json'
                     or request.headers.get('content-encoding', 'identity') != 'identity'):
                 raise refused(415, 'Expected uncompressed JSON')
             data = bytearray()
-            async for chunk in request.stream():
-                if len(data) + len(chunk) > 2048:
-                    raise refused(413, 'Request too large')
-                data.extend(chunk)
+            # A slow upload occupies only its own configured subject's slot,
+            # never tenant or global backend capacity. No dynamic slot map grows.
+            async with capacity(request.app.state.private_wrap_body_slots[(tenant, user.sub)]):
+                async with asyncio.timeout(1.0):
+                    async for chunk in request.stream():
+                        if len(data) + len(chunk) > 2048:
+                            raise refused(413, 'Request too large')
+                        data.extend(chunk)
             try:
                 body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields,
                                   parse_constant=_invalid_constant)
@@ -68,8 +80,11 @@ async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_ten
                     raise ValueError()
             except (ValueError, RecursionError):
                 raise refused(400, 'Invalid request') from None
-            result = await deliver_private_wrap_context(binding.authority, binding.store,
-                                                        str(tenant), binding.reader, body['object'])
+            # One tenant cannot occupy both global delivery slots.
+            async with capacity(request.app.state.private_wrap_tenant_slots[tenant]):
+                async with capacity(request.app.state.private_wrap_slots):
+                    result = await deliver_private_wrap_context(binding.authority, binding.store,
+                                                                str(tenant), binding.reader, body['object'])
             return JSONResponse({
                 'context': {'object': result.object, 'epoch': result.epoch, 'revisionId': result.revision_id},
                 'readerEpub': result.reader_epub, 'expiresAt': result.expires_at,
@@ -79,5 +94,3 @@ async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_ten
         raise refused(403, 'Private wrap access refused') from None
     except TimeoutError:
         raise refused(503, 'Private wrap source unavailable') from None
-    finally:
-        slots.release()

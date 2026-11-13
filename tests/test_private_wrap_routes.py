@@ -32,6 +32,8 @@ def setup():
     app.include_router(router)
     app.state.private_wrap_bindings = {(tenant, actor.sub): binding}
     app.state.private_wrap_slots = asyncio.Semaphore(2)
+    app.state.private_wrap_body_slots = {(tenant, actor.sub):asyncio.Semaphore(1)}
+    app.state.private_wrap_tenant_slots = {tenant:asyncio.Semaphore(1)}
     app.state.rate_limiter = Mock(allow=Mock(return_value=True))
     app.dependency_overrides[get_current_user] = lambda: actor
     app.dependency_overrides[require_matched_tenant] = lambda: tenant
@@ -146,3 +148,58 @@ async def test_transport_requires_authenticated_dependencies(setup):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://owner') as client:
         assert (await client.post(PATH,json={'object':'media-object'})).status_code == 401
     s.authority.authorize_read.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_slow_subject_body_cannot_hold_other_tenants_backend_capacity(setup):
+    s=setup
+    other=uuid4()
+    other_permit=replace(s.permit,tenant=str(other))
+    other_authority=Mock(authorize_read=AsyncMock(return_value=other_permit),commit_delivery=AsyncMock(return_value=True))
+    other_store=Mock(tenant=str(other),read=AsyncMock(return_value=s.payload))
+    s.app.state.private_wrap_bindings[(other,s.actor.sub)]=PrivateWrapBinding(str(other),s.permit.reader,other_authority,other_store)
+    s.app.state.private_wrap_body_slots[(other,s.actor.sub)]=asyncio.Semaphore(1)
+    s.app.state.private_wrap_tenant_slots[other]=asyncio.Semaphore(1)
+    started=asyncio.Event()
+    async def stalled():
+        yield b'{'
+        started.set()
+        await asyncio.sleep(10)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://owner') as client:
+        work=asyncio.create_task(client.post(PATH,content=stalled(),headers={'Content-Type':'application/json'}))
+        try:
+            await asyncio.wait_for(started.wait(),1)
+            assert s.app.state.private_wrap_slots._value == 2
+            assert (await client.post(PATH,json={'object':'media-object'})).status_code == 429
+            s.app.dependency_overrides[require_matched_tenant]=lambda:other
+            assert (await client.post(PATH,json={'object':'media-object'})).status_code == 200
+            assert (await work).status_code == 503
+        finally:
+            if not work.done():
+                work.cancel()
+                with pytest.raises(asyncio.CancelledError): await work
+    s.authority.authorize_read.assert_not_called()
+    assert s.app.state.private_wrap_body_slots[(s.tenant,s.actor.sub)]._value == 1
+    assert s.app.state.private_wrap_slots._value == 2
+
+
+@pytest.mark.asyncio
+async def test_one_tenant_cannot_take_both_backend_slots(setup):
+    s=setup
+    started=asyncio.Event()
+    release=asyncio.Event()
+    async def held(*args):
+        started.set()
+        await release.wait()
+        return s.permit
+    s.authority.authorize_read.side_effect=held
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://owner') as client:
+        work=asyncio.create_task(client.post(PATH,json={'object':'media-object'}))
+        try:
+            await asyncio.wait_for(started.wait(),1)
+            assert s.app.state.private_wrap_slots._value == 1
+            assert (await client.post(PATH,json={'object':'media-object'})).status_code == 429
+        finally: release.set()
+        assert (await work).status_code == 200
+    assert s.app.state.private_wrap_slots._value == 2
+    assert s.app.state.private_wrap_tenant_slots[s.tenant]._value == 1
