@@ -178,6 +178,8 @@ class MediaSource:
                 document,fin=payload['document'],payload['finalization']
                 if type(document) is not dict or type(fin) is not dict: raise AdmissionRejected('invalid epoch')
                 manifest=document.get('manifest',{})
+                if type(manifest) is not dict or type(fin.get('previousFinalizationId')) is not str:
+                    raise AdmissionRejected('invalid epoch shape')
                 expected={'ownerPub':owner_pub,'object':object,'epoch':manifest.get('epoch'),'revisionId':manifest.get('revisionId')}
                 if not self.native[2].matches_manifest(encoded(document),encoded(expected)) or document['snapshot']!=self._snapshot(doc):
                     raise AdmissionRejected('current manifest refused')
@@ -197,7 +199,7 @@ class MediaSource:
             elif operation=='wrap':
                 if len(encoded(payload))>4096: raise AdmissionRejected('private wrap capacity')
                 required={'reader','record','digest','epoch','revisionId','readerEpub','itemDigest'}
-                if set(payload)!=required or payload['reader'] not in identities['bindings']:
+                if set(payload)!=required or type(payload['reader']) is not str or payload['reader'] not in identities['bindings']:
                     raise AdmissionRejected('invalid private wrap')
                 who=payload['reader']; grant=self._latest(doc).get(who)
                 if not grant or grant['claims']['stated']!=1 or payload['epoch']!=grant['claims']['epoch'] or payload['itemDigest']!=grant['claims']['itemCiphertextDigest'] or payload['readerEpub']!=identities['bindings'][who]['epub']:

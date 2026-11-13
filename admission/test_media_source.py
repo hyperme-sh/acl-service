@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import threading
 from unittest import TestCase, IsolatedAsyncioTestCase
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from media_source import MediaSource, encoded
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
@@ -149,8 +149,92 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(AdmissionRejected):self.source.commit(permit)
         with self.assertRaises(AdmissionRejected):self.source.commit(replace(permit,fence='0'*64))
 
+    def test_provision_requires_independent_tenant_and_rechecked_exclusivity(self):
+        with self.assertRaises(AdmissionRejected):MediaSource(Mock(require_authority_checkpoint=False),TENANT)
+        with self.assertRaises(AdmissionRejected):MediaSource(self.store,'00000000-0000-0000-0000-000000000000',native=self.native)
+        with self.assertRaises(AdmissionRejected):MediaSource(self.store,'11234567-89ab-cdef-0123-456789abcdef',native=self.native)
+        for object,until in [('foreign',200),(OBJECT,99)]:
+            with self.assertRaises(AdmissionRejected):self.source.provision(object,{},until,exclusive_grant=lambda *a:True)
+        with self.assertRaises(HistoryConflict):self.source.provision(OBJECT,{},200,exclusive_grant=lambda *a:True)
+        calls=[]
+        def once(*args):calls.append(1);return len(calls)==1
+        with self.assertRaises(AdmissionRejected):self.source.provision('media_new',{},200,exclusive_grant=once)
+        with self.assertRaises(AdmissionRejected):self.source.read_view('media_new',self.now)
+        with self.assertRaises(AdmissionRejected):self.source.provision('media_large',{'padding':'x'*65536},200,exclusive_grant=lambda *a:True)
+
+    def test_default_identity_loader_uses_all_accounts_from_the_held_transaction(self):
+        from history_admission import HistoryAdmission
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,self.now)
+            with patch.object(HistoryAdmission,'_run_verifier',return_value=encoded(self.ids)) as run:
+                result=self.source._identities(db,OBJECT,doc,self.now)
+        self.assertEqual(result,self.ids)
+        self.assertEqual(run.call_args.kwargs['mediaObject'],OBJECT)
+        self.assertEqual(run.call_args.kwargs['peers'][0]['principal'],'reader')
+
+    def test_rejected_signature_enrollment_and_oversized_mutations_leave_state_unchanged(self):
+        before=self.source.read_view(OBJECT,self.now)['fence']
+        self.native[0].matches_grant.return_value=False
+        with self.assertRaises(AdmissionRejected):self.mutate('grant',self.grant())
+        self.native[0].matches_grant.return_value=True
+        for changes in [{'accessor':'foreign'},{'accessor':[]},{'owner':'foreign'},{'object':'other'}]:
+            with self.assertRaises(AdmissionRejected):self.mutate('grant',self.grant(**changes))
+        for value in [{'claims':{},'proof':{}},{**self.grant(),'extra':1},self.grant()|{'proof':{'padding':'x'*17000}}]:
+            with self.assertRaises(AdmissionRejected):self.mutate('grant',value)
+        with self.assertRaises(AdmissionRejected):self.mutate('grant',{'padding':'x'*65537})
+        with self.assertRaises(AdmissionRejected):self.mutate('wrap',{'padding':'x'*4097})
+        self.assertEqual(self.source.read_view(OBJECT,self.now)['fence'],before)
+
+    def test_epoch_signatures_lineage_and_observation_times_are_preserved(self):
+        self.mutate('grant',self.grant())
+        snapshot=self.source.read_view(OBJECT,self.now)['snapshot']
+        document={'manifest':{'epoch':1,'revisionId':'b'*64,'aclSnapshot':'c'*64},'snapshot':snapshot}
+        fin={'epoch':1,'revisionId':'b'*64,'previousEpoch':0,'previousFinalizationId':'','finalizationId':'d'*64}
+        self.native[2].matches_manifest.return_value=False
+        with self.assertRaises(AdmissionRejected):self.mutate('epoch',{'document':document,'finalization':fin})
+        self.native[2].matches_manifest.return_value=True
+        with self.assertRaises(AdmissionRejected):self.mutate('epoch',{'document':document,'finalization':{**fin,'previousEpoch':1}})
+        self.native[4].verifies_history.return_value=False
+        with self.assertRaises(AdmissionRejected):self.mutate('epoch',{'document':document,'finalization':fin})
+        self.native[4].verifies_history.return_value=True
+        self.mutate('epoch',{'document':document,'finalization':fin})
+        with self.assertRaises(HistoryConflict):self.mutate('epoch',{'document':document,'finalization':fin})
+        self.now=101
+        next_doc={**document,'manifest':{**document['manifest'],'epoch':2,'revisionId':'9'*64}}
+        next_fin={**fin,'epoch':2,'revisionId':'9'*64,'previousEpoch':1,'previousFinalizationId':'d'*64,'finalizationId':'8'*64}
+        with self.assertRaises(AdmissionRejected):self.mutate('epoch',{'document':next_doc,'finalization':{**next_fin,'previousFinalizationId':'7'*64}})
+        self.mutate('epoch',{'document':next_doc,'finalization':next_fin})
+        with self.store._transaction(write=False) as db:
+            doc=self.source._load(db,OBJECT,self.now)[1]
+        self.assertEqual([row['seenAt'] for row in doc['finalizations']],[100000,101000])
+        self.assertEqual(doc['anchor'],'d'*64)
+
+    def test_wrap_metadata_cannot_change_recipient_or_item_binding(self):
+        self.ready()
+        valid={'reader':'reader','record':'e'*64,'digest':'f'*64,'epoch':1,'revisionId':'b'*64,'readerEpub':'reader-epub','itemDigest':'a'*64}
+        for field,value in [('reader',[]),('reader','foreign'),('epoch',2),('readerEpub','other'),('itemDigest','9'*64),('record','bad'),('revisionId','9'*64)]:
+            with self.assertRaises(AdmissionRejected):self.mutate('wrap',{**valid,field:value})
+        with self.assertRaises(AdmissionRejected):self.source.commit(None)
+        with self.assertRaises(HistoryConflict):self.source.commit(replace(self.permit(),fence='0'*64))
+
+    def test_policy_refusal_and_expiry(self):
+        for until,policy in [(99,{}),(200,{'padding':'x'*60001})]:
+            with self.assertRaises(AdmissionRejected):self.source.replace_policy(OBJECT,0,policy,until,authorize=lambda *a:True)
+        with self.assertRaises(HistoryConflict):self.source.replace_policy(OBJECT,99,{},200,authorize=lambda *a:True)
+        with self.assertRaises(AdmissionRejected):self.source.replace_policy(OBJECT,0,{},200,authorize=lambda *a:False)
+        self.now=10000
+        with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
+
 
 class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
+    async def test_async_entrypoints_keep_the_exact_commit_permit(self):
+        source=object.__new__(MediaSource);source.slots=asyncio.Semaphore(1)
+        source.authorize=Mock(return_value='permit');source.commit=Mock(return_value=True)
+        self.assertEqual(await source.authorize_read(TENANT,'reader',OBJECT),'permit')
+        self.assertTrue(await source.commit_delivery('permit'))
+        self.assertEqual(source.commit.call_args.args[0],'permit')
+        self.assertFalse(source.slots.locked())
+
     async def test_cancelled_worker_keeps_slot_and_refuses_late_commit(self):
         source=object.__new__(MediaSource); source.slots=asyncio.Semaphore(1)
         entered=threading.Event(); release=threading.Event(); committed=[]
