@@ -54,7 +54,7 @@ class NativeMediaContracts(TestCase):
         permit=self.ready();backup=self.path.read_bytes()
         draft=self.source._owner_cancel_view(self.tenant,self.owner,self.object,self.owner,lambda:None)
         self.assertEqual(draft['grant'],self.f['cancel']['claims'])
-        self.assertEqual(draft['ownerPub'],self.f['identity']['binding']['pub'])
+        self.assertEqual(draft['ownerPub'],self.owner)
         self.mutate('grant',self.f['cancel'])
         with self.assertRaises(AdmissionRejected):self.source.commit(permit)
         self.path.write_bytes(backup)
