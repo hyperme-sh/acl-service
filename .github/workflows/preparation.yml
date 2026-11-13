@@ -4,11 +4,9 @@ on:
 permissions:
   contents: read
 jobs:
-  candidate:
+  consumers:
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 10
-    outputs:
-      artifact-id: ${{ steps.candidate.outputs.artifact-id }}
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -21,37 +19,6 @@ jobs:
         run: uv build --out-dir "$RUNNER_TEMP/acl-candidate"
       - name: Export the exact candidate contract for source reconciliation
         run: python3 scripts/export_release_contract.py "$RUNNER_TEMP"/acl-candidate/*.whl --output "$RUNNER_TEMP/acl-candidate-contract"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: prepared-contract
-          path: ${{ runner.temp }}/acl-candidate-contract/*
-          if-no-files-found: error
-          retention-days: 30
-      - id: candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: prepared-dist
-          path: ${{ runner.temp }}/acl-candidate/*
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-  consumers:
-    needs: candidate
-    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-        with:
-          version: '0.11.26'
-          python-version: '3.13'
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: ${{ needs.candidate.outputs.artifact-id }}
-          path: ${{ runner.temp }}/acl-candidate
-          merge-multiple: true
       - name: Check exact candidate without replacing it
         env:
           RELEASE_CANDIDATE_DIR: ${{ runner.temp }}/acl-candidate
@@ -80,9 +47,3 @@ jobs:
           PYTHONPATH=tests .venv/bin/python -m pytest -p conftest -q admission/test_signed_http.py
       - name: Check policy storage contract against owned PostgreSQL
         run: .venv/bin/python -m pytest -q integration --ignore=integration/nightly
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: prepared-evidence
-          path: ${{ runner.temp }}/acl-prepared-evidence/*
-          if-no-files-found: error
-          retention-days: 30
