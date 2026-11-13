@@ -31,6 +31,25 @@ and refusal boundaries. Protected-source and HTTP route wiring remain under #81.
 The complete async delivery operation has a three-second deadline, including
 both authority calls, so an unavailable owner source cannot hold a request forever.
 
+`POST /api/v1/acl/sociacl/media/read-wrap` accepts only `{"object":"..."}`
+in an uncompressed JSON body capped at 2 KiB. It requires authenticated matching
+tenant claims, `acl:media:read`, and an explicit server-side tenant/subject binding
+to an enrolled reader, owner authority and tenant store. It never accepts reader,
+epoch, revision, storage location or authorization fields from that request.
+The service rate limit and two concurrent request slots apply before body reads;
+the whole request has a four-second deadline. A successful response contains
+`context` (`object`, `epoch`, `revisionId`), `readerEpub`, `expiresAt` (Unix seconds)
+and `wrapBase64`, all from the same committed delivery decision. Storage record
+names, owner fences and provider addresses are omitted. Responses use private,
+no-store caching. Consumers must use this authenticated current context and their
+matching enrolled encryption key when opening the existing SociACL reader wrap.
+They must not reuse an expired response as current authorization.
+
+The application factory accepts optional `private_wrap_bindings`; the default is
+unavailable, with no environment-based activation or permissive authority.
+Concrete protected-source construction, owner enrollment and deployment wiring
+remain under #81. This transport does not provision any of them.
+
 The image carries the shared SociACL Rust epoch-status verifier, built from the
 exact source revision in `admission/sociacl-native.rev`. The packaged
 `EpochStatusVerifier` loads only `/opt/acl-admission/libsociacl.so` and checks

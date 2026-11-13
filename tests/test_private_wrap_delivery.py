@@ -3,7 +3,9 @@ from dataclasses import replace
 import hashlib
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import Mock, AsyncMock
-from acl_service.domain.private_wrap_delivery import WrapReadPermit, WrapDeliveryRejected, deliver_private_wrap
+from acl_service.domain.private_wrap_delivery import (
+    WrapReadPermit, WrapDeliveryRejected, deliver_private_wrap, deliver_private_wrap_context,
+)
 
 
 class PrivateWrapDeliveryTests(IsolatedAsyncioTestCase):
@@ -29,6 +31,13 @@ class PrivateWrapDeliveryTests(IsolatedAsyncioTestCase):
         self.assertEqual(await self.run_delivery(),self.payload)
         self.assertEqual(order,['authorize','fetch','commit'])
         self.authority.commit_delivery.assert_called_once_with(self.permit)
+
+    async def test_context_is_from_the_exact_committed_permit(self):
+        result = await deliver_private_wrap_context(self.authority, self.store, 'tenant',
+                                                   'reader', 'object', clock=lambda:100)
+        self.authority.commit_delivery.assert_called_once_with(self.permit)
+        self.assertEqual(vars(result), {'payload': self.payload, 'object': 'object', 'epoch': 1,
+            'revision_id': 'b'*64, 'reader_epub': 'reader-epub', 'expires_at': 110})
 
     async def test_wrong_binding_or_bad_context_never_fetches(self):
         for key,value in [('tenant','other'),('reader','other'),('object','other'),('record','../object'),

@@ -38,6 +38,7 @@ from acl_service.interfaces.api.witness_policy_routes import router as witness_p
 
 from acl_service.interfaces.api.statement_routes import StatementBinding, router as statement_router
 from acl_service.interfaces.api.delegation_routes import router as delegation_router
+from acl_service.interfaces.api.private_wrap_routes import PrivateWrapBinding, router as private_wrap_router
 from acl_service.interfaces.api.signed_store_routes import SignedStoreBinding, router as signed_store_router
 from acl_service.interfaces.api.contact_lane_routes import router as contact_lane_router
 from acl_service.interfaces.api.first_contact_routes import router as first_contact_router
@@ -54,6 +55,7 @@ def create_app(
     signed_store_bindings: Mapping[tuple[UUID, str], SignedStoreBinding] | None = None,
     statement_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
     delegation_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
+    private_wrap_bindings: Mapping[tuple[UUID, str], PrivateWrapBinding] | None = None,
 ) -> FastAPI:
     if statement_bindings is None:
         from acl_service.infrastructure.statement_bindings import load_statement_bindings
@@ -156,6 +158,9 @@ def create_app(
     # Both sources share the same bounded worker budget.
     app.state.delegation_slots = app.state.statement_slots
     app.include_router(delegation_router, prefix="/api/v1")
+    app.state.private_wrap_bindings = MappingProxyType(dict(private_wrap_bindings)) if private_wrap_bindings is not None else None
+    app.state.private_wrap_slots = asyncio.Semaphore(2)
+    app.include_router(private_wrap_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
     app.add_middleware(AclServiceDbMiddleware)
