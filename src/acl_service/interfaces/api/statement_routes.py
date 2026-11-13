@@ -36,6 +36,8 @@ async def statement_operation(scope: str, operation: str, request: Request,
         raise HTTPException(403, "No statement source binding")
     if not binding.source.production_ready: raise HTTPException(503, "Statement source unavailable")
     if operation not in ("snapshot", "append"): raise HTTPException(404, "Unknown operation")
+    permission = "acl:statements:" + ("read" if operation == "snapshot" else "write")
+    if permission not in user.scopes: raise HTTPException(403, "Statement scope required")
     if not request.app.state.rate_limiter.allow(tenant, user.sub): raise HTTPException(429, "Rate limit exceeded")
     slots = request.app.state.statement_slots
     if slots.locked(): raise HTTPException(429, "Statement source busy")

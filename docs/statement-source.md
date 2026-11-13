@@ -47,7 +47,9 @@ POST `/api/v1/acl/sociacl/statements/{scope}/snapshot` takes only
 `rows`. Append returns `{"ok": true}`. A changed fence/deadline is 409 and requires
 a fresh read and authorization; writes are never automatically retried.
 Responses are private and noncacheable. Both requests require the existing
-verified bearer and matching `X-Tenant-ID`.
+verified bearer and matching `X-Tenant-ID`. Snapshot requires
+`acl:statements:read`; append requires `acl:statements:write`. The dedicated
+service key must have those scopes as well as the explicit source binding.
 
 HTTP input is bounded to 70,000 bytes and two concurrent backend operations.
 Timeouts retain capacity until the backend thread stops. Each source append is

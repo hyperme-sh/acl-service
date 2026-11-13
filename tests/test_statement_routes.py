@@ -11,7 +11,7 @@ from acl_service.deps import get_current_user, require_matched_tenant
 
 @pytest.mark.asyncio
 async def test_binding_body_and_source_contract():
-    tenant = uuid4(); calls = []; actor = SimpleNamespace(sub='service')
+    tenant = uuid4(); calls = []; actor = SimpleNamespace(sub='service', scopes=['acl:statements:read','acl:statements:write'])
     class Source:
         production_ready = True
         def read(self, scope, at, guard):
@@ -33,6 +33,9 @@ async def test_binding_body_and_source_contract():
         source.production_ready = False
         assert (await client.post(path+'snapshot', json={'evaluatedAt':100})).status_code == 503
         source.production_ready = True
+        actor.scopes = []
+        assert (await client.post(path+'snapshot', json={'evaluatedAt':100})).status_code == 403
+        actor.scopes = ['acl:statements:read','acl:statements:write']
         for raw in [b'{"evaluatedAt":100,"evaluatedAt":101}', b'{"evaluatedAt":true}', b'{"evaluatedAt":100,"history":{}}']:
             assert (await client.post(path+'snapshot', content=raw, headers={'Content-Type':'application/json'})).status_code == 400
         assert not calls
@@ -54,7 +57,7 @@ async def test_timed_out_threads_keep_capacity_until_stopped():
     app.state.statement_bindings = {(tenant,'service','forum'):StatementBinding('forum',source)}
     app.state.statement_slots = asyncio.Semaphore(1)
     app.state.rate_limiter = SimpleNamespace(allow=lambda *a:True)
-    app.dependency_overrides[get_current_user] = lambda:SimpleNamespace(sub='service')
+    app.dependency_overrides[get_current_user] = lambda:SimpleNamespace(sub='service', scopes=['acl:statements:read','acl:statements:write'])
     app.dependency_overrides[require_matched_tenant] = lambda:tenant
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://owner') as client:
         try:
