@@ -1,5 +1,21 @@
 # acl-service
 
+The image carries the shared SociACL Rust epoch-status verifier, built from the
+exact source revision in `admission/sociacl-native.rev`. The packaged
+`EpochStatusVerifier` loads only `/opt/acl-admission/libsociacl.so` and checks
+bounded raw proof/context documents through its C interface. The native parser
+rejects duplicate fields, positional arrays and malformed values. Its clock and
+policy inputs use milliseconds and cannot wrap unsigned C integers.
+
+`matches_status` means only that signature, freshness and exact context match.
+A matching cancellation also returns true. The caller must independently supply
+the current enrolled owner key, epoch, grant and graph state; a request cannot
+choose that context. Current Check, rollback custody and confidential reader-wrap
+delivery remain required under #81. No route or source binding activates media
+through this adapter. Missing libraries/symbols fail at construction, with no
+structural or permissive fallback. CI checks TypeScript-signed proofs against the
+native Rust implementation in an isolated container, plus package unit coverage.
+
 The image also carries an operator-only `DelegationSource` in its admission
 bundle. It provisions a new exclusive scope for one canonical HTTPS audience,
 using the same tenant-bound identity store and independent rollback checkpoint

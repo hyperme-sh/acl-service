@@ -1,0 +1,21 @@
+// Cross-language signature contract fixture, generated only in CI.
+import {p256} from '@noble/curves/nist.js';
+import {lengthPrefixed} from 'sociacl-ids';
+const key = new Uint8Array(32); key[31] = 11;
+const point = p256.getPublicKey(key, false);
+const ownerPub = Buffer.from(point.slice(1,33)).toString('base64url') + '.' + Buffer.from(point.slice(33)).toString('base64url');
+const rows = [0,1].map(stated => {
+  const proof = {object:'media-object',epoch:3,revisionId:'a'.repeat(64),accessor:'reader',
+    grantRevision:7,stated,signedAt:10000,maxAgeMs:2000,
+    zookie:{object:'media-object',objectVersion:4,snapshotHash:'b'.repeat(64)}};
+  const bytes = lengthPrefixed(['s3rch-epoch-status-v1',proof.object,String(proof.epoch),proof.revisionId,
+    proof.accessor,String(proof.grantRevision),String(proof.stated),String(proof.signedAt),String(proof.maxAgeMs),
+    proof.zookie.object,String(proof.zookie.objectVersion),proof.zookie.snapshotHash]);
+  if (!bytes.ok) throw Error(bytes.reason);
+  // Existing Rust reference signature encoding, not a SEA JSON envelope.
+  proof.signature = Buffer.from(p256.sign(bytes.value,key,{prehash:true,lowS:true,format:'compact'})).toString('hex');
+  const {signedAt,maxAgeMs,signature,...context} = proof;
+  return {proof,expected:{ownerPub,...context}};
+});
+key.fill(0);
+console.log(JSON.stringify(rows));
