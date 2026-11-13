@@ -76,7 +76,7 @@ class MediaSource:
 
     def _save(self, db, object, row, doc):
         raw=encoded(doc)
-        if len(raw)>5*1024*1024: raise AdmissionRejected('media capacity')
+        if len(raw)>6*1024*1024: raise AdmissionRejected('media capacity')
         updated=(row[0]+1,row[1],raw)
         db.execute('UPDATE media_sources SET revision=?,nonce=?,document=? WHERE object=?',(*updated,object))
         self._checkpoint(db,object,updated,write=True)
@@ -91,7 +91,7 @@ class MediaSource:
         if type(policy_until) is not int or policy_until<=at: raise AdmissionRejected('invalid media policy')
         doc={'policy':json.loads(encoded(policy)),'policyUntil':policy_until,'grants':[],
              'manifests':[],'finalizations':[],'statuses':{},'wraps':{},'anchor':'','floor':0,
-             'objectVersion':0,'frozen':[]}
+             'objectVersion':0,'frozen':[],'conflicts':[]}
         guard()
         with self.store._transaction(write=True,before_commit=guard) as db:
             if db.execute('SELECT COUNT(*) FROM media_sources').fetchone()[0]>=64:
@@ -159,14 +159,20 @@ class MediaSource:
                 if not self.native[0].matches_grant(encoded(payload['proof']),encoded({**claims,'ownerPub':owner_pub})):
                     raise AdmissionRejected('private grant signature refused')
                 held=self._latest(doc).get(who)
-                if held and claims['grantRevision']<=held['claims']['grantRevision']:
-                    if claims==held['claims'] and payload['proof']==held['proof']: return True
-                    if claims['grantRevision']<held['claims']['grantRevision']: raise HistoryConflict('stale grant revision')
+                retained=next((r for r in doc['grants'] if r['claims']['accessor']==who and r['claims']['grantRevision']==claims['grantRevision']),None)
+                if retained:
+                    # Authenticated alternate signatures over the same claims are
+                    # idempotent, even when a later cancellation is already held.
+                    if claims==retained['claims']: return True
                     # An authenticated same-revision fork is permanent, including
                     # when the signed conflict arrived after a cancellation.
-                    if who not in doc['frozen']: doc['frozen'].append(who)
+                    if who not in doc['frozen']:
+                        doc['frozen'].append(who)
+                        doc['conflicts'].append({'claims':claims,'proof':payload['proof'],'ownerPub':owner_pub})
                     frozen=True
                 else:
+                    if held and claims['grantRevision']<held['claims']['grantRevision']:
+                        raise HistoryConflict('stale grant revision')
                     stated=claims['stated']
                     if sum(r['claims']['stated']==stated for r in doc['grants'])>=64:
                         raise AdmissionRejected('grant capacity')

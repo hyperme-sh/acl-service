@@ -111,7 +111,28 @@ class MediaSourceContracts(TestCase):
         self.mutate('grant',self.grant())
         self.assertEqual(self.source.read_view(OBJECT,self.now)['fence'],prior)
         self.mutate('grant',self.grant(grantRevision=2))
-        with self.assertRaises(HistoryConflict):self.mutate('grant',self.grant())
+        self.assertTrue(self.mutate('grant',self.grant()))
+        with self.assertRaises(HistoryConflict):self.mutate('grant',self.grant(grantRevision=0))
+
+    def test_old_authenticated_fork_freezes_after_newer_cancellation(self):
+        self.ready()
+        self.mutate('grant',self.grant(grantRevision=2,stated=0))
+        with self.assertRaises(AdmissionRejected):self.mutate('grant',self.grant(itemCiphertextDigest='9'*64))
+        self.mutate('grant',self.grant(grantRevision=3))
+        with self.assertRaises(AdmissionRejected):self.permit()
+        with self.store._transaction(write=False) as db:
+            doc=self.source._load(db,OBJECT,self.now)[1]
+        self.assertEqual(doc['frozen'],['reader'])
+        self.assertEqual(doc['conflicts'][0]['claims']['grantRevision'],1)
+
+    def test_alternate_valid_signatures_are_not_conflicting_claims(self):
+        self.ready();before=self.source.read_view(OBJECT,self.now)['fence']
+        alternate=self.grant();alternate['proof']['signature']='alternate-valid-signature'
+        self.assertTrue(self.mutate('grant',alternate))
+        self.assertEqual(self.source.read_view(OBJECT,self.now)['fence'],before)
+        self.assertTrue(self.permit())
+        self.native[0].matches_grant.return_value=False
+        with self.assertRaises(AdmissionRejected):self.mutate('grant',alternate)
 
     def test_cancellation_capacity_is_reserved_when_live_grants_are_full(self):
         for revision in range(1,65): self.mutate('grant',self.grant(grantRevision=revision))
