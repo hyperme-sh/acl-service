@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-from epoch_verifier import EpochStatusVerifier
+from epoch_verifier import EpochStatusVerifier, EpochManifestVerifier
 
 
 def encode(value):
@@ -13,6 +13,7 @@ def encode(value):
 class NativeEpochTests(TestCase):
     def setUp(self):
         self.verifier = EpochStatusVerifier()
+        self.manifests = EpochManifestVerifier()
         self.rows = json.loads(Path('epoch-fixture.json').read_bytes())
 
     def matches(self, row, *, now=10000, skew=0, maximum=1000):
@@ -49,3 +50,23 @@ class NativeEpochTests(TestCase):
             changed = json.loads(json.dumps(row))
             changed[name]['zookie'] = list(changed[name]['zookie'].values())
             self.assertFalse(self.matches(changed))
+
+    def test_typescript_signed_manifests_bind_the_complete_snapshot(self):
+        for row in self.rows:
+            expected = encode(row['manifestExpected'])
+            document = row['manifest']
+            self.assertTrue(self.manifests.matches_manifest(encode(document), expected))
+            for path, value in [('signature','0'*128),('aclSnapshot','a'*64),('epoch',2)]:
+                changed = json.loads(json.dumps(document))
+                changed['manifest'][path] = value
+                self.assertFalse(self.manifests.matches_manifest(encode(changed), expected))
+            changed = json.loads(json.dumps(document))
+            changed['snapshot']['entries'][0]['stated'] = 1 - changed['snapshot']['entries'][0]['stated']
+            self.assertFalse(self.manifests.matches_manifest(encode(changed), expected))
+            changed = json.loads(json.dumps(document))
+            changed['snapshot']['entries'][0] = list(changed['snapshot']['entries'][0].values())
+            self.assertFalse(self.manifests.matches_manifest(encode(changed), expected))
+            duplicated = encode(document).replace(b'"epoch":1', b'"epoch":1,"epoch":1')
+            self.assertFalse(self.manifests.matches_manifest(duplicated, expected))
+            other = {**row['manifestExpected'], 'ownerPub': 'wrong'}
+            self.assertFalse(self.manifests.matches_manifest(encode(document), encode(other)))

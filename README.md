@@ -16,6 +16,13 @@ through this adapter. Missing libraries/symbols fail at construction, with no
 structural or permissive fallback. CI checks TypeScript-signed proofs against the
 native Rust implementation in an isolated container, plus package unit coverage.
 
+`EpochManifestVerifier.matches_manifest` also authenticates the existing signed
+manifest and its ACL snapshot through the Rust reference. It bounds each raw
+document to 64 KiB and preserves duplicate-field refusal. The expected owner key,
+object, epoch and revision must come from protected state. A valid old manifest
+can match: this is not current-history selection, settlement or Check. CI covers
+cross-language signatures, snapshot tampering and malformed representations.
+
 The image also carries an operator-only `DelegationSource` in its admission
 bundle. It provisions a new exclusive scope for one canonical HTTPS audience,
 using the same tenant-bound identity store and independent rollback checkpoint
