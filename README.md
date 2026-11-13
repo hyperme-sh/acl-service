@@ -24,9 +24,23 @@ unrelated enrolled identities. `POST /api/v1/acl/sociacl/media/owner/mutate` tak
 subject's configured binding. Owner signatures and current identity/policy checks
 remain mandatory inside the protected source. A stale evaluation or fence returns
 409: refresh and reconcile before signing a new mutation; no automatic retry.
-The routes do not provision objects, replace policy, create credentials, upload
-wrap bytes, or initialize storage. Opaque private bytes must already be stored
-before the `wrap` metadata can be used for delivery.
+`POST /api/v1/acl/sociacl/media/owner/publish-wrap` takes
+`{object, at, fence, metadata, wrapBase64}`. The canonical base64 encodes at most
+64 KiB of opaque encrypted wrap bytes. Metadata uses the existing `wrap` shape;
+its `record` and `digest` must both equal the bytes' SHA-256. The source checks
+the current owner and signed recipient grant, then durably reserves capacity
+before storage access. A short-lived write permit binds that reservation and
+all current authority. After storage creation, a second protected check commits
+the metadata; intervening authority changes refuse the commit.
+
+Each object retains at most 128 reservations, including failed or cancelled
+uploads. Reservations are never pruned or refunded, bounding retained uploads
+to 8 MiB per object and 512 MiB per tenant's 64 objects. Retry requires a fresh
+owner view: an identical reservation can reconcile a create conflict by reading
+and verifying the exact existing bytes. Different bytes are never overwritten.
+An already committed identical wrap does not advance the object version again.
+These routes do not provision objects, replace policy, create credentials, or
+initialize storage.
 
 `MediaSource` in the fixed admission bundle implements direct private-media
 authorization over the existing enrolled identity database and its independent
@@ -63,8 +77,9 @@ the configured Spanopticon tenant's `media` record namespace. Names are opaque
 recipient or object labels. Reads require an independently retained SHA-256
 revision and verify the returned bytes. Payloads are capped at 64 KiB. Requests
 use tenant-bound credentials, refuse redirects and compression, and have bounded
-deadlines and connection capacity. Creates use `If-None-Match: *`; conflicts and
-lost responses never cause an automatic retry or overwrite.
+deadlines and connection capacity. Creates use `If-None-Match: *`; lost responses never cause an automatic
+retry or overwrite. Publication reconciles an explicit create conflict only by
+reading and verifying identical bytes under the reserved digest.
 The async adapter applies a total two-second timeout across response headers,
 streamed bytes and response cleanup, including with an injected client. Each
 request explicitly disables redirects. Use and close the client on its event

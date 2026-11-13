@@ -86,3 +86,16 @@ class NativeMediaContracts(TestCase):
             with self.assertRaises(AdmissionRejected):
                 await self.source.owner_view(self.tenant,'unbound-owner',self.object)
         asyncio.run(run())
+
+    def test_native_publication_reservation_and_idempotent_commit(self):
+        payload=b'private fixture bytes';digest=hashlib.sha256(payload).hexdigest()
+        metadata={**self.f['wrap'],'record':digest,'digest':digest}
+        view=self.source.read_view(self.object,self.now)
+        permit=self.source.prepare_write(self.tenant,self.owner,self.object,self.now,view['fence'],metadata,digest,len(payload))
+        self.now+=1
+        self.assertTrue(self.source.commit_write(permit))
+        view=self.source.read_view(self.object,self.now)
+        version=view['objectVersion']
+        repeated=self.source.prepare_write(self.tenant,self.owner,self.object,self.now,view['fence'],metadata,digest,len(payload))
+        self.assertTrue(self.source.commit_write(repeated))
+        self.assertEqual(self.source.read_view(self.object,self.now)['objectVersion'],version)

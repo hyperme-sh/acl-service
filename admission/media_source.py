@@ -12,6 +12,7 @@ from statement_source import StatementSource, encoded
 from history_admission import HistoryAdmission, _record, _peer_inputs
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.private_wrap_delivery import WrapReadPermit
+from acl_service.domain.private_wrap_publication import WrapWritePermit
 from acl_service.infrastructure.authority_checkpoint import authority_digest
 from acl_service.infrastructure.epoch_verifier import (
     PrivateGrantVerifier, EpochStatusVerifier, EpochManifestVerifier,
@@ -203,19 +204,8 @@ class MediaSource:
                 if not self.native[4].verifies_history(encoded(self._history(object,doc,at,fin))):
                     raise AdmissionRejected('epoch history refused')
             elif operation=='wrap':
-                if len(encoded(payload))>4096: raise AdmissionRejected('private wrap capacity')
-                required={'reader','record','digest','epoch','revisionId','readerEpub','itemDigest'}
-                if set(payload)!=required or type(payload['reader']) is not str or payload['reader'] not in identities['bindings']:
-                    raise AdmissionRejected('invalid private wrap')
-                who=payload['reader']; grant=self._latest(doc).get(who)
-                if not grant or grant['claims']['stated']!=1 or payload['epoch']!=grant['claims']['epoch'] or payload['itemDigest']!=grant['claims']['itemCiphertextDigest'] or payload['readerEpub']!=identities['bindings'][who]['epub']:
-                    raise AdmissionRejected('private wrap binding mismatch')
-                import re
-                if any(type(payload[k]) is not str or re.fullmatch('[0-9a-f]{64}',payload[k]) is None for k in ('record','digest','revisionId','itemDigest')):
-                    raise AdmissionRejected('invalid private wrap digest')
-                if not any(r['document']['manifest']['revisionId']==payload['revisionId'] and r['document']['manifest']['epoch']==payload['epoch'] for r in doc['manifests']):
-                    raise AdmissionRejected('unknown wrap epoch')
-                doc['wraps'][who]=payload
+                self._checked_wrap(doc, identities, payload)
+                doc['wraps'][payload['reader']]=payload
             elif operation=='status':
                 who=payload.get('accessor')
                 grant=self._latest(doc).get(who) if type(who) is str else None
@@ -226,6 +216,92 @@ class MediaSource:
             if operation!='status': doc['objectVersion']+=1
             self._save(db,object,row,doc)
         if frozen: raise AdmissionRejected('private grant fork frozen')
+        return True
+
+    def _checked_wrap(self, doc, identities, payload):
+        if type(payload) is not dict or len(encoded(payload))>4096:
+            raise AdmissionRejected('private wrap capacity')
+        required={'reader','record','digest','epoch','revisionId','readerEpub','itemDigest'}
+        if (set(payload)!=required or type(payload['reader']) is not str
+                or payload['reader'] not in identities['bindings'] or type(payload['epoch']) is not int):
+            raise AdmissionRejected('invalid private wrap')
+        who=payload['reader']; grant=self._latest(doc).get(who)
+        if not grant or grant['claims']['stated']!=1 or payload['epoch']!=grant['claims']['epoch'] or payload['itemDigest']!=grant['claims']['itemCiphertextDigest'] or payload['readerEpub']!=identities['bindings'][who]['epub']:
+            raise AdmissionRejected('private wrap binding mismatch')
+        import re
+        if any(type(payload[k]) is not str or re.fullmatch('[0-9a-f]{64}',payload[k]) is None for k in ('record','digest','revisionId','itemDigest')):
+            raise AdmissionRejected('invalid private wrap digest')
+        if not any(r['document']['manifest']['revisionId']==payload['revisionId'] and r['document']['manifest']['epoch']==payload['epoch'] for r in doc['manifests']):
+            raise AdmissionRejected('unknown wrap epoch')
+        return grant
+
+    def _publication_grant(self, doc, identities, owner, metadata, at):
+        if owner != identities['owner']:
+            raise AdmissionRejected('media owner required')
+        grant = self._checked_wrap(doc, identities, metadata)
+        claims = grant['claims']
+        if metadata['reader'] in doc['frozen'] or not claims['from'] <= at*1000 < claims['until']:
+            raise AdmissionRejected('private grant inactive')
+        expected = {**claims, 'ownerPub': identities['bindings'][owner]['pub']}
+        if not self.native[0].matches_grant(encoded(grant['proof']), encoded(expected)):
+            raise AdmissionRejected('private grant owner changed')
+        return claims
+
+    def _write_fence(self, db, row, owner, object, digest, length, expires):
+        fields=['private-wrap-write-v1',self.tenant,owner,object,digest,length,expires,
+                row[0],hashlib.sha256(row[2]).hexdigest(),authority_digest(db).hex()]
+        return hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+
+    def prepare_write(self, tenant, owner, object, at, fence, metadata, digest, length, cancel=lambda:None):
+        self._guard(at,cancel)
+        if tenant != self.tenant or type(length) is not int or not 0 < length <= 65536:
+            raise AdmissionRejected('invalid private publication')
+        metadata=json.loads(encoded(metadata))
+        with self.store._transaction(write=True,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            if type(fence) is not str or not hmac.compare_digest(fence,self._fence(db,object,row,at)):
+                raise HistoryConflict('media authority changed')
+            identities=self.identities(db,object,doc,at)
+            claims=self._publication_grant(doc,identities,owner,metadata,at)
+            if metadata['record'] != digest or metadata['digest'] != digest:
+                raise AdmissionRejected('private record digest mismatch')
+            expires=min(at+3,doc['policyUntil'],claims['until']//1000)
+            if expires <= at: raise AdmissionRejected('private publication expired')
+            uploads=doc.setdefault('uploads',{})
+            reservation={'metadata':metadata,'length':length}
+            if digest in uploads:
+                if uploads[digest] != reservation: raise HistoryConflict('private reservation changed')
+            else:
+                if len(uploads) >= 128: raise AdmissionRejected('private publication capacity')
+                uploads[digest]=reservation
+                # Reservations survive all failures. They do not change signed
+                # objectVersion until bytes become the current reader wrap.
+                self._save(db,object,row,doc)
+                row,_=self._load(db,object,at)
+            held=self._write_fence(db,row,owner,object,digest,length,expires)
+            return WrapWritePermit(tenant,owner,object,digest,digest,length,held,expires)
+
+    def commit_write(self, permit, cancel=lambda:None):
+        at=int(self.clock());self._guard(at,cancel)
+        if (type(permit) is not WrapWritePermit or permit.tenant != self.tenant
+                or type(permit.expires_at) is not int or permit.expires_at <= at or type(permit.fence) is not str):
+            raise AdmissionRejected('invalid private publication permit')
+        with self.store._transaction(write=True,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,permit.object,at)
+            held=self._write_fence(db,row,permit.owner,permit.object,permit.digest,permit.length,permit.expires_at)
+            if not hmac.compare_digest(held,permit.fence):
+                raise HistoryConflict('private publication authority changed')
+            reservation=doc.get('uploads',{}).get(permit.record)
+            if not reservation or permit.record != permit.digest or reservation['length'] != permit.length:
+                raise AdmissionRejected('private reservation unavailable')
+            identities=self.identities(db,permit.object,doc,at)
+            metadata=reservation['metadata']
+            self._publication_grant(doc,identities,permit.owner,metadata,at)
+            if doc['wraps'].get(metadata['reader']) == metadata:
+                return True
+            doc['wraps'][metadata['reader']]=metadata
+            doc['objectVersion']+=1
+            self._save(db,permit.object,row,doc)
         return True
 
     def replace_policy(self, object, expected_revision, policy, policy_until, *, authorize):
@@ -340,3 +416,9 @@ class MediaSource:
 
     async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
         return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)
+
+    async def prepare_wrap_write(self, tenant, owner, object, at, fence, metadata, digest, length):
+        return await self._work(self.prepare_write,tenant,owner,object,at,fence,metadata,digest,length)
+
+    async def commit_wrap_write(self, permit):
+        return await self._work(self.commit_write,permit)
