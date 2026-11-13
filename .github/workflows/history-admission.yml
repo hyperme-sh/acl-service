@@ -26,3 +26,5 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/pip" install coverage==7.6.1
           PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=statement_source -m unittest test_statement_source
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
+      - name: Statement quota unit coverage
+        run: node --test --test-isolation=none --experimental-test-coverage admission/statement-quota.test.mjs

@@ -56,6 +56,18 @@ class GraphContracts(unittest.TestCase):
         forged = json.loads(json.dumps(self.rows['rows'][0])); forged['record']['sig'] = 'bad'
         with self.assertRaises(AdmissionRejected): self.source.append('test', at, held['fence'], [forged])
 
+    def test_retained_writer_quota_is_enforced_inside_source_transaction(self):
+        at = self.f['now']
+        for rows in (self.rows['quotaRows'][:64], self.rows['quotaRows'][64:128]):
+            held = self.source.read('test', at)
+            self.source.append('test', at, held['fence'], rows, statement_only=False)
+        held = self.source.read('test', at)
+        with self.assertRaises(AdmissionRejected):
+            self.source.append('test', at, held['fence'], self.rows['quotaRows'][128:])
+        self.assertEqual(self.source.read('test', at)['fence'], held['fence'])
+        self.source.append('test', at, held['fence'], self.rows['quotaRows'][:1])
+        self.assertEqual(self.source.read('test', at)['fence'], held['fence'])
+
     def test_full_identity_history_still_allows_graph_reads(self):
         f = self.f
         payload = {'principal': f['genesis'], 'now': f['now'],
