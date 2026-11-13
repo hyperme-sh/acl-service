@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+from acl_service.infrastructure.atomic import store_session
 
 from controlplane_db.models import SociaclRecoverySession
 from acl_service.domain.recovery_store import RecoverySession
@@ -28,7 +29,7 @@ def create_or_get_session(
 ) -> SociaclRecoverySession:
     now = datetime.now(timezone.utc)
     exp = now + timedelta(minutes=ttl_minutes)
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         # Serialize same-key creates across processes without coupling the API to
         # PostgreSQL. Hash collisions only serialize unrelated requests; the
@@ -65,7 +66,7 @@ def transition_state(
     session_id: uuid.UUID,
     new_state: str,
 ) -> SociaclRecoverySession | None:
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         row = session.scalars(select(SociaclRecoverySession).where(
             SociaclRecoverySession.id == session_id,

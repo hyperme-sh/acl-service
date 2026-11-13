@@ -11,6 +11,7 @@ from starlette.requests import Request
 from spanopticon_models.sociacl import SociACLEvaluateRequest, SociACLShareMode
 from acl_service.interfaces.api import sociacl_routes as routes
 from test_share_store import MemoryShareStore, create
+from memory_atomic import install
 
 MODE = next(m.value for m in SociACLShareMode if m.value not in ('notify_only', 'negotiate'))
 
@@ -19,8 +20,7 @@ def setup(monkeypatch):
     store = MemoryShareStore()
     tenant = uuid4()
     row, token = create(store, tenant, mode=MODE)
-    publisher = SimpleNamespace(publish=AsyncMock())
-    monkeypatch.setattr(routes, 'get_tenant_event_publisher', lambda: publisher)
+    publisher, _ = install(store)
     request = Request({'type': 'http', 'headers': [], 'app': SimpleNamespace(
         state=SimpleNamespace(share_store=store, membership_reader=None))})
     return store, row, token, publisher, request
@@ -37,7 +37,7 @@ async def test_concurrent_evaluation_only_publishes_one_allow(monkeypatch, mode,
     body = SociACLEvaluateRequest(token=token, context={})
     results = await asyncio.gather(*(routes.sociacl_evaluate(body, request, None) for _ in range(2)))
     assert sorted(r.decision.value for r in results) == sorted([accepted, 'deny'])
-    decisions = [c.kwargs['payload']['decision'] for c in publisher.publish.await_args_list]
+    decisions = [event['payload']['decision'] for event in publisher.values()]
     assert sorted(decisions) == sorted([accepted, 'deny'])
 
 
@@ -57,11 +57,11 @@ async def test_changed_share_cannot_publish_approval(monkeypatch, mutation):
     if mutation == 'failure':
         with pytest.raises(RuntimeError, match='storage unavailable'):
             await routes.sociacl_evaluate(SociACLEvaluateRequest(token=token, context={}), request, None)
-        publisher.publish.assert_not_awaited()
+        assert not publisher
     else:
         decision = await routes.sociacl_evaluate(SociACLEvaluateRequest(token=token, context={}), request, None)
         assert decision.decision.value == 'deny'
-        assert publisher.publish.await_args.kwargs['payload']['decision'] == 'deny'
+        assert next(iter(publisher.values()))['payload']['decision'] == 'deny'
 
 
 @pytest.mark.asyncio

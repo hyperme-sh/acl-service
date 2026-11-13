@@ -3,9 +3,9 @@
 Run with scripts/check-image.sh. No source checkout supplies acl_service imports.
 PostgreSQL/RLS and live identity acceptance are deliberately not claimed here.
 """
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 import unittest
 import uuid
 
@@ -35,6 +35,11 @@ class ImageHTTPTests(unittest.TestCase):
         self.app.state.share_store = object()
         self.app.state.membership_reader = object()
         self.app.state.policy_store = object()
+        self.emitted = Mock()
+        @contextmanager
+        def operation(store):yield SimpleNamespace(store=store,emit=self.emitted,lock=lambda key:None)
+        for module in (routes,sociacl_routes):
+            self.patches.enter_context(patch.object(module,'atomic_store',operation))
         self.user = AuthMeResponse(sub="verified-user", tenant_id=self.tenant)
         self.app.dependency_overrides[deps.get_current_user] = lambda: self.user
         self.app.dependency_overrides[deps.get_current_tenant_from_token] = lambda: self.tenant
@@ -69,9 +74,10 @@ class ImageHTTPTests(unittest.TestCase):
         self.patches.enter_context(patch.object(enforcer_factory, "enforce_rbac", return_value=True))
         row = SimpleNamespace(id=1, ptype="p", v0="user:verified-user", v1="resource",
                               v2="read", v3=None, v4=None, v5=None)
+        self.patches.enter_context(patch.object(routes, "list_rules", return_value=[row]))
         add = self.patches.enter_context(patch.object(routes, "add_rule", return_value=row))
         remove = self.patches.enter_context(patch.object(routes, "delete_rule", return_value=True))
-        self.patches.enter_context(patch.object(routes, "_emit_policy_updated", AsyncMock()))
+        self.patches.enter_context(patch.object(routes, "_emit_policy_updated", Mock()))
         for method, expected in (("POST", 201), ("DELETE", 204)):
             response = self.client.request(method, "/api/v1/acl/policies", headers=self.headers,
                 json={"ptype": "p", "rule": ["user:verified-user", "resource", "read"]})
@@ -95,8 +101,7 @@ class ImageHTTPTests(unittest.TestCase):
         link = SimpleNamespace(id=uuid.uuid4(), tenant_id=self.tenant, revoked_at=None,
             expires_at=None, uses_remaining=None, predicate_json=predicate, mode=RELEASE_MODE)
         self.patches.enter_context(patch.object(sociacl_routes, "lookup_share_by_token_hash", return_value=link))
-        publisher = SimpleNamespace(publish=AsyncMock())
-        self.patches.enter_context(patch.object(sociacl_routes, "get_tenant_event_publisher", return_value=publisher))
+        publisher = SimpleNamespace(publish=self.emitted)
         decrement = self.patches.enter_context(patch.object(sociacl_routes, "decrement_uses"))
         return publisher, decrement
 
@@ -129,8 +134,7 @@ class ImageHTTPTests(unittest.TestCase):
                 link = SimpleNamespace(id=uuid.uuid4(), tenant_id=self.tenant, revoked_at=None,
                     expires_at=None, uses_remaining=None, predicate_json=predicate, mode=RELEASE_MODE)
                 patches.enter_context(patch.object(sociacl_routes, "lookup_share_by_token_hash", return_value=link))
-                patches.enter_context(patch.object(sociacl_routes, "get_tenant_event_publisher",
-                    return_value=SimpleNamespace(publish=AsyncMock())))
+
                 decrement = patches.enter_context(patch.object(sociacl_routes, "decrement_uses"))
                 result = self.evaluate({"sub": "spoofed", "verification_level": 4, "vouch_count": 100})
                 self.assertEqual(result["decision"], "deny")

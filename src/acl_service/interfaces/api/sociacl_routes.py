@@ -14,7 +14,7 @@ from controlplane_api.event_types import (
     SOCIACL_SHARE_CREATED_V1,
     SOCIACL_SHARE_RESOLVED_V1,
 )
-from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
+from acl_service.infrastructure.atomic import atomic_store
 from auth_service.schemas import AuthMeResponse
 from controlplane_events.payloads import (
     SociaclAccessDecidedPayload,
@@ -138,38 +138,15 @@ async def sociacl_create_share(
     me: AuthMeResponse = Depends(get_current_user),
 ):
     store = request.app.state.share_store
-    exp = _parse_expires_iso(body.expires_at)
-    row, raw_token = await asyncio.to_thread(
-        create_share, store,
-        tenant_id=tenant_id,
-        resource_kind=body.resource_kind.value,
-        resource_descriptor=body.resource_descriptor,
-        predicate_json=body.predicate.model_dump(mode="json"),
-        mode=body.mode.value,
-        expires_at=exp,
-        uses_remaining=body.max_uses,
-        owner_user_id=body.owner_user_id,
-        group_id=body.group_id,
-        created_by=str(me.sub),
-    )
-    pub = _public_payload(row)
-    await get_tenant_event_publisher().publish(
-        tenant_id=tenant_id,
-        event_type=SOCIACL_SHARE_CREATED_V1,
-        payload=SociaclShareCreatedPayload(
-            tenant_id=tenant_id,
-            share_id=row.id,
-            mode=body.mode.value,
-            resource_kind=body.resource_kind.value,
-            token_prefix=row.token_prefix,
-            actor_sub=str(me.sub),
-        ).to_envelope_payload(),
-    )
-    return SociaclShareCreatedResponse(
-        share_id=row.id,
-        token=raw_token,
-        public=pub,
-    )
+    def _run():
+        with atomic_store(store) as tx:
+            store_bound = tx.store
+            exp = _parse_expires_iso(body.expires_at)
+            row, raw_token = create_share(store_bound, tenant_id=tenant_id, resource_kind=body.resource_kind.value, resource_descriptor=body.resource_descriptor, predicate_json=body.predicate.model_dump(mode='json'), mode=body.mode.value, expires_at=exp, uses_remaining=body.max_uses, owner_user_id=body.owner_user_id, group_id=body.group_id, created_by=str(me.sub))
+            pub = _public_payload(row)
+            tx.emit(tenant_id=tenant_id, event_type=SOCIACL_SHARE_CREATED_V1, payload=SociaclShareCreatedPayload(tenant_id=tenant_id, share_id=row.id, mode=body.mode.value, resource_kind=body.resource_kind.value, token_prefix=row.token_prefix, actor_sub=str(me.sub)).to_envelope_payload(), operation_id=str(row.id))
+            return SociaclShareCreatedResponse(share_id=row.id, token=raw_token, public=pub)
+    return await asyncio.to_thread(_run)
 
 
 @router.get(
@@ -207,22 +184,17 @@ async def sociacl_resolve_share(token: str, request: Request):
     if len(token) < 8:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid token")
     store = request.app.state.share_store
-    th = hash_share_token(token)
-    link = await asyncio.to_thread(lookup_share_by_token_hash, store, th)
-    if link is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
-    pub = _public_payload(link)
-    await get_tenant_event_publisher().publish(
-        tenant_id=link.tenant_id,
-        event_type=SOCIACL_SHARE_RESOLVED_V1,
-        payload=SociaclShareResolvedPayload(
-            tenant_id=link.tenant_id,
-            share_id=link.id,
-            active=pub.active,
-            actor_sub=None,
-        ).to_envelope_payload(),
-    )
-    return pub
+    def _run():
+        with atomic_store(store) as tx:
+            store_bound = tx.store
+            th = hash_share_token(token)
+            link = lookup_share_by_token_hash(store_bound, th)
+            if link is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Share not found')
+            pub = _public_payload(link)
+            tx.emit(tenant_id=link.tenant_id, event_type=SOCIACL_SHARE_RESOLVED_V1, payload=SociaclShareResolvedPayload(tenant_id=link.tenant_id, share_id=link.id, active=pub.active, actor_sub=None).to_envelope_payload(), operation_id=str(uuid.uuid4()))
+            return pub
+    return await asyncio.to_thread(_run)
 
 
 @router.post("/evaluate", response_model=SociACLDecision)
@@ -234,35 +206,21 @@ async def sociacl_evaluate(
     if not _public_rl.allow(f"eval:{ip}"):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limited")
     store = request.app.state.share_store
-    th = hash_share_token(body.token)
-    link = await asyncio.to_thread(lookup_share_by_token_hash, store, th)
-    if link is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Share not found")
-    decision = await asyncio.to_thread(
-        evaluate_share_access,
-        request.app.state.membership_reader,
-        link.tenant_id,
-        link,
-        body.context,
-        authenticated_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None,
-    )
-    if decision.decision in (SociACLDecisionKind.allow, SociACLDecisionKind.notify_owner):
-        reserved = await asyncio.to_thread(decrement_uses, store, link.tenant_id, link.id)
-        if not reserved:
-            decision = SociACLDecision(decision=SociACLDecisionKind.deny,
-                reason_code="share_unavailable", matched_predicates=[])
-    await get_tenant_event_publisher().publish(
-        tenant_id=link.tenant_id,
-        event_type=SOCIACL_ACCESS_DECIDED_V1,
-        payload=SociaclAccessDecidedPayload(
-            tenant_id=link.tenant_id,
-            share_id=link.id,
-            decision=decision.decision.value,
-            reason_code=decision.reason_code,
-            actor_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None,
-        ).to_envelope_payload(),
-    )
-    return decision
+    def _run():
+        with atomic_store(store) as tx:
+            store_bound = tx.store
+            th = hash_share_token(body.token)
+            link = lookup_share_by_token_hash(store_bound, th)
+            if link is None:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Share not found')
+            decision = evaluate_share_access(request.app.state.membership_reader, link.tenant_id, link, body.context, authenticated_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None)
+            if decision.decision in (SociACLDecisionKind.allow, SociACLDecisionKind.notify_owner):
+                reserved = decrement_uses(store_bound, link.tenant_id, link.id)
+                if not reserved:
+                    decision = SociACLDecision(decision=SociACLDecisionKind.deny, reason_code='share_unavailable', matched_predicates=[])
+            tx.emit(tenant_id=link.tenant_id, event_type=SOCIACL_ACCESS_DECIDED_V1, payload=SociaclAccessDecidedPayload(tenant_id=link.tenant_id, share_id=link.id, decision=decision.decision.value, reason_code=decision.reason_code, actor_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None).to_envelope_payload(), operation_id=str(uuid.uuid4()))
+            return decision
+    return await asyncio.to_thread(_run)
 
 
 @router.post(
@@ -278,27 +236,13 @@ async def sociacl_recovery_create(
     me: AuthMeResponse = Depends(get_current_user),
 ):
     store: RecoveryStore = request.app.state.recovery_store
-    row = await asyncio.to_thread(
-        store.create_or_get_session,
-        tenant_id,
-        idempotency_key=body.idempotency_key,
-        metadata=body.metadata,
-    )
-    await get_tenant_event_publisher().publish(
-        tenant_id=tenant_id,
-        event_type=SOCIACL_RECOVERY_SESSION_STARTED_V1,
-        payload=SociaclRecoverySessionPayload(
-            tenant_id=tenant_id,
-            session_id=row.id,
-            state=row.state,  # type: ignore[arg-type]
-            idempotency_key=row.idempotency_key,
-        ).to_envelope_payload(),
-    )
-    return RecoverySessionResponse(
-        session_id=row.id,
-        state=row.state,
-        expires_at=row.expires_at.isoformat(),
-    )
+    def _run():
+        with atomic_store(store) as tx:
+            store_bound = tx.store
+            row = store_bound.create_or_get_session(tenant_id, idempotency_key=body.idempotency_key, metadata=body.metadata)
+            tx.emit(tenant_id=tenant_id, event_type=SOCIACL_RECOVERY_SESSION_STARTED_V1, payload=SociaclRecoverySessionPayload(tenant_id=tenant_id, session_id=row.id, state='pending', idempotency_key=row.idempotency_key).to_envelope_payload(), operation_id=str(row.id))
+            return RecoverySessionResponse(session_id=row.id, state=row.state, expires_at=row.expires_at.isoformat())
+    return await asyncio.to_thread(_run)
 
 
 @router.post(

@@ -25,6 +25,8 @@ class AclServiceDbMiddleware(BaseHTTPMiddleware):
         # session. Keep the exception exact: all existing tenant routes are unchanged.
         if (request.method == "GET" and request.url.path == PUBLIC_POLICY_PATH) or is_contact_lane_path(request.url.path, request.method):
             return await call_next(request)
+        if request.method == 'POST' and request.url.path == '/internal/events':
+            return await call_next(request)
         maker = get_session_maker()
         async with maker() as session:
             token = set_db_session(session)
@@ -46,7 +48,10 @@ class AclServiceDbMiddleware(BaseHTTPMiddleware):
                 else:
                     request.state.tenant_id = None
                 response = await call_next(request)
-                await session.commit()
+                if response.status_code >= 400:
+                    await session.rollback()
+                else:
+                    await session.commit()
                 return response
             except Exception:
                 await session.rollback()

@@ -7,7 +7,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from controlplane_api.event_types import ACL_POLICY_UPDATED_V1
-from api.infrastructure.messaging.tenant_event_publisher import get_tenant_event_publisher
+from acl_service.infrastructure.atomic import atomic_store
 from auth_service.schemas import AuthMeResponse
 from controlplane_events.payloads import AclPolicyUpdatedPayload
 
@@ -25,24 +25,11 @@ from acl_service.domain.policy_store import add_rule, delete_rule, list_rules
 router = APIRouter(tags=["ACL"])
 
 
-async def _emit_policy_updated(
-    tenant_id: uuid.UUID,
-    operation: Literal["added", "removed", "replaced"],
-    ptype: str,
-    me: AuthMeResponse,
-    preview: str | None,
-) -> None:
-    await get_tenant_event_publisher().publish(
-        tenant_id=tenant_id,
-        event_type=ACL_POLICY_UPDATED_V1,
-        payload=AclPolicyUpdatedPayload(
-            tenant_id=tenant_id,
-            operation=operation,  # type: ignore[arg-type]
-            ptype=ptype,
-            actor_sub=str(me.sub),
-            rule_preview=preview,
-        ).to_envelope_payload(),
-    )
+def _emit_policy_updated(tx, tenant_id, operation, ptype, me, preview, row_id):
+    tx.emit(tenant_id=tenant_id,event_type=ACL_POLICY_UPDATED_V1,
+        operation_id=f'{row_id}:{operation}:{me.sub}',
+        payload=AclPolicyUpdatedPayload(tenant_id=tenant_id,operation=operation,
+            ptype=ptype,actor_sub=str(me.sub),rule_preview=preview).to_envelope_payload())
 
 
 @router.get(
@@ -90,23 +77,14 @@ async def create_policy(
     _management: None = Depends(require_permission("/acl/policies", "manage")),
 ):
     eng = request.app.state.policy_store
-
     def _run():
-        return add_rule(eng, tenant_id, body.ptype, body.rule)
-
-    row = await asyncio.to_thread(_run)
-    preview = ",".join([body.ptype, *body.rule])[:512]
-    await _emit_policy_updated(tenant_id, "added", body.ptype, me, preview)
-    return PolicyRowResponse(
-        id=row.id,
-        ptype=row.ptype,
-        v0=row.v0,
-        v1=row.v1,
-        v2=row.v2,
-        v3=row.v3,
-        v4=row.v4,
-        v5=row.v5,
-    )
+        with atomic_store(eng) as tx:
+            tx.lock(f'policy:{tenant_id}:{body.ptype}:{body.rule}')
+            row = add_rule(tx.store,tenant_id,body.ptype,body.rule)
+            preview = ','.join([body.ptype,*body.rule])[:512]
+            _emit_policy_updated(tx,tenant_id,'added',body.ptype,me,preview,row.id)
+            return PolicyRowResponse(id=row.id,ptype=row.ptype,**{f'v{i}':getattr(row,f'v{i}') for i in range(6)})
+    return await asyncio.to_thread(_run)
 
 
 @router.delete(
@@ -122,18 +100,16 @@ async def remove_policy(
     _management: None = Depends(require_permission("/acl/policies", "manage")),
 ):
     eng = request.app.state.policy_store
-
     def _run():
-        return delete_rule(eng, tenant_id, body.ptype, body.rule)
-
-    ok = await asyncio.to_thread(_run)
-    if not ok:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Policy rule not found")
-    preview = ",".join([body.ptype, *body.rule])[:512]
-    await _emit_policy_updated(tenant_id, "removed", body.ptype, me, preview)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+        with atomic_store(eng) as tx:
+            tx.lock(f'policy:{tenant_id}:{body.ptype}:{body.rule}')
+            candidates=[r for r in list_rules(tx.store,tenant_id) if r.ptype==body.ptype and [getattr(r,f'v{i}') for i in range(6)]==body.rule+[None]*(6-len(body.rule))]
+            if not candidates or not delete_rule(tx.store,tenant_id,body.ptype,body.rule):
+                raise HTTPException(status_code=404,detail='Policy rule not found')
+            preview=','.join([body.ptype,*body.rule])[:512]
+            _emit_policy_updated(tx,tenant_id,'removed',body.ptype,me,preview,min(r.id for r in candidates))
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return await asyncio.to_thread(_run)
 
 
 @router.post(

@@ -2,7 +2,7 @@
 
 Successful mutations are committed and visible to subsequent reads. Implementations
 must isolate tenants, make identical inserts idempotent, delete exact rules, and
-propagate storage failures. Event publication is a separate, retryable operation.
+propagate storage failures. Route operations bind storage and outgoing events to one owner transaction.
 """
 from dataclasses import dataclass
 from typing import Protocol

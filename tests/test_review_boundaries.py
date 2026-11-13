@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 import uuid
 import casbin
 import pytest
@@ -83,7 +83,7 @@ def test_refresh_restores_transaction_local_tenant_after_commit(monkeypatch, mod
             assert self.tenant == str(tid), 'RLS context lost after commit'
             self.refreshed = True
     session = Session()
-    monkeypatch.setattr(module, 'Session', lambda eng:session)
+    monkeypatch.setattr(module, 'store_session', lambda eng:session)
     if module is policy_repo:
         monkeypatch.setattr(module, '_find_rule', lambda *args:None)
         module.add_rule(None,tid,'p',['alice','resource','read'])
@@ -107,8 +107,10 @@ async def test_share_route_never_uses_payload_identity(monkeypatch, identity):
         seen.append(kwargs['authenticated_sub'])
         return SociACLDecision(decision='deny',reason_code='test',matched_predicates=[])
     monkeypatch.setattr(routes, 'evaluate_share_access', evaluate)
-    publish = AsyncMock()
-    monkeypatch.setattr(routes, 'get_tenant_event_publisher', lambda:SimpleNamespace(publish=publish))
+    publish = Mock()
+    @contextmanager
+    def operation(store):yield SimpleNamespace(store=store,emit=publish)
+    monkeypatch.setattr(routes,'atomic_store',operation)
     me = None if identity == 'anonymous' else AuthMeResponse(
         sub='verified', tenant_id=tid if identity == 'matched' else uuid.uuid4())
     request = Request({'type':'http','headers':[],
@@ -117,7 +119,7 @@ async def test_share_route_never_uses_payload_identity(monkeypatch, identity):
         context=SociACLRequestContext(sub='spoofed')), request, me)
     expected = 'verified' if identity == 'matched' else None
     assert seen == [expected]
-    assert publish.await_args.kwargs['payload']['actor_sub'] == expected
+    assert publish.call_args.kwargs['payload']['actor_sub'] == expected
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('method', ['POST', 'DELETE'])
@@ -147,7 +149,11 @@ async def test_policy_mutations_require_preexisting_management_grant(monkeypatch
     remove = Mock(return_value=True)
     monkeypatch.setattr(routes, 'add_rule', add)
     monkeypatch.setattr(routes, 'delete_rule', remove)
-    monkeypatch.setattr(routes, '_emit_policy_updated', AsyncMock())
+    monkeypatch.setattr(routes, '_emit_policy_updated', Mock())
+    monkeypatch.setattr(routes,'list_rules',lambda *args:[row])
+    @contextmanager
+    def operation(store):yield SimpleNamespace(store=store,lock=lambda key:None)
+    monkeypatch.setattr(routes,'atomic_store',operation)
     # Match the application's domain exception handler.
     from controlplane_api.exceptions import ForbiddenException
     from fastapi.responses import JSONResponse
@@ -180,7 +186,7 @@ def test_recovery_refresh_restores_tenant_context(monkeypatch, operation):
             assert self.tenant == str(tid)
             self.refreshed = True
     session = Session()
-    monkeypatch.setattr(recovery_repo, 'Session', lambda engine:session)
+    monkeypatch.setattr(recovery_repo, 'store_session', lambda engine:session)
     if operation == 'create':
         recovery_repo.create_or_get_session(None,tid,idempotency_key='test',metadata={})
     else:
