@@ -15,6 +15,16 @@ record and digest privately, and revalidate its authorization fence after fetch
 before returning any material. Nothing initializes the adapter or publishes a
 route by default. Use the s3r.ch Spanopticon tenant, not direct Blob credentials.
 
+`deliver_private_wrap` enforces that ordering: it obtains an immutable permit from
+the mandatory owner authority, fetches the exact digest, then asks that authority
+to atomically revalidate and commit the same fence before returning bytes. The
+permit binds tenant, reader, object, epoch/revision, recipient key and private
+record. Expiry, cancellation, changed authority, wrong tenant or corrupt bytes
+refuse. The owner authority must cover all relevant history and policy changes
+and commit rollback floors in its transaction; this module installs no permissive
+authority and enables no endpoint. Its isolated units test the fetch/commit order
+and refusal boundaries. Protected-source and HTTP route wiring remain under #81.
+
 The image carries the shared SociACL Rust epoch-status verifier, built from the
 exact source revision in `admission/sociacl-native.rev`. The packaged
 `EpochStatusVerifier` loads only `/opt/acl-admission/libsociacl.so` and checks

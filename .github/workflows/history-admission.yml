@@ -55,6 +55,10 @@ jobs:
         run: |
           "$RUNNER_TEMP/statement-coverage/bin/pip" install httpx==0.28.1
           PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m unittest discover -s admission -p test_private_wrap_http.py
+      - name: Private wrap delivery fence coverage
+        run: |
+          PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=acl_service.domain.private_wrap_delivery -m unittest discover -s tests -p test_private_wrap_delivery.py
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=95 -m
       - name: Rust epoch verifier cross-language contract (CI only)
         run: |
           set -euo pipefail
