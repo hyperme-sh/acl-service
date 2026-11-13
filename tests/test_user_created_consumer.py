@@ -1,172 +1,50 @@
-"""Tests for user.created consumer (handler logic)."""
-
-from __future__ import annotations
-
+"""Offline atomic inbox/handler contracts; real SQL combinations run nightly."""
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
-
-from api.common.event_types import ACL_POLICY_UPDATED_V1, USER_CREATED_V1
 from controlplane_events.envelope import ControlPlaneEventEnvelope
-from controlplane_events.payloads import PaymentSucceededPayload
 from controlplane_events.payloads.user_created import UserCreatedEvent
-
 from acl_service.infrastructure.user_created_consumer import build_user_created_consumer
+from test_policy_store import MemoryPolicyStore
+from memory_atomic import install
+
+
+def fact(tenant=None):
+    tenant=tenant or uuid.uuid4()
+    return ControlPlaneEventEnvelope(event_type='user.created.v1',service='user-service',tenant_id=tenant,
+        payload=UserCreatedEvent(user_id=uuid.uuid4(),email='unit@example.com',tenant_id=str(tenant)).to_envelope_payload())
 
 
 @pytest.mark.asyncio
-async def test_user_created_adds_policy_and_emits():
-    tid = uuid.uuid4()
-    uid = uuid.uuid4()
-    sync_eng = MagicMock()
-    mock_publish = AsyncMock()
-
-    consumer = build_user_created_consumer(
-        sync_eng,
-        "postgresql://localhost/controlplane",
-    )
-
-    with patch(
-        "acl_service.infrastructure.user_created_consumer.add_rule_if_absent",
-        return_value=True,
-    ) as add_rule, patch(
-        "acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher",
-        return_value=MagicMock(publish=mock_publish),
-    ):
-        env = ControlPlaneEventEnvelope(
-            event_type=USER_CREATED_V1,
-            service="user-service",
-            tenant_id=tid,
-            payload=UserCreatedEvent(
-                user_id=uid,
-                email="u@example.com",
-                tenant_id=str(tid),
-            ).to_envelope_payload(),
-        )
-        await consumer.handle_message(
-            key=None,
-            value=env.model_dump_json().encode("utf-8"),
-            headers={},
-        )
-
-    add_rule.assert_called_once_with(
-        sync_eng,
-        tid,
-        "p",
-        [str(uid), "user_profile", "read"],
-    )
-    mock_publish.assert_awaited_once()
-    call = mock_publish.await_args
-    assert call.kwargs["tenant_id"] == tid
-    assert call.kwargs["event_type"] == ACL_POLICY_UPDATED_V1
+async def test_message_retry_commits_once():
+    store=MemoryPolicyStore();events,inbox=install(store);consumer=build_user_created_consumer(store)
+    event_id=uuid.uuid4();envelope=fact()
+    assert await consumer.receive(event_id,envelope)
+    assert not await consumer.receive(event_id,envelope)
+    assert len(store.rows)==len(events)==len(inbox)==1
 
 
 @pytest.mark.asyncio
-async def test_user_created_skips_without_tenant_envelope():
-    sync_eng = MagicMock()
-    mock_publish = AsyncMock()
-    consumer = build_user_created_consumer(sync_eng, "postgresql://localhost/controlplane")
-
-    with patch(
-        "acl_service.infrastructure.user_created_consumer.add_rule_if_absent",
-        return_value=True,
-    ) as add_rule, patch(
-        "acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher",
-        return_value=MagicMock(publish=mock_publish),
-    ):
-        uid = uuid.uuid4()
-        env = ControlPlaneEventEnvelope(
-            event_type=USER_CREATED_V1,
-            service="user-service",
-            tenant_id=None,
-            payload=UserCreatedEvent(
-                user_id=uid,
-                email="u@example.com",
-                tenant_id=None,
-            ).to_envelope_payload(),
-        )
-        await consumer.handle_message(
-            key=None,
-            value=env.model_dump_json().encode("utf-8"),
-            headers={},
-        )
-
-    add_rule.assert_not_called()
-    mock_publish.assert_not_awaited()
+async def test_outbox_failure_rolls_back_inbox_and_policy():
+    store=MemoryPolicyStore();events,inbox=install(store,fail=True)
+    with pytest.raises(RuntimeError,match='outbox refused'):
+        await build_user_created_consumer(store).receive(uuid.uuid4(),fact())
+    assert not store.rows and not events and not inbox
 
 
 @pytest.mark.asyncio
-async def test_routing_ignores_other_event_types():
-    sync_eng = MagicMock()
-    consumer = build_user_created_consumer(sync_eng, "postgresql://localhost/controlplane")
-
-    with patch("acl_service.infrastructure.user_created_consumer.add_rule_if_absent") as add_rule:
-        tid = uuid.uuid4()
-        env = ControlPlaneEventEnvelope(
-            event_type="payment.succeeded.v1",
-            service="payment-service",
-            tenant_id=tid,
-            payload=PaymentSucceededPayload(
-                tenant_id=tid,
-                billing_record_id=uuid.uuid4(),
-            ).to_envelope_payload(),
-        )
-        await consumer.handle_message(
-            key=None,
-            value=env.model_dump_json().encode("utf-8"),
-            headers={},
-        )
-
-    add_rule.assert_not_called()
+async def test_reused_delivery_id_cannot_change_facts():
+    store=MemoryPolicyStore();events,inbox=install(store);consumer=build_user_created_consumer(store)
+    event_id=uuid.uuid4();envelope=fact()
+    await consumer.receive(event_id,envelope)
+    with pytest.raises(ValueError,match='reused'):
+        await consumer.receive(event_id,fact(envelope.tenant_id))
+    assert len(store.rows)==len(events)==len(inbox)==1
 
 
 @pytest.mark.asyncio
-async def test_user_created_existing_rule_still_emits():
-    tid = uuid.uuid4()
-    uid = uuid.uuid4()
-    sync_eng = MagicMock()
-    mock_publish = AsyncMock()
-    consumer = build_user_created_consumer(sync_eng, "postgresql://localhost/controlplane")
-
-    with patch(
-        "acl_service.infrastructure.user_created_consumer.add_rule_if_absent",
-        return_value=False,
-    ), patch(
-        "acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher",
-        return_value=MagicMock(publish=mock_publish),
-    ):
-        env = ControlPlaneEventEnvelope(
-            event_type=USER_CREATED_V1,
-            service="user-service",
-            tenant_id=tid,
-            payload=UserCreatedEvent(
-                user_id=uid,
-                email="u@example.com",
-                tenant_id=str(tid),
-            ).to_envelope_payload(),
-        )
-        await consumer.handle_message(
-            key=None,
-            value=env.model_dump_json().encode("utf-8"),
-            headers={},
-        )
-
-    mock_publish.assert_awaited_once()
-    assert mock_publish.await_args.kwargs["event_type"] == ACL_POLICY_UPDATED_V1
-
-
-@pytest.mark.asyncio
-async def test_storage_failure_does_not_publish_success():
-    tid, uid = uuid.uuid4(), uuid.uuid4()
-    store = MagicMock()
-    store.add_rule_if_absent.side_effect = RuntimeError('storage unavailable')
-    publisher = MagicMock(publish=AsyncMock())
-    consumer = build_user_created_consumer(store, 'postgresql://localhost/controlplane')
-    env = ControlPlaneEventEnvelope(event_type=USER_CREATED_V1, service='user-service',
-        tenant_id=tid, payload=UserCreatedEvent(user_id=uid, email='u@example.com',
-        tenant_id=str(tid)).to_envelope_payload())
-    with patch('acl_service.infrastructure.user_created_consumer.get_tenant_event_publisher', return_value=publisher):
-        with pytest.raises(RuntimeError, match='storage unavailable'):
-            await consumer.handle_message(key=None, value=env.model_dump_json().encode(), headers={})
-    publisher.publish.assert_not_awaited()
+@pytest.mark.parametrize('field,value',[('tenant_id',None),('service','payment-service'),('event_type','payment.succeeded.v1')])
+async def test_wrong_owner_or_scope_is_refused(field,value):
+    store=MemoryPolicyStore();events,inbox=install(store)
+    envelope=fact().model_copy(update={field:value})
+    with pytest.raises(ValueError):await build_user_created_consumer(store).receive(uuid.uuid4(),envelope)
+    assert not store.rows and not events and not inbox

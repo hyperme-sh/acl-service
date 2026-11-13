@@ -15,11 +15,6 @@ from controlplane_api.exceptions import ForbiddenException, UnauthorizedExceptio
 from controlplane_api.logging import configure_logging
 from controlplane_api.utils import get_logger
 from controlplane_api.config import settings
-from api.infrastructure.messaging.tenant_event_publisher import (
-    install_tenant_event_publisher,
-    set_tenant_event_publisher,
-    shutdown_tenant_event_publisher,
-)
 from api.infrastructure.persistence.db_session import configure_session_maker
 from controlplane_api.service_cors import add_optional_service_cors
 from controlplane_api.health import router as health_router
@@ -84,38 +79,17 @@ def create_app(
         )
 
         if test_event_sink is not None:
-
-            class _ListSink:
-                async def publish(
-                    self,
-                    *,
-                    tenant_id,
-                    event_type: str,
-                    payload: dict,
-                    correlation_id: str | None = None,
-                ) -> None:
-                    test_event_sink.append(
-                        {
-                            "tenant_id": tenant_id,
-                            "event_type": event_type,
-                            "payload": payload,
-                            "correlation_id": correlation_id,
-                        }
-                    )
-
-            set_tenant_event_publisher(_ListSink())
-        else:
-            await install_tenant_event_publisher(service_name=svc_name)
-            user_consumer = build_user_created_consumer(app.state.policy_store, settings.database_url)
-            await user_consumer.start()
-            app.state.event_consumer = user_consumer
+            for store in (app.state.policy_store,app.state.share_store,app.state.recovery_store):
+                store.event_sink=test_event_sink
+        user_consumer=build_user_created_consumer(app.state.policy_store)
+        await user_consumer.start()
+        app.state.event_consumer=user_consumer
 
         yield
 
         event_consumer = getattr(app.state, "event_consumer", None)
         if event_consumer is not None:
             await event_consumer.stop()
-        await shutdown_tenant_event_publisher()
         sync_eng.dispose()
         await engine.dispose()
 
@@ -175,6 +149,8 @@ def create_app(
     app.add_middleware(AclServiceDbMiddleware)
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(version_router)
+    from acl_service.interfaces.api.events import router as events_router
+    app.include_router(events_router)
     app.include_router(acl_router, prefix="/api/v1")
     from acl_service.startup_routes import router as startup_router
     app.include_router(startup_router, prefix="/api/v1")

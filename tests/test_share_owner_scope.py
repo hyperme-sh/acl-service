@@ -10,6 +10,7 @@ from acl_service import deps
 from acl_service.interfaces.api import sociacl_routes as routes
 from test_policy_store import MemoryPolicyStore
 from test_share_store import MemoryShareStore, create
+from memory_atomic import install
 
 
 @pytest.mark.asyncio
@@ -22,7 +23,7 @@ async def test_creator_manager_foreign_grants_and_revocation(monkeypatch):
     viewer = AuthMeResponse(sub='alice', tenant_id=tenant)
     app.dependency_overrides[deps.get_current_user] = lambda: viewer
     app.dependency_overrides[deps.get_current_tenant_from_token] = lambda: viewer.tenant_id
-    monkeypatch.setattr(routes, 'get_tenant_event_publisher', lambda: SimpleNamespace(publish=AsyncMock()))
+    install(shares)
     own, token = create(shares, tenant, resource_kind='attribute_bundle', created_by='alice')
     other, _ = create(shares, tenant, resource_kind='attribute_bundle', created_by='bob', owner_user_id=declared_owner)
     legacy, _ = create(shares, tenant, resource_kind='attribute_bundle', created_by=None)

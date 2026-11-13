@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
+from acl_service.infrastructure.atomic import store_session
 
 from controlplane_db.models import SociaclShareLink
 from acl_service.domain.share_store import ShareRecord, hash_share_token
@@ -24,7 +25,7 @@ def lookup_share_by_token_hash(
     token_hash: str,
 ) -> SociaclShareLink | None:
     """Resolve share by hash across tenants (uses SECURITY DEFINER function)."""
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         row = session.execute(
             text("SELECT id, tenant_id FROM sociacl_share_lookup_by_hash(:h)"),
             {"h": token_hash},
@@ -67,7 +68,7 @@ def create_share(
         uses_remaining=uses_remaining,
         created_by=created_by,
     )
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         session.add(row)
         session.commit()
@@ -78,7 +79,7 @@ def create_share(
 
 def list_shares(sync_engine, tenant_id: uuid.UUID, *, creator_sub: str | None) -> list[SociaclShareLink]:
     """Tenant-scoped metadata with a trusted caller's creator/manager scope."""
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         query = select(SociaclShareLink).where(SociaclShareLink.tenant_id == tenant_id)
         if creator_sub is not None:
@@ -90,7 +91,7 @@ def decrement_uses(
     sync_engine, tenant_id: uuid.UUID, share_id: uuid.UUID
 ) -> bool:
     """Reserve an active use atomically; never acknowledge exhausted/foreign shares."""
-    with Session(sync_engine) as session, session.begin():
+    with store_session(sync_engine) as session, session.begin():
         _set_guc(session, tenant_id)
         obj = session.scalars(select(SociaclShareLink).where(
             SociaclShareLink.id == share_id,

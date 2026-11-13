@@ -50,7 +50,7 @@ def main():
         run_probe('exercise')
         docker('restart', '--time', '15', app)
         run_probe('restarted')
-        print('Owned runtime startup, PostgreSQL event processing and restart checks passed')
+        print('Owned runtime startup and restart smoke checks passed')
     except (subprocess.SubprocessError, OSError):
         # Only the synthetic service's log; no host credentials are passed in.
         logs = subprocess.run(['docker', 'logs', '--tail', '80', app], capture_output=True, text=True)

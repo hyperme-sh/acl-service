@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import and_, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from acl_service.infrastructure.atomic import store_session
 
 from controlplane_db.models import AclCasbinRule
 from acl_service.domain.policy_store import PolicyRecord
@@ -18,7 +19,7 @@ def _set_guc(session: Session, tenant_id: uuid.UUID) -> None:
 
 
 def list_rules(sync_engine, tenant_id: uuid.UUID) -> list[AclCasbinRule]:
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         return list(
             session.scalars(
@@ -61,7 +62,7 @@ def add_rule_if_absent(
     row = AclCasbinRule(tenant_id=tenant_id, ptype=ptype)
     for i, value in enumerate(rule):
         setattr(row, f"v{i}", value)
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         existing = _find_rule(session, tenant_id, ptype, rule)
         if existing is not None:
@@ -82,7 +83,7 @@ def add_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> 
     row = AclCasbinRule(tenant_id=tenant_id, ptype=ptype)
     for i, v in enumerate(rule):
         setattr(row, f"v{i}", v)
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         existing = _find_rule(session, tenant_id, ptype, rule)
         if existing is not None:
@@ -104,7 +105,7 @@ def add_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> 
 
 def delete_rule(sync_engine, tenant_id: uuid.UUID, ptype: str, rule: list[str]) -> bool:
     conds = [AclCasbinRule.tenant_id == tenant_id, *_rule_match(ptype, rule)]
-    with Session(sync_engine) as session:
+    with store_session(sync_engine) as session:
         _set_guc(session, tenant_id)
         obj = session.scalars(
             select(AclCasbinRule).where(and_(*conds)).order_by(AclCasbinRule.id).limit(1)
@@ -143,7 +144,7 @@ class PostgresPolicyStore:
         """Commit the binding and all grants together under a tenant lock."""
         from acl_service.startup_identity import plan, desired
         tenant = uuid.UUID(config['owner']['tenant_id'])
-        with Session(self._engine) as session, session.begin():
+        with store_session(self._engine) as session, session.begin():
             _set_guc(session,tenant)
             session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"),
                             {'key':'startup-acl:'+str(tenant)})

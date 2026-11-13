@@ -20,7 +20,7 @@ signing, and the host agent live in their own repositories.
 The process is a FastAPI application. On startup it opens the PostgreSQL
 database from `DATABASE_URL` (schema from the pinned
 [`controlplane-db`](https://github.com/hyperme-sh/controlplane-db) migrations),
-builds a `PostgresPolicyStore`, and subscribes to control-plane events.
+builds a `PostgresPolicyStore`, and accepts authenticated User event deliveries.
 Row-level security keeps each tenant's rows in that tenant. Authentication is a
 Keycloak access token, validated through
 [`auth-service`](https://github.com/hyperme-sh/auth-service) and
@@ -64,42 +64,41 @@ SociACL sits beside those rules:
   The [recovery adapter inventory](docs/recovery-adapters.md) traces both
   storage paths and identifies where verified chain resolution belongs.
 
-Successful policy, share, and recovery writes commit in PostgreSQL, then
-publish a control-plane event. The commit and the publish are separate. A
-publish error is returned on the HTTP response, and the process leaves that
-event unpublished. `POST /api/v1/acl/sociacl/shares` mints a new token on every
-call, so repeating it after a publish error creates a second share. An
-identical policy rule returns the existing row, and a recovery session with
-the same idempotency key returns the existing session. A client that calls
-either route again publishes the event on that later call.
+Policy, share and recovery mutations now commit together with their local outbox
+row. Existing store commits release an inner savepoint; the owner operation makes
+the final commit. An outbox failure rolls back the business change, including a
+reserved share use. API responses are constructed before that owner commit.
 
-Redelivery applies to `user.created.v1` consumption in
-`build_user_created_consumer`. The handler inserts
-`p, <user id>, user_profile, read` with `add_rule_if_absent`, then publishes
-`acl.policy.updated.v1`. If the handler fails, the Postgres consumer marks
-that delivery pending again (default of 5 attempts) and the Service Bus
-consumer abandons the message for the broker to redeliver. The rule insert
-stays one row across those deliveries. Each delivery publishes
-`acl.policy.updated.v1` again.
+`POST /internal/events` accepts only authenticated `user-service` deliveries of
+`user.created.v1`, with a matching `Idempotency-Key`. Inbox dedupe, the default
+`p, <user id>, user_profile, read` policy and `acl.policy.updated.v1` commit in one
+transaction. Reusing an event ID with different facts is refused. Configure
+`EVENT_PRODUCER_TOKENS_FILE` as a private JSON mapping containing `user-service`.
+Missing credentials refuse deliveries. ACL no longer reads the shared event log
+or selects a Service Bus sender/receiver.
 
-The default bus is the PostgreSQL `controlplane_events` table. That is the
-transport in the frozen install and the root image. Azure Service Bus uses the
-same `controlplane.events.v1` envelope when
-`AZURE_SERVICE_BUS_CONNECTION_STRING` is set, and it needs
-`azure-servicebus>=7.12.0` from the `servicebus` extra of pinned
-`controlplane-core` 0.1.0
-(`c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8`). `uv.lock` and the image install
-(`uv sync --frozen` in `scripts/install-image-runtime.py`) omit that extra.
-With the variable set and the package absent, `AzureServiceBusSender.start`
-raises `RuntimeError` during startup. Install the package into the environment
-that runs the process, `.venv` locally or `/opt/venv` in the image:
+Before starting the new runtime, deployment setup applies the additive event DDL:
+`python -m acl_service.migrate --database-url-file /run/secrets/acl-database-url`.
+Installation grants existing `controlplane` and `controlplane_app` roles read/insert
+access to transport rows and update access only to the delivery marker. For a
+dedicated runtime/relay role, repeat `--runtime-role ROLE` for each existing role.
+It does not create roles or grant row deletion. HTTP deliveries must include the
+sender's stable `occurred_at` timestamp so retries compare the same facts.
+It preserves the existing business tables and adds forced-RLS inbox/outbox tables
+plus the service tenant registry used by the standard owner HTTP relay. Configure
+that relay against this owner's database; independently deployed peers retain the
+same event envelope. Rolling back the runtime does not require deleting tables.
 
-```sh
-uv pip install --python .venv/bin/python 'azure-servicebus>=7.12.0'
-```
+Policy create/delete IDs include the policy row incarnation and operation. Share
+creation and recovery creation use their business row IDs; recovery retries retain
+the original `pending` creation fact even after the returned session advances.
+Resolutions and access decisions represent new operations; a retry of an event
+write inside the transaction reuses its operation ID. This does not add a new
+HTTP idempotency contract to share creation or access evaluation.
 
 | Method | Path | Who calls it |
 | --- | --- | --- |
+| POST | `/internal/events` | Authenticated User owner relay; atomic inbox and default policy. |
 | GET | `/api/v1/health/` | Load balancer. Returns `{"status":"Ok"}`. |
 | GET | `/api/v1/acl/policies` | Authenticated tenant member. |
 | POST, DELETE | `/api/v1/acl/policies` | Subject with `/acl/policies` `manage`. |
@@ -248,8 +247,7 @@ and `X-Tenant-ID` before they create or administer tenant resources. The same
 call authorizes marketplace listing actions and budget-scoped inference.
 
 When [`user-service`](https://github.com/hyperme-sh/user-service) publishes
-`user.created.v1`, this service consumes it (group
-`acl-service-controlplane-events`, client `acl-service-user-events`) and
+`user.created.v1`, this service consumes its HTTP delivery and
 inserts `p, <user id>, user_profile, read` if that rule is absent. It then
 publishes `acl.policy.updated.v1`. Policy create and delete publish the same
 event type with operation `added` or `removed`.
