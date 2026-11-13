@@ -60,6 +60,15 @@ bounded raw proof/context documents through its C interface. The native parser
 rejects duplicate fields, positional arrays and malformed values. Its clock and
 policy inputs use milliseconds and cannot wrap unsigned C integers.
 
+`PrivateGrantVerifier.matches_grant` verifies the existing confidential
+`SignedGrantPayload` transcript against exact protected context, including
+owner/reader, grant revision, epoch and item ciphertext digest. It also matches
+signed cancellations; a match is not current permission. Public `SeeGrant` rows
+cannot replace this private grant or supply its monotonic revision. The source
+must still enforce current Check, enrollment, status, settlement and rollback
+custody before delivery. Both raw JSON documents are capped at 64 KiB, preserved
+for strict native parsing, and never accepted as caller-provided authority.
+
 `matches_status` means only that signature, freshness and exact context match.
 A matching cancellation also returns true. The caller must independently supply
 the current enrolled owner key, epoch, grant and graph state; a request cannot

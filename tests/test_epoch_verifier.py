@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from acl_service.infrastructure.epoch_verifier import (
     EpochStatusVerifier, EpochManifestVerifier, LIBRARY, MAX_DOCUMENT, MAX_SAFE, MAX_MANIFEST_DOCUMENT,
-    SettledEpochVerifier, MAX_EPOCH_HISTORY,
+    SettledEpochVerifier, MAX_EPOCH_HISTORY, PrivateGrantVerifier,
 )
 
 
@@ -128,3 +128,37 @@ class SettledEpochVerifierTests(TestCase):
         with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL', return_value=object()):
             with self.assertRaises(AttributeError):
                 SettledEpochVerifier()
+
+
+class PrivateGrantVerifierTests(TestCase):
+    def setUp(self):
+        self.native = Mock(return_value=1)
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',
+                   return_value=Mock(sociacl_verify_private_grant=self.native)) as load:
+            self.verifier = PrivateGrantVerifier()
+            load.assert_called_once_with(LIBRARY)
+
+    def test_exact_buffers_and_only_one_matches(self):
+        raw = b'{"grantBytes":"a","grantBytes":"b"}'
+        self.assertTrue(self.verifier.matches_grant(raw, b'{"expected":true}'))
+        args = self.native.call_args.args
+        self.assertEqual(ctypes.string_at(args[0], args[1]),raw)
+        self.assertEqual(ctypes.string_at(args[2], args[3]),b'{"expected":true}')
+        for result in [0,-1,2]:
+            self.native.return_value=result
+            self.assertFalse(self.verifier.matches_grant(b'{}',b'{}'))
+
+    def test_invalid_buffers_do_not_call_native(self):
+        for value in [None,'',bytearray(b'{}'),b'',b'x'*(MAX_MANIFEST_DOCUMENT+1)]:
+            self.assertFalse(self.verifier.matches_grant(value,b'{}'))
+            self.assertFalse(self.verifier.matches_grant(b'{}',value))
+        self.native.assert_not_called()
+
+    def test_native_errors_or_absent_verifier_do_not_fallback(self):
+        for error in [OSError(),ValueError(),ctypes.ArgumentError()]:
+            self.native.side_effect=error
+            self.assertFalse(self.verifier.matches_grant(b'{}',b'{}'))
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',side_effect=OSError()):
+            with self.assertRaises(OSError): PrivateGrantVerifier()
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',return_value=object()):
+            with self.assertRaises(AttributeError): PrivateGrantVerifier()

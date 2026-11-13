@@ -93,3 +93,28 @@ class SettledEpochVerifier:
             return self._verify(buffer, len(history)) == 1
         except (OSError, ValueError, ctypes.ArgumentError):
             return False
+
+
+class PrivateGrantVerifier:
+    """Matches the reference private-grant signature, including cancellation.
+
+    This is admission, not current Check. Expected enrollment, grant order,
+    epoch and ciphertext binding come from protected state, never caller claims.
+    """
+    def __init__(self):
+        self._library = ctypes.CDLL(LIBRARY)
+        self._verify = self._library.sociacl_verify_private_grant
+        self._verify.argtypes = [ctypes.c_void_p, ctypes.c_size_t,
+                                ctypes.c_void_p, ctypes.c_size_t]
+        self._verify.restype = ctypes.c_int
+
+    def matches_grant(self, proof: bytes, expected: bytes) -> bool:
+        if any(type(value) is not bytes or not 0 < len(value) <= MAX_MANIFEST_DOCUMENT
+               for value in (proof, expected)):
+            return False
+        proof_buffer = ctypes.create_string_buffer(proof)
+        expected_buffer = ctypes.create_string_buffer(expected)
+        try:
+            return self._verify(proof_buffer, len(proof), expected_buffer, len(expected)) == 1
+        except (OSError, ValueError, ctypes.ArgumentError):
+            return False
