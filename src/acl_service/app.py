@@ -37,6 +37,7 @@ from acl_service.infrastructure.witness_policy_publication import load_publicati
 from acl_service.interfaces.api.witness_policy_routes import router as witness_policy_router
 
 from acl_service.interfaces.api.statement_routes import StatementBinding, router as statement_router
+from acl_service.interfaces.api.delegation_routes import router as delegation_router
 from acl_service.interfaces.api.signed_store_routes import SignedStoreBinding, router as signed_store_router
 from acl_service.interfaces.api.contact_lane_routes import router as contact_lane_router
 from acl_service.interfaces.api.first_contact_routes import router as first_contact_router
@@ -52,10 +53,14 @@ def create_app(
     service_name: str | None = None,
     signed_store_bindings: Mapping[tuple[UUID, str], SignedStoreBinding] | None = None,
     statement_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
+    delegation_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
 ) -> FastAPI:
     if statement_bindings is None:
         from acl_service.infrastructure.statement_bindings import load_statement_bindings
         statement_bindings = load_statement_bindings()
+    if delegation_bindings is None:
+        from acl_service.infrastructure.delegation_bindings import load_delegation_bindings
+        delegation_bindings = load_delegation_bindings()
     svc_name = service_name or settings.service_name
     from acl_service.lane_access_log import install_lane_log_filter
     install_lane_log_filter()
@@ -147,6 +152,10 @@ def create_app(
     app.state.statement_bindings = MappingProxyType(dict(statement_bindings)) if statement_bindings is not None else None
     app.state.statement_slots = asyncio.Semaphore(2)
     app.include_router(statement_router, prefix="/api/v1")
+    app.state.delegation_bindings = MappingProxyType(dict(delegation_bindings)) if delegation_bindings is not None else None
+    # Both sources share the same bounded worker budget.
+    app.state.delegation_slots = app.state.statement_slots
+    app.include_router(delegation_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
     app.add_middleware(AclServiceDbMiddleware)

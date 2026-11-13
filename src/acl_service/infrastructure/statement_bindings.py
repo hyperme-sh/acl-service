@@ -110,9 +110,10 @@ def _provisioned(binding):
             raise ValueError('graph checkpoint is not provisioned')
 
 
-def _source(binding):
+def _source(binding, *, delegations=False):
     # Only load the verifier shipped in the image, never a configured module path.
-    for name in ('history_admission', 'statement_source'):
+    names = ('history_admission', 'statement_source') + (('delegation_source',) if delegations else ())
+    for name in names:
         path = Path('/opt/acl-admission') / (name + '.py')
         existing = sys.modules.get(name)
         if existing is not None:
@@ -129,7 +130,8 @@ def _source(binding):
             raise
     from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
     store = SqliteHistoryStore(binding.history, freshness_path=binding.freshness, require_authority_checkpoint=True)
-    return sys.modules['statement_source'].StatementSource(store, str(binding.tenant))
+    source_type = sys.modules['delegation_source'].DelegationSource if delegations else sys.modules['statement_source'].StatementSource
+    return source_type(store, str(binding.tenant))
 
 
 def load_statement_bindings(environ=None, *, source_factory=None):

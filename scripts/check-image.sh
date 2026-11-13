@@ -51,6 +51,10 @@ source = _source(BindingSettings(UUID("a5ed86d0-cb50-4404-a5ac-410aab086a82"),
 assert source.production_ready
 assert source.store.require_authority_checkpoint
 assert source.tenant == "a5ed86d0-cb50-4404-a5ac-410aab086a82"
+delegation = _source(BindingSettings(UUID("a5ed86d0-cb50-4404-a5ac-410aab086a82"),
+                                    "ci-service", "ci-agents", history, freshness), delegations=True)
+assert delegation.production_ready
+assert type(delegation).__name__ == "DelegationSource"
 '
 import json
 from pathlib import Path
