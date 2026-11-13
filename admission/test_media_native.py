@@ -9,6 +9,8 @@ from history_admission import HistoryAdmission, EnrollmentGrant
 from acl_service.domain.history_store import AdmissionRejected
 from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
 from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+from acl_service.infrastructure.media_bindings import MediaSettings, _provisioned, _source
+from uuid import UUID
 
 
 class NativeMediaContracts(TestCase):
@@ -59,3 +61,16 @@ class NativeMediaContracts(TestCase):
         forged=json.loads(json.dumps(self.f['cancel']));forged['proof']['signature']='0'*128
         with self.assertRaises(AdmissionRejected):self.mutate('grant',forged)
         self.assertEqual(self.source.read_view(self.object,self.now)['fence'],before)
+
+    def test_runtime_loader_requires_existing_private_checkpoints(self):
+        root=Path(self.tmp.name); key=root/'storage-key';key.write_text('fixture-key');key.chmod(0o600)
+        anchor=root/'freshness.db'
+        for path in (self.path,anchor):path.chmod(0o600)
+        binding=MediaSettings(UUID(self.tenant),'fixture-subject',self.owner,self.path,anchor,
+                              'https://storage.example',key)
+        _provisioned(binding)
+        loaded=_source(binding)
+        self.assertTrue(loaded.production_ready)
+        self.assertEqual(loaded.tenant,self.tenant)
+        key.chmod(0o644)
+        with self.assertRaises(ValueError):_provisioned(binding)

@@ -63,6 +63,10 @@ def create_app(
     if delegation_bindings is None:
         from acl_service.infrastructure.delegation_bindings import load_delegation_bindings
         delegation_bindings = load_delegation_bindings()
+    owns_media_stores = private_wrap_bindings is None
+    if owns_media_stores:
+        from acl_service.infrastructure.media_bindings import load_media_bindings
+        private_wrap_bindings = load_media_bindings()
     svc_name = service_name or settings.service_name
     from acl_service.lane_access_log import install_lane_log_filter
     install_lane_log_filter()
@@ -95,7 +99,13 @@ def create_app(
         await user_consumer.start()
         app.state.event_consumer=user_consumer
 
-        yield
+        try:
+            yield
+        finally:
+            if owns_media_stores:
+                stores = {id(binding.store): binding.store for binding in (private_wrap_bindings or {}).values()}
+                for store in stores.values():
+                    await store.close()
 
         event_consumer = getattr(app.state, "event_consumer", None)
         if event_consumer is not None:
