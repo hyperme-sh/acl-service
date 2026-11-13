@@ -1,5 +1,18 @@
 # acl-service
 
+The image also carries an operator-only `DelegationSource` in its admission
+bundle. It provisions a new exclusive scope for one canonical HTTPS audience,
+using the same tenant-bound identity store and independent rollback checkpoint
+as statement admission. It retains owner-signed delegations and cancellations,
+including expired records, and verifies them with the published SociACL helpers.
+It never imports an existing delegation collection or treats a statement scope
+as delegation history. At most 64 delegations per owner and 512 per scope reserve
+space for one permanent cancellation of every delegation. This journal does not
+prove agent possession or grant object access. Agent login must still verify
+current delegation authority and challenge the agent key on every exchange.
+No HTTP route or startup binding exposes this source yet; runtime activation and
+the s3r.ch consumer are separate work under FyberLabs/s3r.ch#277.
+
 Tenant authorization for the Hypermesh control plane. This service stores
 per-tenant [Casbin](https://casbin.org/) policies and evaluates them over HTTP,
 and it keeps the SociACL witness, share, recovery, and keyring state those

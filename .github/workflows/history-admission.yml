@@ -17,7 +17,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --no-audit
         working-directory: admission
-      - run: PYTHONPATH=../src python3 -m unittest -v test_admission test_history_freshness test_statement_source test_statement_graph
+      - run: PYTHONPATH=../src python3 -m unittest -v test_admission test_history_freshness test_statement_source test_statement_graph test_delegation_source
         working-directory: admission
       - name: Statement transaction unit coverage
         working-directory: admission
@@ -28,6 +28,17 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
       - name: Statement quota unit coverage
         run: node --test --test-isolation=none --experimental-test-coverage admission/statement-quota.test.mjs
+      - name: Delegation verifier contract coverage (CI only)
+        run: >-
+          node --test --test-isolation=none --experimental-test-coverage
+          --test-coverage-include=admission/delegation-graph.mjs
+          --test-coverage-lines=90 --test-coverage-branches=75
+          admission/delegation-graph.test.mjs
+      - name: Delegation storage adapter coverage (CI only)
+        working-directory: admission
+        run: |
+          PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=delegation_source -m unittest test_delegation_source
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=100 -m
       - name: Statement binding configuration unit coverage
         run: |
           PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=acl_service.infrastructure.statement_bindings -m unittest discover -s tests -p test_statement_binding_settings.py
