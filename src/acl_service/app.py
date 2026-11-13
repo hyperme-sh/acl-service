@@ -53,6 +53,9 @@ def create_app(
     signed_store_bindings: Mapping[tuple[UUID, str], SignedStoreBinding] | None = None,
     statement_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
 ) -> FastAPI:
+    if statement_bindings is None:
+        from acl_service.infrastructure.statement_bindings import load_statement_bindings
+        statement_bindings = load_statement_bindings()
     svc_name = service_name or settings.service_name
     from acl_service.lane_access_log import install_lane_log_filter
     install_lane_log_filter()

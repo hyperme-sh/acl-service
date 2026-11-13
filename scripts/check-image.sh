@@ -37,6 +37,20 @@ writer = HistoryAdmission(SqliteHistoryStore(Path("/tmp/history.sqlite")), grant
 writer.enroll(p, json.dumps(f["binding"]).encode(), f["signature"])
 assert writer.apply_store_operation(p, "recovery", operations["current"]) == 1
 assert writer.apply_store_operation(p, "wraps", operations["wrap"]) == 1
+# Check the fixed image bundle can be loaded by the default-off startup adapter.
+# Provisioning below is confined to this disposable CI container/public fixture.
+import hashlib
+from acl_service.infrastructure.initialize_ciphertext_freshness import initialize
+from acl_service.infrastructure.statement_bindings import BindingSettings, _source
+from uuid import UUID
+history = Path("/tmp/history.sqlite")
+freshness = Path("/tmp/freshness.sqlite")
+initialize(history, hashlib.sha256(history.read_bytes()).hexdigest(), freshness)
+source = _source(BindingSettings(UUID("a5ed86d0-cb50-4404-a5ac-410aab086a82"),
+                                "ci-service", "ci", history, freshness))
+assert source.production_ready
+assert source.store.require_authority_checkpoint
+assert source.tenant == "a5ed86d0-cb50-4404-a5ac-410aab086a82"
 '
 import json
 from pathlib import Path

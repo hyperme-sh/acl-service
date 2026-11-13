@@ -28,3 +28,7 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
       - name: Statement quota unit coverage
         run: node --test --test-isolation=none --experimental-test-coverage admission/statement-quota.test.mjs
+      - name: Statement binding configuration unit coverage
+        run: |
+          PYTHONPATH=src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=acl_service.infrastructure.statement_bindings -m unittest discover -s tests -p test_statement_binding_settings.py
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m

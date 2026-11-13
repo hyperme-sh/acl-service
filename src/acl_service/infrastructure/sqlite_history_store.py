@@ -44,20 +44,31 @@ class SqliteHistoryStore:
 
     @contextmanager
     def _transaction(self, *, write, ciphertext=False, before_commit=None):
-        with closing(self._connect()) as db, db:
-            if ciphertext or self.require_authority_checkpoint:
-                self._attach_freshness(db)
-            db.execute("BEGIN IMMEDIATE" if write else "BEGIN")
-            if self.require_authority_checkpoint:
-                expected = db.execute("SELECT digest FROM freshness.authority_checkpoint WHERE id=1").fetchone()
-                if expected != (authority_digest(db),):
-                    raise StoreRejected()
-            yield db
-            if write and self.require_authority_checkpoint:
-                db.execute("UPDATE freshness.authority_checkpoint SET digest=? WHERE id=1",
-                           (authority_digest(db),))
-            if before_commit is not None:
-                before_commit()
+        attached = self.freshness_path is not None and (ciphertext or self.require_authority_checkpoint)
+        try:
+            with closing(self._connect()) as db, db:
+                if attached:
+                    self._attach_freshness(db)
+                # A deferred read can hold freshness while waiting for main,
+                # opposite to an attached writer's commit lock order. Reserve
+                # both databases before reading either to avoid that deadlock.
+                db.execute("BEGIN IMMEDIATE" if write or attached else "BEGIN")
+                if self.require_authority_checkpoint:
+                    expected = db.execute("SELECT digest FROM freshness.authority_checkpoint WHERE id=1").fetchone()
+                    if expected != (authority_digest(db),):
+                        raise StoreRejected()
+                yield db
+                if write and self.require_authority_checkpoint:
+                    db.execute("UPDATE freshness.authority_checkpoint SET digest=? WHERE id=1",
+                               (authority_digest(db),))
+                if before_commit is not None:
+                    before_commit()
+        except sqlite3.OperationalError as exc:
+            if getattr(exc, "sqlite_errorcode", 0) & 0xff in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
+                # Rollback/close happened above. Never retry a signed write or
+                # expose database details; the caller must refresh its fence.
+                raise HistoryConflict("store contention; refresh required") from None
+            raise
 
     def enroll(self, principal: str, genesis: bytes) -> None:
         if not principal or not isinstance(genesis, bytes) or not genesis:
