@@ -25,7 +25,7 @@ class WrapReadPermit:
 
 
 class WrapAuthority(Protocol):
-    def authorize_read(self, tenant: str, reader: str, object: str) -> WrapReadPermit:
+    async def authorize_read(self, tenant: str, reader: str, object: str) -> WrapReadPermit:
         """Current Check, enrolled reader binding, epoch and private record.
 
         Resolve all values from one protected view. The fence covers identity,
@@ -34,7 +34,7 @@ class WrapAuthority(Protocol):
         """
         ...
 
-    def commit_delivery(self, permit: WrapReadPermit) -> bool:
+    async def commit_delivery(self, permit: WrapReadPermit) -> bool:
         """Atomically revalidate the complete fence and commit retained floors.
 
         Return exactly True only after the transaction commits. A concurrent
@@ -43,7 +43,7 @@ class WrapAuthority(Protocol):
         ...
 
 
-def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: str,
+async def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: str,
                          object: str, *, clock=time.time, cancel=lambda: None) -> bytes:
     """A trusted internal operation; the public transport must authenticate reader.
 
@@ -54,7 +54,7 @@ def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: s
         cancel()
         if store.tenant != tenant:
             raise ValueError()
-        permit = authority.authorize_read(tenant, reader, object)
+        permit = await authority.authorize_read(tenant, reader, object)
         if type(permit) is not WrapReadPermit or (permit.tenant, permit.reader, permit.object) != (tenant, reader, object):
             raise ValueError()
         if any(type(value) is not str or re.fullmatch(r'[0-9a-f]{64}',value) is None
@@ -64,7 +64,7 @@ def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: s
                 or type(permit.expires_at) is not int or not clock() < permit.expires_at
                 or type(permit.reader_epub) is not str or not 0 < len(permit.reader_epub) <= 1024):
             raise ValueError()
-        payload = store.read(permit.record,permit.digest,cancel=cancel)
+        payload = await store.read(permit.record,permit.digest,cancel=cancel)
         cancel()
         if (type(payload) is not bytes or not 0 < len(payload) <= 65_536
                 or hashlib.sha256(payload).hexdigest() != permit.digest
@@ -72,7 +72,7 @@ def deliver_private_wrap(authority: WrapAuthority, store, tenant: str, reader: s
             raise ValueError()
         # Fetching bytes is not authorization. This is the delivery linearization
         # point, after storage has returned and against the exact immutable permit.
-        if authority.commit_delivery(permit) is not True:
+        if await authority.commit_delivery(permit) is not True:
             raise ValueError()
         cancel()
         if not clock() < permit.expires_at:

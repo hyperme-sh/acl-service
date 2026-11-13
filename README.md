@@ -8,6 +8,10 @@ revision and verify the returned bytes. Payloads are capped at 64 KiB. Requests
 use tenant-bound credentials, refuse redirects and compression, and have bounded
 deadlines and connection capacity. Creates use `If-None-Match: *`; conflicts and
 lost responses never cause an automatic retry or overwrite.
+The async adapter applies a total two-second timeout across response headers,
+streamed bytes and response cleanup, including with an injected client. Each
+request explicitly disables redirects. Use and close the client on its event
+loop; CI exercises slow headers and a body that trickles below the chunk size.
 
 This storage adapter is not an authorization endpoint. The owner source must
 authenticate the current reader, select the current epoch, retain the opaque

@@ -3,6 +3,7 @@
 Storage possession is not permission to deliver. Callers must authenticate the
 reader and revalidate the current authorization fence after fetching bytes.
 """
+import asyncio
 import hashlib
 import re
 import time
@@ -46,19 +47,19 @@ class PrivateWrapStore:
         self._clock = clock
         if client is None:
             import httpx
-            client = httpx.Client(trust_env=False, follow_redirects=False,
+            client = httpx.AsyncClient(trust_env=False, follow_redirects=False,
                                   timeout=2.0, limits=httpx.Limits(max_connections=2, max_keepalive_connections=2))
         self._client = client
 
-    def close(self):
-        self._client.close()
+    async def close(self):
+        await self._client.aclose()
 
     def _path(self, name):
         if not _digest(name):
             raise ValueError('invalid opaque wrap record')
         return self._base + name
 
-    def read(self, name, revision, *, cancel=lambda: None):
+    async def read(self, name, revision, *, cancel=lambda: None):
         """Fetch only the exact retained digest, never the provider's new head."""
         path = self._path(name)
         if not _digest(revision):
@@ -70,7 +71,8 @@ class PrivateWrapStore:
                 raise WrapStorageUnavailable('private wrap storage unavailable')
         try:
             guard()
-            with self._client.stream('GET', path, headers=self._headers) as response:
+            async with asyncio.timeout(2.0), self._client.stream('GET', path, headers=self._headers,
+                                                               follow_redirects=False, timeout=2.0) as response:
                 guard()
                 if response.status_code != 200 or response.headers.get('etag') != '"' + revision + '"':
                     raise ValueError()
@@ -81,7 +83,7 @@ class PrivateWrapStore:
                                            or int(length) > MAX_WRAP_BYTES):
                     raise ValueError()
                 data = bytearray()
-                for chunk in response.iter_raw(chunk_size=4096):
+                async for chunk in response.aiter_raw(chunk_size=4096):
                     guard()
                     if len(data) + len(chunk) > MAX_WRAP_BYTES:
                         raise ValueError()
@@ -96,7 +98,7 @@ class PrivateWrapStore:
             # Do not include provider bodies, URLs, authentication or transport diagnostics.
             raise WrapStorageUnavailable('private wrap storage unavailable') from None
 
-    def create(self, name, payload, *, cancel=lambda: None):
+    async def create(self, name, payload, *, cancel=lambda: None):
         path = self._path(name)
         if type(payload) is not bytes or not 0 < len(payload) <= MAX_WRAP_BYTES:
             raise ValueError('invalid private wrap size')
@@ -108,7 +110,8 @@ class PrivateWrapStore:
                 raise ValueError()
             headers = {**self._headers, 'If-None-Match': '*', 'Content-Type': 'application/octet-stream',
                        'Content-Length': str(len(payload))}
-            with self._client.stream('PUT', path, headers=headers, content=payload) as response:
+            async with asyncio.timeout(2.0), self._client.stream('PUT', path, headers=headers, content=payload,
+                                                               follow_redirects=False, timeout=2.0) as response:
                 cancel()
                 if self._clock() >= deadline:
                     raise ValueError()
