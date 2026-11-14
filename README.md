@@ -962,3 +962,13 @@ so consumers cannot treat a pending policy as authorization. Direct entries and
 group membership remain separate; this preparation view creates no epoch, wrap,
 or delivery grant. Group row changes advance the object version; exact retries
 do not. Existing direct and group-view routes retain their response shapes.
+
+`POST /api/v1/acl/sociacl/media/owner/group-check` accepts
+`{object, predicate, set, rows}` for an exact bounded signed batch. It returns
+`{at, state, fence}` under current protected authority. `applied` means every
+exact row is retained; otherwise `absent` means the batch is not fully retained.
+Partial overlap is allowed because a batch may repeat existing object rows.
+Both results reverify the combined rows against current enrolled histories.
+The read creates no rows or versions. An applied older row does not revive a
+cancelled edge or grant access. After an absent result, explicit append must use
+the returned fence; an intervening authority change still refuses the write.

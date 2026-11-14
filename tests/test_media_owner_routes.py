@@ -421,3 +421,20 @@ async def test_group_authority_view_is_object_only_and_fixed_owner(setup):
         assert (await client.post(BASE+'group-authority-view',json={'object':'media-object'})).status_code==503
     s.authority.owner_mutate.assert_not_awaited()
 
+
+
+@pytest.mark.asyncio
+async def test_group_check_is_bounded_read_only_and_fixed_owner(setup):
+    s=setup;s.authority.owner_group_append_state=AsyncMock(return_value={'at':100,'state':'applied','fence':'a'*64})
+    body={'object':'media-object','predicate':'same-group','set':'set_test','rows':[{'signed':'row'}]}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'group-check',json=body)
+        assert response.status_code==200
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_group_append_state.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','same-group','set_test',body['rows'])
+        for change in [{'at':100},{'writer':'other'},{'rows':[]},{'rows':[{}]*65},{'set':'bad'}]:
+            assert (await client.post(BASE+'group-check',json={**body,**change})).status_code==400
+        assert (await client.post(BASE+'group-check',content=b'x'*81921,headers={'content-type':'application/json'})).status_code==413
+        s.authority.owner_group_append_state=None
+        assert (await client.post(BASE+'group-check',json=body)).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()

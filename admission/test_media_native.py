@@ -272,3 +272,25 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(cancelled['projection']['members'],[])
         self.assertEqual(cancelled['direct'],first['direct'])
         self.assertGreater(cancelled['objectVersion'],live['objectVersion'])
+
+    def test_native_group_append_reconciliation_never_writes_or_hides_withdrawal(self):
+        policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
+        rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupEdges'][0]]
+        check=lambda batch:self.source.group_append_state(self.tenant,self.owner,self.object,self.now,predicate,set_id,batch)
+        pending=check(rows);self.assertEqual(pending['state'],'absent')
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,pending['fence'],predicate,set_id,rows)
+        self.assertEqual(check(rows)['state'],'applied')
+        boolean=json.loads(json.dumps(rows));boolean[1]['record']['stated']=True
+        with self.assertRaises(AdmissionRejected):check(boolean)
+        held=check(rows)
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(self.tenant,self.owner,self.object,self.now,held['fence'],predicate,set_id,boolean)
+        self.assertEqual(check(rows),held)
+        withdrawal=[self.f['groupEdges'][1]];pending=check(withdrawal)
+        current=lambda:self.source.group_object_view(self.tenant,self.owner,self.object,self.now)['projection']['snapshot']['objectSet']['stated']
+        self.assertEqual(pending['state'],'absent');self.assertEqual(current(),1)
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,pending['fence'],predicate,set_id,withdrawal)
+        self.assertEqual(check(withdrawal)['state'],'applied');self.assertEqual(current(),0)
+        self.assertEqual(check(rows)['state'],'applied')  # Retention does not revive the earlier edge.
+        bad=json.loads(json.dumps(rows));bad[1]['record']['sig']='invalid'
+        with self.assertRaises(AdmissionRejected):check(bad)
