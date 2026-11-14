@@ -687,3 +687,25 @@ Runtime configuration never invokes provisioning or creates an owner; missing
 configuration keeps the feature disabled, while invalid configuration refuses
 startup. Verified existing owner admission and operator provisioning remain
 open work under #103 and s3r.ch #440.
+
+## Private media deletion preparation
+
+The protected source now supports a read-only `deletion_view` and a synchronous
+`delete` operation for a trusted adapter. There is no public route or provider
+cleanup worker yet. The view binds tenant, stable owner, object version, current
+write fence and a validity window to the owner signing key. The native SociACL
+verifier checks the separate deletion transcript; unshare is not deletion.
+
+A first accepted command checkpoints a permanent deletion marker and sets the
+policy deadline to zero, so existing readers also refuse the object. Reads,
+writes, pending delivery commits, reprovisioning and policy restoration refuse.
+The same authenticated owner's exact accepted proof can be retried after its
+original time expires; only the original command identifier is returned, with
+no new mutation. A changed proof or owner refuses. Primary-only rollback cannot
+remove the independent checkpoint.
+
+This does not free quota or claim ciphertext cleanup. The future cleanup worker
+must account for writes already in flight, delete all reserved wraps and stored
+ciphertext, and only then release quota once without erasing the tombstone or
+allowing reuse of the object identifier. No activation or operator provisioning
+is performed by these primitives.

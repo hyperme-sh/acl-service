@@ -96,6 +96,66 @@ class MediaSourceContracts(TestCase):
             db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(objects[0],))
         with self.assertRaises(AdmissionRejected):self.source._owner_catalog(TENANT,owner,0,lambda:None)
 
+    def test_deletion_blocks_delivery_mutations_policy_restore_and_reallocation(self):
+        self.ready();permit=self.permit()
+        draft=self.source.deletion_view(TENANT,'owner',OBJECT)
+        self.assertEqual(draft['claims']['objectVersion'],self.source.read_view(OBJECT,self.now)['objectVersion'])
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        proof={'deletionBytes':'fixture','signature':'fixture'}
+        command=self.source.delete(TENANT,'owner',OBJECT,self.now,proof,verifier=verifier)
+        expected=json.loads(verifier.matches_deletion.call_args.args[1])
+        self.assertEqual(expected,{**draft['claims'],'ownerPub':'owner-key'})
+        for operation in [lambda:self.permit(),lambda:self.source.commit(permit),
+                lambda:self.source.read_view(OBJECT,self.now),
+                lambda:self.mutate('status',{}),
+                lambda:self.source.provision(OBJECT,{},10000,exclusive_grant=lambda *args:True)]:
+            with self.assertRaises((AdmissionRejected,HistoryConflict)):operation()
+        with self.store._transaction(write=False) as db:
+            revision,document=db.execute('SELECT revision,document FROM media_sources WHERE object=?',(OBJECT,)).fetchone()
+        self.assertEqual(json.loads(document)['policyUntil'],0)
+        with self.assertRaises(AdmissionRejected):
+            self.source.replace_policy(OBJECT,revision,{},10000,authorize=lambda *args:True)
+        self.now+=120
+        self.assertEqual(self.source.delete(TENANT,'owner',OBJECT,100,proof,verifier=verifier),command)
+        verifier.matches_deletion.assert_called_once()
+        for writer,held in [('reader',proof),('owner',{'deletionBytes':'other','signature':'fixture'})]:
+            with self.assertRaises(HistoryConflict):self.source.delete(TENANT,writer,OBJECT,100,held,verifier=verifier)
+
+    def test_deletion_refuses_signature_scope_change_and_cancelled_commit(self):
+        verifier=Mock();verifier.matches_deletion.return_value=False
+        with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
+        self.source.read_view(OBJECT,self.now)
+        for tenant,writer in [('other','owner'),(TENANT,'reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.deletion_view(tenant,writer,OBJECT)
+            with self.assertRaises(AdmissionRejected):self.source.delete(tenant,writer,OBJECT,self.now,{},verifier=verifier)
+        def cancelled(*args,**kwargs):
+            self.now+=10
+            return True
+        verifier.matches_deletion.side_effect=cancelled
+        with self.assertRaises(HistoryConflict):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
+        self.now=100
+        self.source.read_view(OBJECT,self.now)
+        with self.store._transaction(write=True) as db:
+            db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
+
+    def test_deletion_binds_fence_and_rejects_primary_rollback(self):
+        draft=self.source.deletion_view(TENANT,'owner',OBJECT)
+        expected={**draft['claims'],'ownerPub':'owner-key'}
+        verifier=Mock();verifier.matches_deletion.side_effect=lambda p,e,**kw:json.loads(e)==expected
+        self.grant()
+        with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
+        fresh=self.source.deletion_view(TENANT,'owner',OBJECT)
+        expected={**fresh['claims'],'ownerPub':'owner-key'}
+        with self.store._transaction(write=False) as db:
+            original=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(OBJECT,)).fetchone()
+        self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
+        # Restore only primary bytes; independent media checkpoint must refuse.
+        with self.store._transaction(write=True) as db:
+            db.execute('UPDATE media_sources SET revision=?,nonce=?,document=? WHERE object=?',(*original,OBJECT))
+        with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
+        with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
+
     def test_private_view_and_delivery_commit_share_protected_history(self):
         self.ready(); permit=self.permit()
         self.assertEqual((permit.reader_epub,permit.epoch,permit.revision_id),('reader-epub',1,'b'*64))

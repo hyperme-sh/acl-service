@@ -90,6 +90,28 @@ class NativeMediaContracts(TestCase):
                 await self.source.owner_view(self.tenant,'unbound-owner',self.object)
         asyncio.run(run())
 
+    def test_native_deletion_invalidates_issued_permit_and_refuses_scope_changes(self):
+        from cryptography.hazmat.primitives.asymmetric import ec,utils
+        from cryptography.hazmat.primitives import hashes
+        permit=self.ready()
+        view=self.source.deletion_view(self.tenant,self.owner,self.object)
+        claims=view['claims']
+        message=b'SOCIACL_PRIVATE_MEDIA_DELETE_V1\n'+json.dumps([claims[k] for k in
+            ('tenant','object','owner','objectVersion','fence','issuedAt','expiresAt')],separators=(',',':')).encode()
+        signature=ec.derive_private_key(1,ec.SECP256R1()).sign(message,ec.ECDSA(hashes.SHA256()))
+        r,s=utils.decode_dss_signature(signature)
+        order=0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+        signature=(r.to_bytes(32,'big')+min(s,order-s).to_bytes(32,'big')).hex()
+        proof={'deletionBytes':message.hex(),'signature':signature}
+        with self.assertRaises(AdmissionRejected):
+            self.source.delete(self.tenant,self.owner,self.object,self.now,{**proof,'signature':'0'*128})
+        command=self.source.delete(self.tenant,self.owner,self.object,self.now,proof)
+        self.assertEqual(len(command),64)
+        with self.assertRaises(AdmissionRejected):self.source.read_view(self.object,self.now)
+        with self.assertRaises(AdmissionRejected):self.source.commit(permit)
+        self.now+=1
+        self.assertEqual(self.source.delete(self.tenant,self.owner,self.object,self.now-1,proof),command)
+
     def test_native_publication_reservation_and_idempotent_commit(self):
         payload=b'private fixture bytes';digest=hashlib.sha256(payload).hexdigest()
         metadata={**self.f['wrap'],'record':digest,'digest':digest}
