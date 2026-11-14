@@ -492,6 +492,18 @@ class MediaSourceContracts(TestCase):
         self.source.replace_policy(OBJECT,revision,{},150,authorize=lambda *args:True)
         with self.assertRaises(AdmissionRejected):self.share_plan()
 
+    def test_share_reconciliation_checks_owner_signature_and_never_mutates(self):
+        self.share_ready()
+        payload=self.grant(epoch=2,grantRevision=2)
+        before=self.source.read_view(OBJECT,self.now)
+        args=(TENANT,'owner',OBJECT,'grant',payload,lambda:None)
+        self.assertEqual(self.source._owner_share_state(*args),{'at':100,'state':'absent'})
+        self.assertEqual(self.source.read_view(OBJECT,self.now),before)
+        with self.assertRaises(AdmissionRejected):self.source._owner_share_state(TENANT,'reader',OBJECT,'grant',payload,lambda:None)
+        with self.assertRaises(AdmissionRejected):self.source._owner_share_state('other','owner',OBJECT,'grant',payload,lambda:None)
+        self.native[0].matches_grant.return_value=False
+        with self.assertRaises(AdmissionRejected):self.source._owner_share_state(*args)
+
     def test_epoch_context_is_read_only_and_hides_unrelated_identities(self):
         self.ready()
         self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}
