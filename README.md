@@ -895,3 +895,11 @@ scopes. Documents with group rows reserve space for every remaining direct-grant
 cancellation slot and the deletion tombstone, including on later ordinary writes. Existing direct-grant delivery
 is unchanged. These methods have no HTTP binding and do not issue group grants,
 epochs or wraps; those consumers remain under #126.
+
+
+Group projection also returns detached canonical `snapshot` material from the
+shared SociACL implementation. Membership and object-set edges keep separate HAM
+values and removal states; an absent object-set edge returns null. This prepares
+epoch construction and does not activate group delivery. Before delivery is
+implemented, competing object-set scopes must be resolved over the object's full
+retained authority; per-scope inspection alone is not a current group grant.

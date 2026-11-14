@@ -1,7 +1,7 @@
 import {resolveStoreAccount,objectPrincipal,parseObjectRecord} from 'sociacl-ids';
 import {putObject} from 'sociacl/gun';
 import {MemoryGroupGraph,parseMembershipAssent,parseObjectSet,parseGroupCancel,
-  admitMembership,admitObjectSet,admitGroupCancel,membershipSoul,objectSetSoul,checkGroupPresentation} from 'sociacl/group';
+  admitMembership,admitObjectSet,admitGroupCancel,membershipSoul,objectSetSoul,checkGroupPresentation,groupSnapshot} from 'sociacl/group';
 const take=result=>{if(!result.ok)throw Error(result.reason);return result.value;};
 
 /** Pure projection from protected rows and authenticated histories. No grants or writes. */
@@ -52,5 +52,5 @@ export function groupAuthority(accounts,contextFor,now,input) {
     const result=checkGroupPresentation(graph,input.set,input.object,principal,{stated:1,from:0,until:Number.MAX_SAFE_INTEGER},now,null,null);
     return result.allowed&&result.reason===input.predicate;
   }).sort();
-  return {object:input.object,set:input.set,predicate:input.predicate,members};
+  return {object:input.object,set:input.set,predicate:input.predicate,members,snapshot:groupSnapshot(graph,input.object)};
 }
