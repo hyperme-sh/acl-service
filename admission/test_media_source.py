@@ -108,6 +108,16 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(AdmissionRejected):append({**config,'configRevision':64})
         append(config)  # Exact replay remains possible at capacity.
 
+    def test_group_policy_async_bridge_preserves_current_context_and_copies_input(self):
+        context,config,view,append=self.policy_fixture()
+        draft=asyncio.run(self.source.owner_group_policy_view(TENANT,'owner',OBJECT,'same-group','set_test'))
+        self.assertEqual(draft['at'],100)
+        self.assertEqual(draft['context'],context)
+        self.assertTrue(asyncio.run(self.source.owner_append_group_policy(TENANT,'owner',OBJECT,100,draft['fence'],'same-group','set_test',config)))
+        self.assertEqual(view()['config'],config)
+        with self.assertRaises(AdmissionRejected):
+            asyncio.run(self.source.owner_append_group_policy(TENANT,'owner',OBJECT,100,draft['fence'],'same-group','set_test',{}))
+
     def test_group_policy_context_uses_only_admitted_rows(self):
         with self.store._transaction(write=False) as db:
             _,doc=self.source._load(db,OBJECT,100)

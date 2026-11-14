@@ -938,5 +938,15 @@ then select the greatest revision, breaking ties by the smallest canonical signe
 transcript digest, as in SociACL. A key change that leaves no current signature
 returns no policy. Exact retries do not change the source; new rows advance its
 checkpoint and object version. Capacity never prunes signed history. These methods
-are not HTTP routes yet and do not turn group members into direct grants, select
-media epochs or deliver wraps. Existing direct-media behavior remains unchanged.
+do not turn group members into direct grants, select media epochs or deliver wraps. Existing direct-media behavior remains unchanged.
+
+`POST /api/v1/acl/sociacl/media/owner/group-policy-view` accepts exactly
+`{object, predicate, set}` and returns `{at, context, config, fence}`. The context
+contains the currently resolved set owner and signing key; config is the selected
+signed policy or null. `group-policy-append` accepts exactly
+`{object, at, fence, predicate, set, config}` and returns `{accepted: true}` only
+after protected admission. Both use the fixed authenticated writer binding and
+`acl:media:write`, private/no-store responses and existing bounded worker slots.
+The view is capped at 2 KiB and append at 18 KiB; duplicate JSON fields refuse.
+Stale writes return 409 without automatic retry. Older sources without these
+methods return 503; direct owner routes keep their existing contracts.

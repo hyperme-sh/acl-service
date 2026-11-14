@@ -1143,6 +1143,18 @@ class MediaSource:
         rows=json.loads(encoded(rows))
         return await self._work(self.append_group,tenant,writer,object,at,fence,predicate,set_id,rows)
 
+    def _owner_group_policy_view(self,tenant,writer,object,predicate,set_id,cancel):
+        at=int(self.clock())
+        return {'at':at,**self.group_policy_view(tenant,writer,object,at,predicate,set_id,cancel)}
+
+    async def owner_group_policy_view(self,tenant,writer,object,predicate,set_id):
+        return await self._work(self._owner_group_policy_view,tenant,writer,object,predicate,set_id)
+
+    async def owner_append_group_policy(self,tenant,writer,object,at,fence,predicate,set_id,config):
+        self._group_policy_shape(config)
+        config=json.loads(encoded(config))
+        return await self._work(self.append_group_policy,tenant,writer,object,at,fence,predicate,set_id,config)
+
     async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
         return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)
 
