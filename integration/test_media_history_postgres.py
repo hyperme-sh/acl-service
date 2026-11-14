@@ -162,3 +162,39 @@ def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch):
             consume()
     finally:
         engine.dispose()
+
+
+def test_active_index_explicit_upgrade_fences_old_writers_and_preserves_checkpoints(source):
+    import json
+    from acl_service.domain.media_checkpoint import media_checkpoint_digest
+    from acl_service.infrastructure.media_active_index import install_active_media_index
+    store,spec,url=source
+    with pytest.raises(StoreRejected):PostgresHistoryStore(url,**spec,active_media_index=True)
+    docs={'active':{},'pending':{'deletion':{'owner':'owner'}},
+          'done':{'deletion':{'cleanupComplete':True,'owner':'owner','command':'command','proofDigest':'digest','claims':{}}}}
+    with store._transaction(write=False) as db:
+        for object,doc in docs.items():
+            row=(0,b'nonce',json.dumps(doc).encode())
+            db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
+            db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',
+                       (object,media_checkpoint_digest(spec['tenant'],object,*row)))
+    install_active_media_index(url,**spec)
+    with pytest.raises(StoreRejected):store.read_authority()
+    with pytest.raises(StoreRejected):PostgresHistoryStore(url,**spec)
+    with pytest.raises(StoreRejected):install_active_media_index(url,**spec)
+    current=PostgresHistoryStore(url,**spec,active_media_index=True)
+    try:
+        with current._transaction(write=False) as db:
+            assert db.execute('SELECT object FROM freshness.media_active ORDER BY object').fetchall()==[('active',),('pending',)]
+            assert db.execute('SELECT COUNT(*) FROM freshness.media_checkpoints').fetchone()==(3,)
+            assert db.execute('SELECT COUNT(*) FROM media_sources').fetchone()==(3,)
+    finally:current.close()
+
+
+def test_active_index_upgrade_refuses_missing_primary_without_changing_mode(source):
+    from acl_service.infrastructure.media_active_index import install_active_media_index
+    store,spec,url=source
+    with store._transaction(write=False) as db:
+        db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',('missing',b'digest'))
+    with pytest.raises(ValueError,match='checkpoint mismatch'):install_active_media_index(url,**spec)
+    assert store.read_authority()==(0,{})

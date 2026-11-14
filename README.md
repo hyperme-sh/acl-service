@@ -761,3 +761,22 @@ It returns `{accepted:true}` only after that read-only transaction completes.
 It does not allocate an object, store another ownership copy, extend policy or
 change grants. This lets allocated-storage consumers replace their legacy
 registration index while keeping signature verification in the protected source.
+
+### Explicit active media capacity upgrade
+
+Private PostgreSQL source settings version 2 select an independently retained
+active-object index. Version 1 remains unchanged. Before selecting version 2,
+an operator explicitly calls `install_active_media_index` from
+`acl_service.infrastructure.media_active_index` with the existing database URL,
+history/checkpoint schemas, tenant and source. It verifies every old source
+against its retained checkpoint (at most 64), installs the index once, and
+advances both source markers atomically. Old source processes then refuse all
+transactions; restart all consumers with the same version 2 settings. Runtime
+construction never creates or repairs this index.
+
+Pending deletions still consume capacity. Only confirmed storage cleanup removes
+an active entry; permanent source documents and checkpoints remain to prevent
+reuse. Owner pages enumerate at most 64 active entries, so completed tombstones
+do not permanently exhaust capacity or hide later objects. Missing primary rows
+remain represented independently and cause refusal. This does not activate a
+provider, install anything in a running tenant, or import existing objects.

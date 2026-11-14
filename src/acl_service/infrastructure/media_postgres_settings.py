@@ -15,10 +15,11 @@ class PostgresMediaSettings:
     checkpoint_schema: str
     tenant: str
     source: str
+    active_media_index: bool = False
 
     def open(self):
         return PostgresHistoryStore(self.database_url, history_schema=self.history_schema,
-            checkpoint_schema=self.checkpoint_schema, tenant=self.tenant, source=self.source)
+            checkpoint_schema=self.checkpoint_schema, tenant=self.tenant, source=self.source, active_media_index=self.active_media_index)
 
 
 def read_postgres_settings(path, tenant):
@@ -29,7 +30,7 @@ def read_postgres_settings(path, tenant):
     value=json.loads(raw,object_pairs_hook=_unique)
     if type(value) is not dict or set(value)!={'version','databaseUrl','historySchema','checkpointSchema','tenant','source'}:
         raise ValueError('invalid PostgreSQL source configuration')
-    if type(value['version']) is not int or value['version']!=1 or value['tenant']!=str(tenant):
+    if type(value['version']) is not int or value['version'] not in (1,2) or value['tenant']!=str(tenant):
         raise ValueError('invalid PostgreSQL source binding')
     source=value['source']
     if type(source) is not str or str(UUID(source))!=source or not UUID(source).int:
@@ -42,4 +43,4 @@ def read_postgres_settings(path, tenant):
     url=make_url(value['databaseUrl'])
     if url.drivername!='postgresql+psycopg' or not url.host or not url.database or not url.username:
         raise ValueError('explicit PostgreSQL address required')
-    return PostgresMediaSettings(value['databaseUrl'],history,checkpoint,str(tenant),source)
+    return PostgresMediaSettings(value['databaseUrl'],history,checkpoint,str(tenant),source,active_media_index=value['version']==2)
