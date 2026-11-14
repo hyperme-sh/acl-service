@@ -21,7 +21,7 @@ router = APIRouter(prefix='/acl/sociacl/media/owner', tags=['SociACL'])
 async def owner_operation(action: str, request: Request,
                           tenant: UUID = Depends(require_matched_tenant),
                           user: AuthMeResponse = Depends(get_current_user)):
-    if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state', 'share-state', 'delete-view', 'delete', 'cleanup', 'registration'):
+    if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state', 'share-state', 'share-check', 'delete-view', 'delete', 'cleanup', 'registration'):
         raise refused(404, 'Unknown media operation')
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
@@ -52,7 +52,7 @@ async def owner_operation(action: str, request: Request,
                 if action == 'registration': expected = {'object','record'}
                 if action == 'delete': expected = {'object', 'at', 'proof'}
                 if action in ('catalog', 'cleanup-catalog'): expected = {'page'}
-                if action in ('upload-state', 'share-state'): expected = {'object', 'operation', 'payload'}
+                if action in ('upload-state', 'share-state', 'share-check'): expected = {'object', 'operation', 'payload'}
                 if action in ('status-view', 'share-view', 'cancel-view'): expected = {'object', 'reader'}
                 if action == 'publish-wrap': expected = {'object', 'at', 'fence', 'metadata', 'wrapBase64'}
                 if type(body) is not dict or set(body) != expected:
@@ -65,7 +65,7 @@ async def owner_operation(action: str, request: Request,
                 if action in ('status-view', 'share-view', 'cancel-view') and (type(body['reader']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['reader']) is None):
                     raise ValueError()
-                if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'upload-state', 'share-state', 'delete-view', 'delete', 'cleanup', 'registration') and (
+                if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'upload-state', 'share-state', 'share-check', 'delete-view', 'delete', 'cleanup', 'registration') and (
                         type(body['at']) is not int or not 0 <= body['at'] <= 9007199254740991
                         or type(body['fence']) is not str or re.fullmatch(r'[0-9a-f]{64}', body['fence']) is None):
                     raise ValueError()
@@ -75,7 +75,7 @@ async def owner_operation(action: str, request: Request,
                 if action == 'mutate' and (type(body['operation']) is not str
                         or body['operation'] not in ('grant', 'epoch', 'status', 'wrap') or type(body['payload']) is not dict):
                     raise ValueError()
-                if action in ('upload-state', 'share-state') and (body['operation'] not in ('grant', 'epoch', 'wrap') or type(body['payload']) is not dict):
+                if action in ('upload-state', 'share-state', 'share-check') and (body['operation'] not in ('grant', 'epoch', 'wrap') or type(body['payload']) is not dict):
                     raise ValueError()
                 if action == 'publish-wrap':
                     if type(body['metadata']) is not dict or type(body['wrapBase64']) is not str:
@@ -94,8 +94,8 @@ async def owner_operation(action: str, request: Request,
                         if await binding.authority.owner_confirm_registration(str(tenant),binding.reader,body['object'],body['record']) is not True:
                             raise AdmissionRejected('Media registration refused')
                         result={'accepted':True}
-                    elif action in ('upload-state', 'share-state'):
-                        method=getattr(binding.authority,'owner_share_state' if action=='share-state' else 'owner_upload_state',None)
+                    elif action in ('upload-state', 'share-state', 'share-check'):
+                        method=getattr(binding.authority,{'share-state':'owner_share_state','share-check':'owner_share_check','upload-state':'owner_upload_state'}[action],None)
                         if not callable(method): raise refused(503,'Private media source unavailable')
                         result = await method(str(tenant), binding.reader, body['object'], body['operation'], body['payload'])
                     elif action == 'delete-view':

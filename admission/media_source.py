@@ -725,14 +725,14 @@ class MediaSource:
     async def owner_upload_state(self, tenant, writer, object, operation, payload):
         return await self._work(self._owner_upload_state, tenant, writer, object, operation, payload)
 
-    def _owner_share_state(self, tenant, writer, object, operation, payload, cancel):
+    def _owner_share_state(self, tenant, writer, object, operation, payload, cancel, *, include_fence=False):
         from acl_service.domain.media_share_reconcile import share_state
         at = int(self.clock()); self._guard(at, cancel)
         if tenant != self.tenant or type(payload) is not dict or len(encoded(payload)) > 81920:
             raise AdmissionRejected('invalid upload intent')
         payload = json.loads(encoded(payload))
         with self.store._transaction(write=False, before_commit=lambda:self._guard(at, cancel)) as db:
-            _, doc = self._load(db, object, at)
+            row, doc = self._load(db, object, at)
             identities = self.identities(db, object, doc, at)
             if writer != identities['owner']: raise AdmissionRejected('media owner required')
             latest = self._latest(doc)
@@ -751,10 +751,18 @@ class MediaSource:
                 if not self.native[0].matches_grant(encoded(target['proof']),encoded({**target['claims'],'ownerPub':identities['bindings'][writer]['pub']})):
                     raise AdmissionRejected('sharing recipient changed')
             self._guard(at, cancel)
-            return {'at': at, 'state': state}
+            result={'at': at, 'state': state}
+            if include_fence: result['fence']=self._fence(db,object,row,at)
+            return result
 
     async def owner_share_state(self, tenant, writer, object, operation, payload):
         return await self._work(self._owner_share_state, tenant, writer, object, operation, payload)
+
+    def _owner_share_check(self, tenant, writer, object, operation, payload, cancel):
+        return self._owner_share_state(tenant,writer,object,operation,payload,cancel,include_fence=True)
+
+    async def owner_share_check(self, tenant, writer, object, operation, payload):
+        return await self._work(self._owner_share_check,tenant,writer,object,operation,payload)
 
     async def owner_view(self, tenant, writer, object):
         return await self._work(self._owner_view, tenant, writer, object)

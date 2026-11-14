@@ -305,3 +305,16 @@ async def test_sharing_reconcile_is_fixed_owner_optional_and_read_only(setup):
         s.authority.owner_share_state=None
         assert (await client.post(BASE+'share-state',json=body)).status_code==503
     s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_share_check_preserves_reconciliation_fence_and_optional_adapter(setup):
+    s=setup;s.authority.owner_share_check=AsyncMock(return_value={'at':100,'state':'absent','fence':'a'*64})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        body={'object':'media-object','operation':'grant','payload':{'claims':{}}}
+        response=await client.post(BASE+'share-check',json=body)
+        assert response.status_code==200 and response.json()['fence']=='a'*64
+        s.authority.owner_share_check.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','grant',{'claims':{}})
+        s.authority.owner_share_check=None
+        assert (await client.post(BASE+'share-check',json=body)).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()

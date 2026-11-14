@@ -514,6 +514,18 @@ class MediaSourceContracts(TestCase):
         self.mutate('grant',self.grant(epoch=3,grantRevision=3))
         self.assertEqual(self.source._owner_share_state(TENANT,'owner',OBJECT,'wrap',payload,lambda:None),{'at':100,'state':'conflict'})
 
+    def test_share_check_fence_rejects_intervening_changes_without_freezing_recipient(self):
+        self.share_ready();payload=self.grant(epoch=2,grantRevision=2)
+        check=self.source._owner_share_check(TENANT,'owner',OBJECT,'grant',payload,lambda:None)
+        self.assertEqual(check['state'],'absent')
+        self.assertEqual(check['fence'],self.source.read_view(OBJECT,self.now)['fence'])
+        self.mutate('grant',self.grant(epoch=2,grantRevision=2,until=9998000))
+        with self.assertRaises(HistoryConflict):
+            self.source.mutate(TENANT,'owner',OBJECT,check['at'],check['fence'],'grant',payload)
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,self.now)
+            self.assertEqual(doc['frozen'],[])
+
     def test_epoch_context_is_read_only_and_hides_unrelated_identities(self):
         self.ready()
         self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}

@@ -861,3 +861,9 @@ changing access. Exact signed values are applied; the immediate missing revision
 is absent; superseding or competing state is conflict. The initial-upload
 endpoint retains its initial-only scope. An absent result is not permission to
 write: ordinary fenced mutation and native signature checks still apply.
+
+`share-check` takes the same fixed-owner input and adds the protected write
+`fence` to the comparison result. Clients submit an absent intent using that
+exact `at` and `fence`, without obtaining a replacement view. An intervening
+change then refuses at the mutation boundary rather than converting a stale
+plan into a conflicting grant. `share-state` keeps its existing response shape.
