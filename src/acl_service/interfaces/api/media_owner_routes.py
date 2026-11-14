@@ -21,7 +21,7 @@ router = APIRouter(prefix='/acl/sociacl/media/owner', tags=['SociACL'])
 async def owner_operation(action: str, request: Request,
                           tenant: UUID = Depends(require_matched_tenant),
                           user: AuthMeResponse = Depends(get_current_user)):
-    if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'mutate', 'publish-wrap'):
+    if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state'):
         raise refused(404, 'Unknown media operation')
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
@@ -50,6 +50,7 @@ async def owner_operation(action: str, request: Request,
                                   parse_constant=_invalid_constant)
                 expected = {'object'} if action == 'view' else {'object', 'at', 'fence', 'operation', 'payload'}
                 if action == 'catalog': expected = {'page'}
+                if action == 'upload-state': expected = {'object', 'operation', 'payload'}
                 if action in ('status-view', 'cancel-view'): expected = {'object', 'reader'}
                 if action == 'publish-wrap': expected = {'object', 'at', 'fence', 'metadata', 'wrapBase64'}
                 if type(body) is not dict or set(body) != expected:
@@ -62,12 +63,14 @@ async def owner_operation(action: str, request: Request,
                 if action in ('status-view', 'cancel-view') and (type(body['reader']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['reader']) is None):
                     raise ValueError()
-                if action not in ('catalog', 'view', 'status-view', 'cancel-view') and (
+                if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'upload-state') and (
                         type(body['at']) is not int or not 0 <= body['at'] <= 9007199254740991
                         or type(body['fence']) is not str or re.fullmatch(r'[0-9a-f]{64}', body['fence']) is None):
                     raise ValueError()
                 if action == 'mutate' and (type(body['operation']) is not str
                         or body['operation'] not in ('grant', 'epoch', 'status', 'wrap') or type(body['payload']) is not dict):
+                    raise ValueError()
+                if action == 'upload-state' and (body['operation'] not in ('grant', 'epoch', 'wrap') or type(body['payload']) is not dict):
                     raise ValueError()
                 if action == 'publish-wrap':
                     if type(body['metadata']) is not dict or type(body['wrapBase64']) is not str:
@@ -81,6 +84,8 @@ async def owner_operation(action: str, request: Request,
                 async with capacity(request.app.state.private_wrap_slots):
                     if action == 'catalog':
                         result = await binding.authority.owner_catalog(str(tenant),binding.reader,body['page'])
+                    elif action == 'upload-state':
+                        result = await binding.authority.owner_upload_state(str(tenant), binding.reader, body['object'], body['operation'], body['payload'])
                     elif action == 'view':
                         result = await binding.authority.owner_view(str(tenant), binding.reader, body['object'])
                     elif action == 'status-view':

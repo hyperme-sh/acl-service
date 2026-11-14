@@ -166,3 +166,21 @@ async def test_cancellation_draft_binds_fixed_owner_and_exact_recipient(setup):
         for changes in [{'reader':[]},{'reader':'bad reader'},{'owner':'attacker'},{'grantRevision':1},{'policy':{}}]:
             assert (await client.post(BASE+'cancel-view',json={**body,**changes})).status_code==400
         assert s.authority.owner_cancel_view.await_count==1
+
+
+@pytest.mark.asyncio
+async def test_upload_state_is_scoped_read_only_and_exact(setup):
+    s=setup;s.authority.owner_upload_state=AsyncMock(return_value={'at':100,'state':'applied'})
+    body={'object':'media-object','operation':'epoch','payload':{'document':{},'finalization':{}}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'upload-state',json=body)
+        assert response.status_code==200
+        assert response.json()=={'at':100,'state':'applied'}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_upload_state.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','epoch',body['payload'])
+        s.authority.owner_mutate.assert_not_awaited()
+        for changed in [{'writer':'foreign'},{'at':100},{'operation':'status'},{'payload':[]}]:
+            assert (await client.post(BASE+'upload-state',json={**body,**changed})).status_code==400
+        s.actor.scopes=[]
+        assert (await client.post(BASE+'upload-state',json=body)).status_code==403
+        assert s.authority.owner_upload_state.await_count==1
