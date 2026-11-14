@@ -28,7 +28,7 @@ def upload_state(doc, latest, snapshot, owner, operation, payload):
                 or finalization.get('epoch') != 1 or finalization.get('previousEpoch') != 0
                 or finalization.get('previousFinalizationId') != ''):
             raise AdmissionRejected('initial epoch required')
-        if not same(document.get('snapshot'), snapshot): return 'conflict'
+        if owner in doc['frozen'] or not same(document.get('snapshot'), snapshot): return 'conflict'
         manifests, finalizations = doc['manifests'], doc['finalizations']
         if not manifests and not finalizations: return 'absent'
         return 'applied' if (len(manifests) == len(finalizations) == 1
@@ -38,6 +38,13 @@ def upload_state(doc, latest, snapshot, owner, operation, payload):
                 or payload['reader'] != owner or payload['epoch'] != 1):
             raise AdmissionRejected('initial owner wrap required')
         if owner in doc['frozen']: return 'conflict'
+        manifests, finalizations = doc['manifests'], doc['finalizations']
+        if len(manifests) != 1 or len(finalizations) != 1: return 'conflict'
+        document, finalization = manifests[0]['document'], finalizations[0]['proof']
+        if (document['manifest'].get('epoch') != 1 or document['manifest'].get('revisionId') != payload['revisionId']
+                or finalization.get('epoch') != 1 or finalization.get('revisionId') != payload['revisionId']
+                or not same(document.get('snapshot'), snapshot)):
+            return 'conflict'
         held = doc['wraps'].get(owner)
         if held is None: return 'absent'
         return 'applied' if same(held, payload) else 'conflict'
