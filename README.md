@@ -739,3 +739,16 @@ The configured cleanup adapter records completion only after the storage client
 confirms the same permanent command. Lost acknowledgements leave the command
 available for explicit retry. Completion does not erase the permanent tombstone
 or reclaim protected-source capacity; that requires separate indexed accounting.
+
+
+Media delivery configuration version 3 uses the same PostgreSQL binding fields
+as version 2 and explicitly selects allocation-bound reader wraps. Version 1
+and 2 retain their existing record-store behavior. The new adapter binds the
+protected read/write permit's object before storage access and requires the
+record name to equal the retained digest. Uploads derive the owner from the
+canonical object ID, accept only matching immutable acknowledgements, and use
+`/api/v1/storage/media/payloads/{object}/wrap/{digest}`. The storage credential
+needs separate payload read/write permissions; deletion remains a distinct
+permission and operation. Source authorization and post-storage commit checks
+remain mandatory. Selecting version 3 requires the dedicated registry/provider
+data and scopes to be staged first; there is no fallback, import or activation.

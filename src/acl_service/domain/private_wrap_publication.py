@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import hashlib
 import time
 from acl_service.domain.history_store import HistoryConflict
+from acl_service.domain.private_wrap_delivery import bind_wrap_store
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,7 @@ async def publish_private_wrap(authority, store, tenant, owner, object, at, fenc
                     or permit.length != len(payload) or type(permit.expires_at) is not int
                     or not clock() < permit.expires_at <= clock()+3):
                 raise ValueError()
-            if await store.create_or_reconcile(permit.record, payload) != digest:
+            if await bind_wrap_store(store,permit.object).create_or_reconcile(permit.record, payload) != digest:
                 raise ValueError()
             if clock() >= permit.expires_at:
                 raise ValueError()

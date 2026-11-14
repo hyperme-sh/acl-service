@@ -32,6 +32,8 @@ class PrivateWrapStore:
     the caller to refresh authorization and reconcile by the retained digest;
     the adapter never retries writes or overwrites an existing record.
     """
+    _create_statuses = (201,)
+
     def __init__(self, origin, tenant, api_key, *, client=None, clock=time.monotonic):
         parsed = urlsplit(origin)
         if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
@@ -117,7 +119,7 @@ class PrivateWrapStore:
                     raise ValueError()
                 if response.status_code == 412:
                     raise WrapStorageConflict('private wrap record already exists')
-                if response.status_code != 201 or response.headers.get('etag') != '"' + revision + '"':
+                if response.status_code not in self._create_statuses or response.headers.get('etag') != '"' + revision + '"':
                     raise ValueError()
                 return revision
         except WrapStorageConflict:
