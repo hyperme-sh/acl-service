@@ -381,6 +381,49 @@ class MediaSourceContracts(TestCase):
         self.now=10000
         with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
 
+    def test_epoch_context_is_read_only_and_hides_unrelated_identities(self):
+        self.ready()
+        self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}
+        before=self.source.read_view(OBJECT,self.now)
+        context=self.source._owner_epoch_view(TENANT,'owner',OBJECT,lambda:None)
+        self.assertEqual(context['previousEpoch'],1)
+        self.assertEqual(context['previousFinalizationId'],'d'*64)
+        self.assertEqual(context['snapshot'],before['snapshot'])
+        self.assertEqual(context['fence'],before['fence'])
+        self.assertEqual(context['ownerPub'],'owner-key')
+        self.assertEqual(set(context['bindings']),{'owner','reader'})
+        self.assertEqual(self.source.read_view(OBJECT,self.now),before)
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        with self.assertRaises(HistoryConflict):
+            self.source.mutate(TENANT,'owner',OBJECT,self.now,context['fence'],'grant',self.grant(grantRevision=3))
+
+    def test_epoch_context_refuses_missing_settlement_owner_tenant_and_cancel(self):
+        def context(tenant=TENANT,writer='owner',cancel=lambda:None):
+            return self.source._owner_epoch_view(tenant,writer,OBJECT,cancel)
+        with self.assertRaises(AdmissionRejected):context()
+        self.ready()
+        for values in [{'tenant':'other'},{'writer':'reader'}]:
+            with self.assertRaises(AdmissionRejected):context(**values)
+        self.native[3].matches_settled.return_value=False
+        with self.assertRaises(AdmissionRejected):context()
+        self.native[3].matches_settled.return_value=True
+        with patch.object(self.source,'_selected_finalization',return_value={'epoch':9007199254740991}):
+            with self.assertRaises(AdmissionRejected):context()
+        def cancelled():raise AdmissionRejected('cancelled')
+        with self.assertRaises(AdmissionRejected):context(cancel=cancelled)
+
+    def test_epoch_parent_survives_grant_change_without_authorizing_old_reads(self):
+        self.ready()
+        previous=self.source.read_view(OBJECT,self.now)['snapshot']
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.native[3].matches_settled.side_effect=lambda raw:json.loads(raw)['current']==previous
+        context=self.source._owner_epoch_view(TENANT,'owner',OBJECT,lambda:None)
+        self.assertEqual(context['previousFinalizationId'],'d'*64)
+        self.assertEqual(context['snapshot']['entries'][0]['stated'],0)
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,self.now)
+            with self.assertRaises(AdmissionRejected):self.source._selected(OBJECT,doc,self.now)
+
     def test_owner_view_restricts_identity_inventory_and_requires_fixed_owner(self):
         view=self.source._owner_view(TENANT,'owner',OBJECT,lambda:None)
         self.assertEqual(set(view['bindings']),{'owner'})
@@ -525,6 +568,9 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
         self.assertFalse(source.slots.locked())
         source._owner_view=Mock(return_value={'fence':'held'});source.mutate=Mock(return_value=True)
         self.assertEqual(await source.owner_view(TENANT,'owner',OBJECT),{'fence':'held'})
+        source._owner_epoch_view=Mock(return_value={'previousEpoch':1})
+        self.assertEqual(await source.owner_epoch_view(TENANT,'owner',OBJECT),{'previousEpoch':1})
+        self.assertEqual(source._owner_epoch_view.call_args.args[:-1],(TENANT,'owner',OBJECT))
         self.assertTrue(await source.owner_mutate(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
         self.assertEqual(source.mutate.call_args.args[:-1],(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
         source.prepare_write=Mock(return_value='write-permit');source.commit_write=Mock(return_value=True)
