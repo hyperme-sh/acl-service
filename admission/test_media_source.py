@@ -526,6 +526,20 @@ class MediaSourceContracts(TestCase):
             _,doc=self.source._load(db,OBJECT,self.now)
             self.assertEqual(doc['frozen'],[])
 
+    def test_unshare_plan_cancels_target_and_prepares_remaining_reader_epoch(self):
+        self.share_ready();before=self.source.read_view(OBJECT,self.now)
+        plan=self.source._owner_unshare_view(TENANT,'owner',OBJECT,'reader',lambda:None)
+        self.assertEqual(set(plan['bindings']),{'owner'})
+        drafts={g['accessor']:g for g in plan['grants']}
+        self.assertEqual((drafts['reader']['stated'],drafts['reader']['grantRevision'],drafts['reader']['epoch']),(0,2,2))
+        self.assertEqual((drafts['owner']['stated'],drafts['owner']['epoch']),(1,2))
+        self.assertEqual(drafts['reader']['until'],self.grant()['claims']['until'])
+        self.assertEqual(self.source.read_view(OBJECT,self.now),before)
+        with self.assertRaises(AdmissionRejected):self.source._owner_unshare_view(TENANT,'owner',OBJECT,'new',lambda:None)
+        with self.assertRaises(AdmissionRejected):self.source._owner_unshare_view(TENANT,'owner',OBJECT,'owner',lambda:None)
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        with self.assertRaises(AdmissionRejected):self.source._owner_unshare_view(TENANT,'owner',OBJECT,'reader',lambda:None)
+
     def test_epoch_context_is_read_only_and_hides_unrelated_identities(self):
         self.ready()
         self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}
