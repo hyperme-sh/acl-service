@@ -65,7 +65,12 @@ class AllocationBinding:
                 raw=await RetirementBinding(self.tenant,self.reader,self.authority,signer).prepare(object)
                 command=json.loads(raw)['claims']['command']
                 scope=RetirementScope(self.issuer,self.tenant,self.source,object,self.reader,command)
-                return await self.client.retire(scope,raw)
+                result=await self.client.retire(scope,raw)
+                if result!={'accepted':True,'command':command,'cleanup':'complete'}:
+                    raise AdmissionRejected('Media cleanup unconfirmed')
+                await self.authority._work(lambda cancel:self.authority.confirm_retirement(
+                    self.tenant,self.reader,object,command,cancel=cancel))
+                return result
         except asyncio.CancelledError:
             raise
         except HistoryConflict:

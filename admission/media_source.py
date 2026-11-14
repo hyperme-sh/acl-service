@@ -508,6 +508,27 @@ class MediaSource:
                 raise AdmissionRejected('invalid signed retirement request')
             return request
 
+    def confirm_retirement(self, tenant, writer, object, command, cancel=lambda:None):
+        """Record a trusted storage completion for the original accepted command."""
+        at=int(self.clock());guard=lambda:self._guard(at,cancel)
+        guard()
+        if tenant!=self.tenant: raise AdmissionRejected('wrong media tenant')
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+            if row is None: raise AdmissionRejected('media source unavailable')
+            self._checkpoint(db,object,row);doc=json.loads(row[2])
+            deleted=doc.get('deletion')
+            if not deleted or deleted['owner']!=writer or deleted['command']!=command:
+                raise AdmissionRejected('accepted owner deletion required')
+            held=db.execute('SELECT allocation,digest FROM media_allocations WHERE object=?',(object,)).fetchone()
+            anchor=db.execute('SELECT allocation,digest FROM freshness.media_allocations WHERE object=?',(object,)).fetchone()
+            if held is None or held!=anchor:
+                raise HistoryConflict('retirement allocation checkpoint mismatch')
+            if deleted.get('cleanupComplete') is True: return False
+            deleted['cleanupComplete']=True
+            self._save(db,object,row,doc)
+            return True
+
     def _selected(self, object, doc, at):
         for row in reversed(doc['finalizations']):
             fin=row['proof']
@@ -625,7 +646,7 @@ class MediaSource:
     async def owner_view(self, tenant, writer, object):
         return await self._work(self._owner_view, tenant, writer, object)
 
-    def _owner_catalog(self, tenant, writer, page, cancel):
+    def _owner_catalog(self, tenant, writer, page, cancel, *, cleanup=False):
         if tenant != self.tenant or type(writer) is not str or type(page) is not int or not 0 <= page < 16:
             raise AdmissionRejected('invalid media catalog request')
         if re.fullmatch(r'[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}',writer) is None:
@@ -644,6 +665,13 @@ class MediaSource:
                               (len(prefix),prefix,page*4)).fetchall()
             for (object,) in rows:
                 self._guard(at,cancel)
+                if cleanup:
+                    row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+                    self._checkpoint(db,object,row);doc=json.loads(row[2])
+                    deleted=doc.get('deletion')
+                    if deleted and deleted['owner']==writer and deleted.get('cleanupComplete') is not True:
+                        objects.append({'object':object,'command':deleted['command']})
+                    continue
                 _,doc = self._load(db,object,at,catalog=True)
                 if 'deletion' in doc: continue
                 identities = self.identities(db,object,doc,at)
@@ -651,6 +679,9 @@ class MediaSource:
                     objects.append(object)
             self._guard(at,cancel)
         return {'at':at,'objects':objects,'nextPage':page+1 if page<15 else None}
+
+    async def owner_cleanup_catalog(self, tenant, writer, page):
+        return await self._work(lambda cancel:self._owner_catalog(tenant,writer,page,cancel,cleanup=True))
 
     async def owner_catalog(self, tenant, writer, page):
         return await self._work(self._owner_catalog,tenant,writer,page)

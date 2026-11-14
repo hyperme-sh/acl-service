@@ -156,6 +156,23 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
         with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
 
+    def test_cleanup_catalog_uses_permanent_owner_command_after_policy_expiry(self):
+        owner,objects=self.catalog_fixture()
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        command=self.source.delete(TENANT,owner,objects[0],self.now,{},verifier=verifier)
+        self.now=11000
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,0,lambda:None,cleanup=True),
+            {'at':11000,'objects':[{'object':objects[0],'command':command}],'nextPage':1})
+        with self.store._transaction(write=True) as db:
+            row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(objects[0],)).fetchone()
+            doc=json.loads(row[2]);doc['deletion']['cleanupComplete']=True
+            self.source._save(db,objects[0],row,doc)
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,0,lambda:None,cleanup=True)['objects'],[])
+        with self.store._transaction(write=True) as db:
+            db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(objects[0],))
+        with self.assertRaises(AdmissionRejected):
+            self.source._owner_catalog(TENANT,owner,0,lambda:None,cleanup=True)
+
     def test_catalog_skips_verified_tombstones_but_rejects_corruption(self):
         owner,objects=self.catalog_fixture()
         verifier=Mock();verifier.matches_deletion.return_value=True
@@ -579,6 +596,25 @@ class AllocationConsumptionContracts(MediaSourceContracts):
         with self.assertRaises(RuntimeError):prepare(cancel=cancel)
         signer.side_effect=lambda claims:setattr(self,'now',self.now+1) or b'valid'
         with self.assertRaises(HistoryConflict):prepare()
+
+    def test_retirement_completion_is_exact_checkpointed_and_idempotent(self):
+        record,proof=self.allocation()
+        with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)
+        def confirm(tenant=TENANT,writer='owner',object='media_new',command='bad',**kw):
+            return self.source.confirm_retirement(tenant,writer,object,command,**kw)
+        with self.assertRaises(AdmissionRejected):confirm()
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        command=self.source.delete(TENANT,'owner','media_new',self.now,{},verifier=verifier)
+        for args in [{'tenant':'other'},{'writer':'reader'},{'object':'missing'},{'command':'bad'}]:
+            with self.assertRaises(AdmissionRejected):confirm(**{'command':command,**args})
+        def cancel():raise RuntimeError('cancelled')
+        with self.assertRaises(RuntimeError):confirm(command=command,cancel=cancel)
+        self.now=11000
+        self.assertTrue(confirm(command=command))
+        self.assertFalse(confirm(command=command))
+        with self.store._transaction(write=True) as db:
+            db.execute('DELETE FROM media_allocations WHERE object=?',('media_new',))
+        with self.assertRaises(HistoryConflict):confirm(command=command)
 
     def test_retirement_refuses_allocation_or_source_rollback(self):
         record,proof=self.allocation()
