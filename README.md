@@ -923,3 +923,20 @@ The native group settlement-policy adapter verifies an existing signed
 fields. It does not select the current policy, establish set ownership or grant
 media delivery. Protected group policy persistence and source consumption remain
 separate from this bounded adapter; existing direct-media routes are unchanged.
+
+### Protected group policy source
+
+The source's `group_policy_view` and `append_group_policy` methods retain at most
+64 set-owner-signed settlement configurations per media object. They require the
+media owner's authenticated writer, a current write fence and an already admitted
+group scope. Set ownership and its current signing key are resolved separately
+from the media owner through the protected enrolled histories. The installed
+SociACL native verifier authenticates the exact scope, revision and window.
+
+Reads revalidate every matching configuration under the current set-owner key,
+then select the greatest revision, breaking ties by the smallest canonical signed
+transcript digest, as in SociACL. A key change that leaves no current signature
+returns no policy. Exact retries do not change the source; new rows advance its
+checkpoint and object version. Capacity never prunes signed history. These methods
+are not HTTP routes yet and do not turn group members into direct grants, select
+media epochs or deliver wraps. Existing direct-media behavior remains unchanged.
