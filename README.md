@@ -806,3 +806,28 @@ primary checkpoints refuse the page. Hidden objects disclose no IDs or total
 count: page traversal is fixed through page 15. Listing never reads storage or
 grants delivery; opening an item must perform the existing current read check.
 Older source adapters without this optional operation return unavailable.
+
+### First owner of a new s3r.ch media source
+
+`admission/first_media_owner.py` provides the explicit operator-only
+`admit_first_media_owner` entry point. This starts a fresh ACL journal for an
+existing SEA key; it does not import prior ACL history or generate an identity.
+The trusted resolver must uniquely resolve wallet
+`0x4C8d36f87287e75D3D84F1aeD72655ecCbC7A1A7` under Infra #1261 to the declared
+principal. Missing, ambiguous or changed resolution refuses admission. Public
+wallet-link exports are not a substitute for that resolver.
+
+The existing key signs the normal enrollment transcript using the authority
+`s3rch-first-media-owner-v1:<tenant>:<source>:<lowercase-wallet>`, a 32-byte lowercase hexadecimal nonce and an expiry at most
+60 seconds away. Native verification authenticates its genesis encryption-key
+binding and signature. Tenant and source must match the already provisioned
+PostgreSQL store. The store locks both source markers, verifies the independent
+checkpoint and refuses any prior history, ciphertext, media or allocation rows.
+It inserts exactly one owner with empty history and initial independent
+ciphertext counters in one transaction, rechecking resolution before commit.
+Any replay or competing first admission refuses; a failed commit leaves no rows.
+
+No runtime loader or HTTP route calls this entry point. Installation and
+activation remain off until Infra #1261 supplies the unique resolution and the
+controlled provisioning inputs. No additional reader or primary-member authority
+is installed. The existing generic enrollment path retains its separate contract.

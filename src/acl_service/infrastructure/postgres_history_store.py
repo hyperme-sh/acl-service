@@ -77,6 +77,24 @@ class PostgresHistoryStore(RelationalHistoryStore):
     def close(self):
         self.engine.dispose()
 
+    def enroll_first_media_owner(self, principal, genesis, *, before_commit):
+        """Internal verified bootstrap; refuse any prior source contents."""
+        import hashlib
+        if not principal or type(genesis) is not bytes or not genesis or not callable(before_commit):
+            raise ValueError('verified first owner required')
+        with self._transaction(write=True,before_commit=before_commit) as db:
+            before_commit()
+            for table in ('history_accounts','history_entries','history_head_floors','history_ciphertext',
+                          'media_sources','media_allocations','freshness.ciphertext_heads',
+                          'freshness.media_checkpoints','freshness.media_allocations'):
+                if db.execute(f'SELECT 1 FROM {table} LIMIT 1').fetchone() is not None:
+                    raise HistoryConflict('first owner requires empty source')
+            if self.active_media_index and db.execute('SELECT 1 FROM freshness.media_active LIMIT 1').fetchone() is not None:
+                raise HistoryConflict('first owner requires empty source')
+            db.execute('INSERT INTO history_accounts VALUES (?,?)',(principal,genesis))
+            db.executemany('INSERT INTO freshness.ciphertext_heads VALUES(?,?,0,?)',
+                           [(principal,kind,hashlib.sha256(b'').digest()) for kind in ('recovery','wraps')])
+
     @contextmanager
     def _transaction(self, *, write, ciphertext=False, before_commit=None):
         try:
