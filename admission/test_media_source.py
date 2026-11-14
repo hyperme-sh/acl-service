@@ -39,6 +39,12 @@ class MediaSourceContracts(TestCase):
         self.source=MediaSource(self.store,TENANT,clock=lambda:self.now,identities=self.identities,native=self.native)
         self.source.provision(OBJECT,{},10000,exclusive_grant=lambda *args:True)
 
+    def enable_active_index(self):
+        with self.store._transaction(write=False) as db:
+            db.execute('CREATE TABLE freshness.media_active (object TEXT PRIMARY KEY)')
+            db.execute('INSERT INTO freshness.media_active SELECT object FROM freshness.media_checkpoints')
+        self.store.active_media_index=True
+
     def mutate(self,operation,payload,**kwargs):
         fence=self.source.read_view(OBJECT,self.now)['fence']
         return self.source.mutate(TENANT,'owner',OBJECT,self.now,fence,operation,payload,**kwargs)
@@ -68,6 +74,51 @@ class MediaSourceContracts(TestCase):
         for object in objects:
             self.source.provision(object,{},10000,exclusive_grant=lambda *args:True)
         return owner,objects
+
+    def test_reader_catalog_requires_current_grant_status_epoch_and_wrap(self):
+        def catalog():return self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+        self.assertEqual(catalog(),{'at':100,'objects':[],'nextPage':1})
+        self.ready()
+        self.assertEqual(catalog()['objects'],[OBJECT])
+        self.assertEqual(self.source._reader_catalog(TENANT,'owner',0,lambda:None)['objects'],[])
+        for verifier,name in [(self.native[0],'matches_grant'),(self.native[1],'matches_status'),(self.native[3],'matches_settled')]:
+            getattr(verifier,name).return_value=False
+            self.assertEqual(catalog()['objects'],[])
+            getattr(verifier,name).return_value=True
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.assertEqual(catalog()['objects'],[])
+
+    def test_reader_visible_positions_do_not_depend_on_hidden_objects(self):
+        self.ready()
+        before=self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+        for i in range(8):self.source.provision('media_hidden_'+str(i),{},10000,exclusive_grant=lambda *args:True)
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',0,lambda:None),before)
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',1,lambda:None)['objects'],[])
+
+    def test_reader_catalog_bounds_hidden_pages_and_cancellation(self):
+        self.ready()
+        self.assertEqual(self.source._reader_catalog(TENANT,'unknown',0,lambda:None),{'at':100,'objects':[],'nextPage':1})
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',15,lambda:None),{'at':100,'objects':[],'nextPage':None})
+        for page in (True,-1,16,'0'):
+            with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',page,lambda:None)
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog('other','reader',0,lambda:None)
+        def cancel():raise RuntimeError('cancelled')
+        with self.assertRaises(RuntimeError):self.source._reader_catalog(TENANT,'reader',0,cancel)
+        self.now=10001
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',0,lambda:None)['objects'],[])
+
+    def test_reader_catalog_refuses_missing_primary_and_changed_checkpoint(self):
+        self.ready()
+        with self.store._transaction(write=False) as db:db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+        with self.store._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+
+    def test_reader_catalog_uses_active_index_and_never_fetches_storage(self):
+        self.ready();self.enable_active_index()
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',0,lambda:None)['objects'],[OBJECT])
+        with self.store._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',0,lambda:None)
 
     def test_owner_catalog_has_fixed_pages_without_unrelated_ids_or_positions(self):
         owner,objects=self.catalog_fixture()
@@ -694,12 +745,6 @@ class AllocationConsumptionContracts(MediaSourceContracts):
         with self.store._transaction(write=True) as db:
             db.execute('DELETE FROM media_allocations WHERE object=?',('media_new',))
         with self.assertRaises(HistoryConflict):confirm(command=command)
-
-    def enable_active_index(self):
-        with self.store._transaction(write=False) as db:
-            db.execute('CREATE TABLE freshness.media_active (object TEXT PRIMARY KEY)')
-            db.execute('INSERT INTO freshness.media_active SELECT object FROM freshness.media_checkpoints')
-        self.store.active_media_index=True
 
     def test_active_capacity_released_only_after_confirmed_cleanup(self):
         self.enable_active_index()
