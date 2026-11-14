@@ -798,8 +798,9 @@ this endpoint alone does not implement sharing or recovery.
 ### Current-reader media catalog
 
 `POST /acl/sociacl/media/catalog` accepts only a page number (0–15) and uses
-the configured authenticated reader with `acl:media:read`. Each page examines
-at most four source objects and returns only non-owned objects satisfying the
+the configured authenticated reader with `acl:media:read`. Each request examines
+at most 64 source objects and paginates four authorized entries only after the
+current authorization filter. It returns only non-owned objects satisfying the
 current grant, status, settled epoch and wrap checks. Missing or mismatched
 primary checkpoints refuse the page. Hidden objects disclose no IDs or total
 count: page traversal is fixed through page 15. Listing never reads storage or

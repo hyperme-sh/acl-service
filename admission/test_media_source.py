@@ -88,6 +88,13 @@ class MediaSourceContracts(TestCase):
         self.mutate('grant',self.grant(stated=0,grantRevision=2))
         self.assertEqual(catalog()['objects'],[])
 
+    def test_reader_visible_positions_do_not_depend_on_hidden_objects(self):
+        self.ready()
+        before=self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+        for i in range(8):self.source.provision('media_hidden_'+str(i),{},10000,exclusive_grant=lambda *args:True)
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',0,lambda:None),before)
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',1,lambda:None)['objects'],[])
+
     def test_reader_catalog_bounds_hidden_pages_and_cancellation(self):
         self.ready()
         self.assertEqual(self.source._reader_catalog(TENANT,'unknown',0,lambda:None),{'at':100,'objects':[],'nextPage':1})
