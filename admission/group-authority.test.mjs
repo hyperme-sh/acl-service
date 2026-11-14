@@ -65,3 +65,14 @@ test('scope, signatures, future records and incomplete histories refuse',()=>{
  const missing=new Map(accounts);missing.delete(member);assert.throws(()=>run(input(),missing));
  assert.throws(()=>run(input([owned,cancel()])));
 });
+
+test('epoch material keeps independent membership and object-set HAM and removals',()=>{
+ const result=run(input([owned,assent('member',1,3),assent('set',1,7),edge]));
+ assert.deepEqual(result.snapshot,{members:[{accessor:member,predicate:'same-group',setId:set,stated:1,hamState:7}],
+  objectSet:{predicate:'same-group',setId:set,stated:1,hamState:1}});
+ const removed=run(input([...rows(),cancel()]));
+ assert.equal(removed.snapshot.members[0].stated,0);assert.equal(removed.snapshot.objectSet.stated,1);
+ const detached=run(input([...rows(),cancel('object-set')]));
+ assert.equal(detached.snapshot.members[0].stated,1);assert.equal(detached.snapshot.objectSet.stated,0);
+ assert.equal(run(input([owned])).snapshot,null);
+});
