@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
+from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.private_wrap_delivery import (
     WrapAuthority, WrapDeliveryRejected, deliver_private_wrap_context,
 )
@@ -46,6 +47,16 @@ async def capacity(slots):
 @router.post('/read-wrap')
 async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_tenant),
                     user: AuthMeResponse = Depends(get_current_user)):
+    return await _private_operation('read-wrap',request,tenant,user)
+
+
+@router.post('/catalog')
+async def reader_catalog(request: Request, tenant: UUID = Depends(require_matched_tenant),
+                         user: AuthMeResponse = Depends(get_current_user)):
+    return await _private_operation('catalog',request,tenant,user)
+
+
+async def _private_operation(action,request,tenant,user):
     # The authenticated subject is mapped by the owner, never by request JSON.
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
@@ -74,7 +85,10 @@ async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_ten
             try:
                 body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields,
                                   parse_constant=_invalid_constant)
-                if (type(body) is not dict or set(body) != {'object'}
+                if action=='catalog':
+                    if type(body) is not dict or set(body)!={'page'} or type(body['page']) is not int or not 0<=body['page']<16:
+                        raise ValueError()
+                elif (type(body) is not dict or set(body) != {'object'}
                         or type(body['object']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['object']) is None):
                     raise ValueError()
@@ -83,6 +97,11 @@ async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_ten
             # One tenant cannot occupy both global delivery slots.
             async with capacity(request.app.state.private_wrap_tenant_slots[tenant]):
                 async with capacity(request.app.state.private_wrap_slots):
+                    if action=='catalog':
+                        catalog=getattr(binding.authority,'reader_catalog',None)
+                        if not callable(catalog):raise refused(503,'Private catalog unavailable')
+                        result=await catalog(str(tenant),binding.reader,body['page'])
+                        return JSONResponse(result,headers=PRIVATE)
                     result = await deliver_private_wrap_context(binding.authority, binding.store,
                                                                 str(tenant), binding.reader, body['object'])
             return JSONResponse({
@@ -90,6 +109,10 @@ async def read_wrap(request: Request, tenant: UUID = Depends(require_matched_ten
                 'readerEpub': result.reader_epub, 'expiresAt': result.expires_at,
                 'wrapBase64': base64.b64encode(result.payload).decode('ascii'),
             }, headers=PRIVATE)
+    except HistoryConflict:
+        raise refused(409, 'Private media source changed') from None
+    except AdmissionRejected:
+        raise refused(403, 'Private media access refused') from None
     except WrapDeliveryRejected:
         raise refused(403, 'Private wrap access refused') from None
     except TimeoutError:

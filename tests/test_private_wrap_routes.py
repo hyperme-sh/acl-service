@@ -203,3 +203,33 @@ async def test_one_tenant_cannot_take_both_backend_slots(setup):
         assert (await work).status_code == 200
     assert s.app.state.private_wrap_slots._value == 2
     assert s.app.state.private_wrap_tenant_slots[s.tenant]._value == 1
+
+
+@pytest.mark.asyncio
+async def test_reader_catalog_uses_authenticated_binding_without_fetching_wraps(setup):
+    s=setup;s.authority.reader_catalog=AsyncMock(return_value={'at':100,'objects':['media-object'],'nextPage':1})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://owner') as client:
+        response=await client.post('/acl/sociacl/media/catalog',json={'page':0})
+        assert response.status_code==200
+        assert response.json()=={'at':100,'objects':['media-object'],'nextPage':1}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.reader_catalog.assert_awaited_once_with(str(s.tenant),'enrolled-reader',0)
+        s.authority.authorize_read.assert_not_called();s.store.read.assert_not_called()
+        for body in [{'page':True},{'page':16},{'page':-1},{'page':0,'reader':'other'},{}]:
+            assert (await client.post('/acl/sociacl/media/catalog',json=body)).status_code==400
+        s.actor.scopes=[]
+        assert (await client.post('/acl/sociacl/media/catalog',json={'page':0})).status_code==403
+        assert s.authority.reader_catalog.await_count==1
+
+
+@pytest.mark.asyncio
+async def test_reader_catalog_refuses_old_source_conflicts_and_unavailable_authority(setup):
+    from acl_service.domain.history_store import AdmissionRejected,HistoryConflict
+    s=setup
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://owner') as client:
+        s.authority.reader_catalog=None
+        assert (await client.post('/acl/sociacl/media/catalog',json={'page':0})).status_code==503
+        for error,status in [(AdmissionRejected(),403),(HistoryConflict(),409),(TimeoutError(),503)]:
+            s.authority.reader_catalog=AsyncMock(side_effect=error)
+            assert (await client.post('/acl/sociacl/media/catalog',json={'page':0})).status_code==status
+        s.store.read.assert_not_called()

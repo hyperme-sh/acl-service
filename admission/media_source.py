@@ -592,6 +592,32 @@ class MediaSource:
         permit=WrapReadPermit(tenant,reader,object,wrap['record'],wrap['digest'],selected['epoch'],selected['revisionId'],wrap['readerEpub'],fence,expires)
         return permit,ids,row,doc
 
+    def _reader_catalog(self, tenant, reader, page, cancel):
+        at=int(self.clock());guard=lambda:self._guard(at,cancel)
+        guard()
+        if tenant!=self.tenant or type(reader) is not str or type(page) is not int or not 0<=page<16:
+            raise AdmissionRejected('invalid media reader catalog')
+        objects=[]
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            candidates='freshness.media_active' if getattr(self.store,'active_media_index',False) else '(SELECT object FROM media_sources UNION SELECT object FROM freshness.media_checkpoints) AS candidates'
+            rows=db.execute(f'SELECT object FROM {candidates} ORDER BY object LIMIT 4 OFFSET ?',(page*4,)).fetchall()
+            for (object,) in rows:
+                guard()
+                # Corrupt or missing primary data cannot silently disappear.
+                row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+                if row is None:raise AdmissionRejected('media source unavailable')
+                self._checkpoint(db,object,row)
+                try:
+                    _,ids,_,_=self._permit(db,tenant,reader,object,at)
+                except AdmissionRejected:
+                    continue  # No current grant/status/wrap: disclose no ID.
+                if ids['owner']!=reader:objects.append(object)
+            # Fixed page traversal discloses neither hidden IDs nor their count.
+            return {'at':at,'objects':objects,'nextPage':page+1 if page<15 else None}
+
+    async def reader_catalog(self, tenant, reader, page):
+        return await self._work(self._reader_catalog,tenant,reader,page)
+
     def authorize(self, tenant, reader, object, cancel=lambda:None):
         at=int(self.clock()); self._guard(at,cancel)
         with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:

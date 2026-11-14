@@ -794,3 +794,14 @@ This read-only preparation does not change grants, publish wraps or advance an
 epoch. Subsequent owner signatures still require the current write fence. The
 browser must preserve its intended signed changes across interrupted publication;
 this endpoint alone does not implement sharing or recovery.
+
+### Current-reader media catalog
+
+`POST /acl/sociacl/media/catalog` accepts only a page number (0–15) and uses
+the configured authenticated reader with `acl:media:read`. Each page examines
+at most four source objects and returns only non-owned objects satisfying the
+current grant, status, settled epoch and wrap checks. Missing or mismatched
+primary checkpoints refuse the page. Hidden objects disclose no IDs or total
+count: page traversal is fixed through page 15. Listing never reads storage or
+grants delivery; opening an item must perform the existing current read check.
+Older source adapters without this optional operation return unavailable.

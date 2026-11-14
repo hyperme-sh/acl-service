@@ -69,6 +69,44 @@ class MediaSourceContracts(TestCase):
             self.source.provision(object,{},10000,exclusive_grant=lambda *args:True)
         return owner,objects
 
+    def test_reader_catalog_requires_current_grant_status_epoch_and_wrap(self):
+        def catalog():return self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+        self.assertEqual(catalog(),{'at':100,'objects':[],'nextPage':1})
+        self.ready()
+        self.assertEqual(catalog()['objects'],[OBJECT])
+        self.assertEqual(self.source._reader_catalog(TENANT,'owner',0,lambda:None)['objects'],[])
+        for verifier,name in [(self.native[0],'matches_grant'),(self.native[1],'matches_status'),(self.native[3],'matches_settled')]:
+            getattr(verifier,name).return_value=False
+            self.assertEqual(catalog()['objects'],[])
+            getattr(verifier,name).return_value=True
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.assertEqual(catalog()['objects'],[])
+
+    def test_reader_catalog_bounds_hidden_pages_and_cancellation(self):
+        self.ready()
+        self.assertEqual(self.source._reader_catalog(TENANT,'unknown',0,lambda:None),{'at':100,'objects':[],'nextPage':1})
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',15,lambda:None),{'at':100,'objects':[],'nextPage':None})
+        for page in (True,-1,16,'0'):
+            with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',page,lambda:None)
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog('other','reader',0,lambda:None)
+        def cancel():raise RuntimeError('cancelled')
+        with self.assertRaises(RuntimeError):self.source._reader_catalog(TENANT,'reader',0,cancel)
+        self.now=10001
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',0,lambda:None)['objects'],[])
+
+    def test_reader_catalog_refuses_missing_primary_and_changed_checkpoint(self):
+        self.ready()
+        with self.store._transaction(write=False) as db:db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+        with self.store._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+
+    def test_reader_catalog_uses_active_index_and_never_fetches_storage(self):
+        self.ready();self.enable_active_index()
+        self.assertEqual(self.source._reader_catalog(TENANT,'reader',0,lambda:None)['objects'],[OBJECT])
+        with self.store._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',(OBJECT,))
+        with self.assertRaises(AdmissionRejected):self.source._reader_catalog(TENANT,'reader',0,lambda:None)
+
     def test_owner_catalog_has_fixed_pages_without_unrelated_ids_or_positions(self):
         owner,objects=self.catalog_fixture()
         foreign='media_p_'+'0'*128+'_'+'0'*32
