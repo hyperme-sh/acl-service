@@ -1,3 +1,4 @@
+import {authorizeAppObjectAppend, requireCurrentParentOwner} from "./app-object-policy.mjs";
 import {enforceStatementQuota} from './statement-quota.mjs';
 // Uses the same authenticated identity contexts as recovery admission.
 import {resolveStoreAccount, verifyObjectRecord, verifySeeGrant, verifyPostGrant,
@@ -46,13 +47,12 @@ export function statementGraph(accounts, contextFor, now, graph) {
     if (!row || row.record.stated !== 1 || row.record.from > now || row.record.until <= now) return false;
     verify(row); return true;
   };
-  if (graph.statementOnly && proposed.length) {
-    const object = proposed[0].record.object, owner = proposed[0].record.owner;
-    if (!object.startsWith('stmt_') || proposed.some(row => row.record.object !== object || row.record.owner !== owner || row.kind === 'post') ||
-        !allowed('see', owner) || !allowed('post', owner)) throw Error('statement-denied');
-    for (const row of proposed) if (row.kind === 'see' && (row.record.until > now + 3600 ||
-        (row.record.stated === 1 && !allowed('see', row.record.accessor)))) throw Error('reader-denied');
+  if (graph.statementOnly && proposed.some(row => row.record.object.startsWith('room_'))) {
+    requireCurrentParentOwner(held, graph.forum, forumOwner, verify);
+    const child = proposed.find(row => row.record.object.startsWith('room_'));
+    requireCurrentParentOwner([...held, ...proposed], child.record.object, child.record.owner, verify, 'missing-room-owner');
   }
+  if (graph.statementOnly) authorizeAppObjectAppend(proposed, held, allowed, now);
   // Retain every admitted cancellation and prior record. No overwriting history.
   const identity = row => JSON.stringify([row.kind, row.soul, Buffer.from(row.bytes).toString('base64')]);
   const seen = new Set(held.map(identity)), novel = [];
