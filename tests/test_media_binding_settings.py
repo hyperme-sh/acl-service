@@ -163,3 +163,47 @@ class MediaBindingUnits(TestCase):
                 patch.object(m.os.path,'samefile',return_value=False):
             with self.assertRaisesRegex(RuntimeError,'Invalid private media binding configuration'):
                 m.load_media_bindings({m.CONFIG_NAME:'/private/config'},allocation_bindings={'bound':allocation})
+
+    def test_postgres_bindings_snapshot_and_check_source_without_bootstrap(self):
+        from contextlib import contextmanager
+        from dataclasses import replace
+        postgres_row={key:value for key,value in row().items() if key not in ('historyFile','freshnessFile')}
+        postgres_row['postgresFile']='/private/postgres'
+        parsed=m.parse_settings(json.dumps({'version':2,'bindings':[postgres_row,{**postgres_row,'subject':'second'}]}).encode())
+        spec=Mock();reader=Mock(return_value=spec)
+        with patch.dict(sys.modules,{'acl_service.infrastructure.media_postgres_settings':SimpleNamespace(read_postgres_settings=reader)}):
+            prepared=m._prepare_settings(parsed)
+        reader.assert_called_once()
+        binding=prepared[0]
+        self.assertIs(binding.postgres_settings,prepared[1].postgres_settings)
+        self.assertTrue(m._same_source(binding,SimpleNamespace(binding_spec=spec)))
+        self.assertFalse(m._same_source(binding,SimpleNamespace()))
+        with self.assertRaises(ValueError):m._provisioned(parsed[0])
+        store=Mock();spec.open.return_value=store;db=Mock()
+        @contextmanager
+        def transaction(**options):
+            self.assertEqual(options,{'write':False})
+            yield db
+        store._transaction=transaction
+        with patch.object(m,'_private_file',side_effect=lambda _:io.BytesIO()),patch.object(m.os.path,'samefile',return_value=False):
+            db.execute.return_value.fetchall.return_value=[]
+            with self.assertRaises(ValueError):m._provisioned(binding)
+            m._provisioned(binding,allow_empty=True)
+            db.execute.return_value.fetchall.return_value=[('media_x',)]
+            db.execute.return_value.fetchone.return_value=('digest',)
+            m._provisioned(binding)
+            db.execute.return_value.fetchone.return_value=None
+            with self.assertRaises(ValueError):m._provisioned(binding)
+        self.assertEqual(store.close.call_count,4)
+        with patch.object(m,'_private_file',side_effect=lambda _:io.BytesIO()),patch.object(m.os.path,'samefile',return_value=True):
+            with self.assertRaises(ValueError):m._provisioned(binding)
+        modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
+                 for name in ('history_admission','statement_source','media_source')}
+        factory=Mock();modules['media_source'].MediaSource=factory
+        with patch.dict(sys.modules,modules):
+            self.assertIs(m._source(binding),factory.return_value)
+            self.assertIs(store.binding_spec,spec)
+            with self.assertRaises(ValueError):m._source(parsed[0])
+            factory.side_effect=ValueError('missing state')
+            with self.assertRaises(ValueError):m._source(binding)
+        self.assertEqual(store.close.call_count,5)
