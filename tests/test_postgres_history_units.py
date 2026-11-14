@@ -37,3 +37,11 @@ def test_non_postgres_and_invalid_scopes_refuse_before_connecting(backend):
     for changes in ({}, {'checkpoint_schema':'acl_history'}, {'tenant':'00000000-0000-0000-0000-000000000000'}):
         with pytest.raises(ValueError):
             factory('sqlite://',**{**options,**changes})
+
+
+def test_first_owner_requires_verified_input_and_commit_guard():
+    from acl_service.infrastructure.postgres_history_store import PostgresHistoryStore
+    store=object.__new__(PostgresHistoryStore)
+    for principal,genesis,guard in [('',b'genesis',lambda:None),('owner','not-bytes',lambda:None),('owner',b'',lambda:None),('owner',b'genesis',None)]:
+        with pytest.raises(ValueError):
+            store.enroll_first_media_owner(principal,genesis,before_commit=guard)

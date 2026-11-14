@@ -237,3 +237,56 @@ def test_active_startup_accepts_more_than_64_retained_tombstones(source,tmp_path
         with current._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',('65',))
         with pytest.raises(ValueError,match='active checkpoint'):_provisioned(binding)
     finally:current.close()
+
+
+def test_first_owner_is_atomic_absence_only_and_survives_restart(source):
+    store,spec,url=source
+    store.enroll_first_media_owner('existing-owner',b'signed-genesis',before_commit=lambda:None)
+    assert store.read_authority()[1]['existing-owner'].entries==()
+    again=PostgresHistoryStore(url,**spec)
+    try:
+        assert again.read('existing-owner').genesis==b'signed-genesis'
+        for principal in ('existing-owner','another'):
+            with pytest.raises(HistoryConflict):
+                again.enroll_first_media_owner(principal,b'genesis',before_commit=lambda:None)
+    finally:again.close()
+
+
+def test_first_owner_cancellation_rolls_back_and_concurrency_has_one_winner(source):
+    store,spec,url=source
+    calls=0
+    def cancel():
+        nonlocal calls
+        calls+=1
+        if calls==2:raise RuntimeError('resolution changed')
+    with pytest.raises(RuntimeError,match='resolution changed'):
+        store.enroll_first_media_owner('owner',b'genesis',before_commit=cancel)
+    assert store.read_authority()==(0,{})
+    with store._transaction(write=False) as db:
+        assert db.execute('SELECT 1 FROM freshness.ciphertext_heads').fetchall()==[]
+    def admit(principal):
+        try:
+            store.enroll_first_media_owner(principal,b'genesis',before_commit=lambda:None)
+            return True
+        except HistoryConflict:return False
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(admit,['one','two']))==[False,True]
+    assert len(store.read_authority()[1])==1
+
+
+def test_first_owner_refuses_orphan_storage_rows_and_primary_rollback(source):
+    store,spec,url=source
+    with store._transaction(write=False) as db:
+        db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',('old-object',b'digest'))
+    with pytest.raises(HistoryConflict):
+        store.enroll_first_media_owner('owner',b'genesis',before_commit=lambda:None)
+    with store._transaction(write=False) as db:
+        db.execute('DELETE FROM freshness.media_checkpoints')
+    store.enroll_first_media_owner('owner',b'genesis',before_commit=lambda:None)
+    engine=create_engine(url)
+    try:
+        with engine.begin() as db:
+            db.execute(text(f'DELETE FROM "{spec["history_schema"]}".history_accounts'))
+        with pytest.raises(StoreRejected):
+            store.enroll_first_media_owner('replacement',b'genesis',before_commit=lambda:None)
+    finally:engine.dispose()

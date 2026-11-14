@@ -26,6 +26,11 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/pip" install coverage==7.6.1
           PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=statement_source -m unittest test_statement_source
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
+      - name: First media owner admission coverage (CI only)
+        working-directory: admission
+        run: |
+          PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=first_media_owner -m unittest test_first_media_owner
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=95 -m
       - name: Statement quota unit coverage
         run: node --test --test-isolation=none --experimental-test-coverage admission/statement-quota.test.mjs
       - name: Protected media transaction contracts and coverage (CI only)
