@@ -6,6 +6,8 @@ import json
 
 from acl_service.allocation_protocol.media_allocation_grant import AllocationScope, verify_allocation_grant
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
+from acl_service.domain.media_retirement import RetirementBinding
+from acl_service.allocation_protocol.media_retirement_request import RetirementRequestSigner,RetirementScope
 
 
 def canonical(value):
@@ -54,3 +56,19 @@ class AllocationBinding:
             raise
         except Exception:
             raise AdmissionRejected('Media allocation refused; reconcile') from None
+
+    async def retire(self, object):
+        signer=RetirementRequestSigner(issuer=self.issuer,tenant=self.tenant,source=self.source,
+            key_id=self.signer.key_id,signing_key=self.signer.signing_key)
+        try:
+            async with asyncio.timeout(4):
+                raw=await RetirementBinding(self.tenant,self.reader,self.authority,signer).prepare(object)
+                command=json.loads(raw)['claims']['command']
+                scope=RetirementScope(self.issuer,self.tenant,self.source,object,self.reader,command)
+                return await self.client.retire(scope,raw)
+        except asyncio.CancelledError:
+            raise
+        except HistoryConflict:
+            raise
+        except Exception:
+            raise AdmissionRejected('Media cleanup unconfirmed; retry') from None

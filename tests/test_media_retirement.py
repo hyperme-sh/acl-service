@@ -66,3 +66,25 @@ async def test_cancellation_conflict_and_source_refusal_preserved(setup):
     for error,expected in [(asyncio.CancelledError(),asyncio.CancelledError),(HistoryConflict('changed'),HistoryConflict),(ValueError(),AdmissionRejected),(TimeoutError(),AdmissionRejected)]:
         state['error']=error
         with pytest.raises(expected):await binding.prepare(object)
+
+
+@pytest.mark.asyncio
+async def test_allocation_binding_connects_protected_command_to_configured_client(setup):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from acl_service.domain.media_allocation import AllocationBinding
+    protected,object,state,key=setup
+    expected={'accepted':True,'command':'a'*64,'cleanup':'complete'}
+    client=SimpleNamespace(retire=AsyncMock(return_value=expected))
+    binding=AllocationBinding(protected.tenant,protected.reader,protected.authority,client,protected.signer,
+        protected.signer.issuer,protected.signer.source,{},0,{})
+    assert await binding.retire(object)==expected
+    sent,raw=client.retire.call_args.args
+    assert sent.command==state['claims']['command'] and sent.owner==protected.reader
+    verify_retirement_request(raw,expected=sent,keys={'source':key.public_key()},now=100)
+    state['error']=HistoryConflict('changed')
+    with pytest.raises(HistoryConflict):await binding.retire(object)
+    state['error']=asyncio.CancelledError()
+    with pytest.raises(asyncio.CancelledError):await binding.retire(object)
+    state['error']=None;client.retire.side_effect=TimeoutError()
+    with pytest.raises(AdmissionRejected):await binding.retire(object)
