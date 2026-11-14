@@ -831,3 +831,23 @@ No runtime loader or HTTP route calls this entry point. Installation and
 activation remain off until Infra #1261 supplies the unique resolution and the
 controlled provisioning inputs. No additional reader or primary-member authority
 is installed. The existing generic enrollment path retains its separate contract.
+
+### Protected owner share preparation
+
+`POST /acl/sociacl/media/owner/share-view` accepts only `{object, reader}`.
+The fixed owner must currently qualify for private delivery, including a fresh
+signed status and settled epoch. The target must already be enrolled; this
+operation cannot create a reader or accept caller-supplied identity bindings.
+It returns unsigned next-epoch grant drafts for the target and every unexpired
+recipient, plus the planned snapshot, parent finalization, current write fence
+and only those recipients' current bindings. Future start times are preserved;
+expired or cancelled targets require a new revision. Every retained recipient
+proof must match the current owner key and ciphertext digest. Policy expiry,
+revision exhaustion, frozen recipients and retained-history limits refuse plans.
+
+This is read-only preparation. No grant, epoch or wrap is published. The browser
+must obtain the owner's current encrypted-key material, preserve the exact signed
+intent in protected recovery storage, and reconcile interrupted publication.
+Until the resulting epoch settles and fresh statuses/wraps are accepted, the
+plan itself grants no access. Group expansion and the complete sharing UI remain
+separate work.

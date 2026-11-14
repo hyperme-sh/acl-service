@@ -37,6 +37,22 @@ WRITE={'object':'media-object','at':100,'fence':'a'*64,'operation':'grant','payl
 
 
 @pytest.mark.asyncio
+async def test_share_context_is_object_recipient_only_and_fixed_owner(setup):
+    s=setup;s.authority.owner_share_view=AsyncMock(return_value={'grants':[]})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        body={'object':'media-object','reader':'recipient'}
+        response=await client.post(BASE+'share-view',json=body)
+        assert response.status_code==200
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_share_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','recipient')
+        for extra in ({'writer':'other'},{'until':999},{'epoch':2},{'reader':[]}):
+            assert (await client.post(BASE+'share-view',json={**body,**extra})).status_code==400
+        s.authority.owner_share_view=None
+        assert (await client.post(BASE+'share-view',json=body)).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_epoch_context_uses_fixed_owner_and_refuses_old_adapters(setup):
     s=setup;s.authority.owner_epoch_view=AsyncMock(return_value={'previousEpoch':1,'previousFinalizationId':'d'*64})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
