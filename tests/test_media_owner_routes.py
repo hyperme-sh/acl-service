@@ -211,3 +211,22 @@ async def test_deletion_uses_fixed_owner_and_reports_only_pending_cleanup(setup)
         assert (await client.post(BASE+'delete',json=body)).status_code==403
         s.actor.scopes=['acl:media:read']
         assert (await client.post(BASE+'delete',json=body)).status_code==403
+
+
+@pytest.mark.asyncio
+async def test_cleanup_requires_same_fixed_owner_source_and_allocation_binding(setup):
+    s=setup;result={'accepted':True,'command':'a'*64,'cleanup':'complete'}
+    allocated=SimpleNamespace(tenant=str(s.tenant),reader='fixed-owner',authority=s.authority,retire=AsyncMock(return_value=result))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        assert (await client.post(BASE+'cleanup',json={'object':'media-object'})).status_code==403
+        s.app.state.media_allocation_bindings={(s.tenant,s.actor.sub):allocated}
+        response=await client.post(BASE+'cleanup',json={'object':'media-object'})
+        assert response.status_code==200 and response.json()==result
+        allocated.retire.assert_awaited_once_with('media-object')
+        assert (await client.post(BASE+'cleanup',json={'object':'media-object','command':'b'*64})).status_code==400
+        for field,value in [('tenant',str(uuid4())),('reader','other'),('authority',object())]:
+            previous=getattr(allocated,field);setattr(allocated,field,value)
+            assert (await client.post(BASE+'cleanup',json={'object':'media-object'})).status_code==403
+            setattr(allocated,field,previous)
+        allocated.retire.side_effect=AdmissionRejected()
+        assert (await client.post(BASE+'cleanup',json={'object':'media-object'})).status_code==403
