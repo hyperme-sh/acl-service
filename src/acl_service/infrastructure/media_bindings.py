@@ -74,7 +74,7 @@ def parse_settings(raw):
     return tuple(result)
 
 
-def _provisioned(binding):
+def _provisioned(binding, *, allow_empty=False):
     for path in (binding.history, binding.freshness, binding.key_file):
         with _private_file(path):
             pass
@@ -86,7 +86,7 @@ def _provisioned(binding):
         if db.execute('SELECT tenant FROM statement_tenant WHERE id=1').fetchone() != (str(binding.tenant),):
             raise ValueError('tenant not provisioned')
         objects = db.execute('SELECT object FROM media_sources LIMIT 65').fetchall()
-        if not 1 <= len(objects) <= 64:
+        if not (0 if allow_empty else 1) <= len(objects) <= 64:
             raise ValueError('media sources not provisioned')
     with closing(sqlite3.connect(binding.freshness.as_uri() + '?mode=ro', uri=True)) as db:
         if not db.execute('SELECT digest FROM authority_checkpoint WHERE id=1').fetchone():

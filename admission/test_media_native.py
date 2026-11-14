@@ -141,3 +141,36 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(json.loads(request)['ownershipDigest'],scope.ownership_digest)
         self.assertTrue(consume(record))
         self.assertFalse(consume(record))
+
+    def test_current_native_owner_roundtrip_through_authenticated_storage_issuer(self):
+        import base64
+        from types import SimpleNamespace
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+        from acl_service.allocation_protocol.media_allocation_request import AllocationRequestSigner
+        from acl_service.allocation_protocol.media_allocation_grant import verify_allocation_request,canonical_message
+        from acl_service.domain.media_allocation import AllocationBinding,canonical
+        issuer_id=str(UUID(int=2));source_id=str(UUID(int=3))
+        policy={k:self.f['identity'][k] for k in ('jwks','policy','pinnedIss')}
+        digest=hashlib.sha256(canonical(policy)).hexdigest()
+        source_key=Ed25519PrivateKey.from_private_bytes(b'\x07'*32)
+        storage_key=Ed25519PrivateKey.from_private_bytes(b'\x08'*32)
+        signer=AllocationRequestSigner(issuer=issuer_id,source=source_id,tenant=self.tenant,
+            policy_digest=digest,key_id='source',signing_key=source_key)
+        calls=[]
+        async def issue(scope,request):
+            verified=verify_allocation_request(request,expected=scope,keys={'source':source_key.public_key()},now=self.now)
+            calls.append(verified)
+            # Independent fixture issuer; durable issuance is covered in Core CI.
+            claims={**scope.claims(),'version':1,'allocation':str(UUID(int=4)),
+                    'issuedAt':self.now,'expiresAt':self.now+60}
+            sig=base64.urlsafe_b64encode(storage_key.sign(canonical_message('storage',claims))).rstrip(b'=').decode()
+            return canonical({'keyId':'storage','claims':claims,'signature':sig})
+        binding=AllocationBinding(self.tenant,self.owner,self.source,SimpleNamespace(issue=issue),signer,
+            issuer_id,source_id,policy,self.now+7200,{'storage':storage_key.public_key()})
+        async def run():
+            result=await binding.allocate(self.f['allocationRecord'])
+            self.assertEqual(result,{'object':self.f['allocationRecord']['object'],'accepted':True})
+            self.assertEqual(await binding.allocate(self.f['allocationRecord']),result)
+            self.assertEqual(len(calls),2)
+            self.assertEqual(self.source.read_view(self.f['allocationRecord']['object'],self.now)['snapshot'],{'entries':[]})
+        asyncio.run(run())

@@ -581,3 +581,44 @@ restores, expired authority and cancellation refuse. Ownership and policy digest
 are SHA-256 of sorted compact JSON with ASCII escaping, including the ownership
 signature. There is no transport route or issuer configuration enabled by this
 internal method; authenticated issuance and runtime wiring remain required.
+
+`SOCIACL_MEDIA_ALLOCATION_FILE` separately enables
+`POST /api/v1/acl/sociacl/media/allocate` for configured tenant/subject bindings
+with `acl:media:write`. The body is only the canonical ownership record
+`{object, owner, issuedAt, sig}`. Neither issuer, protected source, policy nor a
+signing key comes from the browser. The source checks current SEA history before
+signing a 30-second request, exchanges it once through the tenant Storage gateway,
+verifies the signed grant, then rechecks current ownership during atomic
+consumption. Identical requests reconcile; conflicting or uncertain results must
+be refreshed rather than implicitly retried. Disconnects and deadlines cancel
+pending work. This does not create reader grants or publish media.
+
+The private version-1 JSON file has at most 64 `bindings`. Each contains the usual
+`tenant`, `subject`, `reader`, `historyFile`, `freshnessFile`, `storageOrigin`, and
+`storageKeyFile`, plus `issuer`, `source`, `policyFile`, `policyUntil`, `keyId`,
+`sourceKeyFile`, and `issuerKeys`. Issuer and source are configured UUIDs.
+`policyFile` is private JSON containing exactly `jwks`, `policy`, and `pinnedIss`;
+its canonical digest must match the Storage issuer configuration. The source key
+file contains a canonical unpadded base64url 32-byte Ed25519 seed with no newline.
+`issuerKeys` maps configured issuer key IDs to similarly encoded public keys.
+The source key must differ from every issuer key. Files are private, distinct and
+tenant-bound; bindings for the same tenant must agree on their source and policy.
+The gateway credential needs `storage:allocations:issue`; it is not itself proof
+of current SEA ownership.
+
+The history and independent checkpoint databases must already be provisioned.
+An explicitly configured allocation source may initially contain zero media
+objects; ordinary private-wrap delivery still requires provisioned objects.
+Loading allocation settings never enrolls identities, creates credentials or
+bootstraps the Storage registry. Missing configuration disables this route and
+invalid configuration fails startup. Operator staging and registry initialization
+remain required before deployment activation.
+
+The allocation verifier and source signer under `acl_service/allocation_protocol`
+are byte-identical Core wire modules. CI compares both files with the exact
+reviewed Core source revision recorded in `preparation.yml`. They import only
+standard-library and cryptography code, avoiding a forced upgrade of the older
+shared service dependency set. Protocol changes must update the pinned source
+and both consumer copies together; CI refuses drift. Core remains the protocol
+owner and tests the durable issuer independently. Native ACL CI tests the real
+current ownership/signing/verification/consumption boundary with fixture keys.
