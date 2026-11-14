@@ -83,7 +83,7 @@ class RelationalHistoryStore:
     def read_authority(self) -> tuple[int, dict[str, HistorySnapshot]]:
         with self._transaction(write=False) as db:
             revision = self._authority_revision(db)
-            accounts = dict(db.execute("SELECT principal, genesis FROM history_accounts"))
+            accounts = {principal: genesis for principal, genesis in db.execute("SELECT principal, genesis FROM history_accounts")}
             entries = {p: [] for p in accounts}
             for owner, raw in db.execute(
                 "SELECT principal, entry FROM history_entries ORDER BY principal, revision"

@@ -37,6 +37,8 @@ def test_restart_history_ciphertext_and_stale_revision(source):
     again = PostgresHistoryStore(url, **spec)
     try:
         assert again.read('owner').entries == (b'entry',)
+        revision, accounts = again.read_authority()
+        assert revision == 2 and accounts['owner'].entries == (b'entry',)
         assert again.read_ciphertext('owner', 'wraps') == (1, b'opaque')
         with pytest.raises(HistoryConflict):
             again.append('owner', 0, b'stale', authority_revision=1)
