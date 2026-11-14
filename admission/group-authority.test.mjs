@@ -1,11 +1,13 @@
 // Signature and projection contracts execute in CI.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
 import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
 import {groupAuthority} from './group-authority.mjs';
 const now=1700000060;
+const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
 const pub=n=>{const p=p256.getPublicKey(scalar(n),false);return Buffer.from(p.slice(1,33)).toString('base64url')+'.'+Buffer.from(p.slice(33)).toString('base64url');};
 const owner=pub(1),member=pub(2),outsider=pub(3),witness=pub(9);
@@ -23,7 +25,7 @@ const accounts=new Map([1,2,3].map(n=>{
   attest:jws({typ:'sociacl-genesis-epub-attest-v1',principal,epub,iat:issuedAt,exp:now+600})};
  return [principal,{principal,genesis,rotations:[],entries:[],links:new Map(),ownRevokes:[]}];
 }));
-const contextFor=account=>({jwks,links:account.links,revocations:[],genesisEpubBindings:[account.genesis],now,
+const contextFor=account=>({jwks,policy,pinnedIss:new Set(),links:account.links,revocations:[],genesisEpubBindings:[account.genesis],now,
  history:(principal,from,until)=>accounts.has(principal)?{ok:true,value:historyState(principal,[],from,until)}:{ok:false,reason:'missing-history'}});
 const object='media_'+formatPrincipalKey(owner)+'_'+'ab'.repeat(16),set='set_'+formatPrincipalKey(owner)+'_'+'cd'.repeat(16);
 const objectRecord={object,owner,issuedAt:now};objectRecord.sig=sign(objectRecordBytes(objectRecord),1);
