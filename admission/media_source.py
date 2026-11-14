@@ -507,6 +507,30 @@ class MediaSource:
         self._guard(at, cancel)
         return {'at': at, **view}
 
+    def _owner_upload_state(self, tenant, writer, object, operation, payload, cancel):
+        from acl_service.domain.media_upload_reconcile import upload_state
+        at = int(self.clock()); self._guard(at, cancel)
+        if tenant != self.tenant or type(payload) is not dict or len(encoded(payload)) > 81920:
+            raise AdmissionRejected('invalid upload intent')
+        payload = json.loads(encoded(payload))
+        with self.store._transaction(write=False, before_commit=lambda:self._guard(at, cancel)) as db:
+            _, doc = self._load(db, object, at)
+            identities = self.identities(db, object, doc, at)
+            if writer != identities['owner']: raise AdmissionRejected('media owner required')
+            latest = self._latest(doc)
+            grant = latest.get(writer)
+            if grant is not None:
+                expected = {**grant['claims'], 'ownerPub': identities['bindings'][writer]['pub']}
+                if not self.native[0].matches_grant(encoded(grant['proof']), encoded(expected)):
+                    raise AdmissionRejected('private grant owner changed')
+            if operation == 'wrap': self._publication_grant(doc, identities, writer, payload, at)
+            state = upload_state(doc, latest, self._snapshot(doc), writer, operation, payload)
+            self._guard(at, cancel)
+            return {'at': at, 'state': state}
+
+    async def owner_upload_state(self, tenant, writer, object, operation, payload):
+        return await self._work(self._owner_upload_state, tenant, writer, object, operation, payload)
+
     async def owner_view(self, tenant, writer, object):
         return await self._work(self._owner_view, tenant, writer, object)
 

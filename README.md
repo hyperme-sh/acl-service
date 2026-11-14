@@ -625,3 +625,20 @@ shared service dependency set. Protocol changes must update the pinned source
 and both consumer copies together; CI refuses drift. Core remains the protocol
 owner and tests the durable issuer independently. Native ACL CI tests the real
 current ownership/signing/verification/consumption boundary with fixture keys.
+
+### Initial upload reconciliation
+
+`POST /api/v1/acl/sociacl/media/owner/upload-state` takes exactly
+`object`, `operation` (`grant`, `epoch`, or `wrap`), and the original `payload`.
+It returns only `at` and `state`: `absent`, `applied`, or `conflict`.
+This is a private, read-only probe for the initial owner grant, first epoch,
+and owner wrap, under the existing fixed subject, tenant and `acl:media:write`
+binding. Native current ownership and the independent checkpoint remain required.
+A wrap probe additionally checks its current grant and encryption-key binding.
+
+A browser keeps its original signed intent after an uncertain response and probes
+before deciding what to do next. `applied` confirms retained matching state; it
+never means the epoch has settled or reader delivery is permitted. `absent` is
+not a write permit: another write still needs a fresh view/fence and all ordinary
+signature checks. Conflicting or superseded state requires explicit reconciliation.
+No operation automatically retries, creates an object, or releases quota.

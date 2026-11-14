@@ -174,3 +174,22 @@ class NativeMediaContracts(TestCase):
             self.assertEqual(len(calls),2)
             self.assertEqual(self.source.read_view(self.f['allocationRecord']['object'],self.now)['snapshot'],{'entries':[]})
         asyncio.run(run())
+
+    def test_upload_reconciliation_reads_current_protected_state_without_delivery(self):
+        before=self.source.read_view(self.object,self.now)['fence']
+        for operation,payload in [('grant',self.f['grant']),('epoch',self.f['epoch']),('wrap',self.f['wrap'])]:
+            result=asyncio.run(self.source.owner_upload_state(self.tenant,self.owner,self.object,operation,payload))
+            self.assertEqual(result,{'at':self.now,'state':'applied'})
+        self.assertEqual(self.source.read_view(self.object,self.now)['fence'],before)
+        with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+        with self.assertRaises(AdmissionRejected):
+            asyncio.run(self.source.owner_upload_state(self.tenant,'foreign',self.object,'epoch',self.f['epoch']))
+        with self.assertRaises(AdmissionRejected):
+            asyncio.run(self.source.owner_upload_state(str(UUID(int=1)),self.owner,self.object,'epoch',self.f['epoch']))
+        changed=json.loads(json.dumps(self.f['epoch']));changed['finalization']['signature']='forged'
+        self.assertEqual(asyncio.run(self.source.owner_upload_state(self.tenant,self.owner,self.object,'epoch',changed))['state'],'conflict')
+        backup=self.path.read_bytes();self.mutate('grant',self.f['cancel'])
+        self.assertEqual(asyncio.run(self.source.owner_upload_state(self.tenant,self.owner,self.object,'grant',self.f['grant']))['state'],'conflict')
+        self.path.write_bytes(backup)
+        with self.assertRaises(AdmissionRejected):
+            asyncio.run(self.source.owner_upload_state(self.tenant,self.owner,self.object,'epoch',self.f['epoch']))
