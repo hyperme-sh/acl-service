@@ -207,3 +207,33 @@ def test_active_index_upgrade_refuses_missing_primary_without_changing_mode(sour
         db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',('missing',b'digest'))
     with pytest.raises(ValueError,match='checkpoint mismatch'):install_active_media_index(url,**spec)
     assert store.read_authority()==(0,{})
+
+
+def test_active_startup_accepts_more_than_64_retained_tombstones(source,tmp_path):
+    import json
+    from types import SimpleNamespace
+    from acl_service.domain.media_checkpoint import media_checkpoint_digest
+    from acl_service.infrastructure.media_active_index import install_active_media_index
+    from acl_service.infrastructure.media_postgres_settings import PostgresMediaSettings
+    from acl_service.infrastructure.media_bindings import _provisioned
+    _,spec,url=source
+    install_active_media_index(url,**spec)
+    settings=PostgresMediaSettings(url,**spec,active_media_index=True)
+    config=tmp_path/'source.json';config.write_text('{}');config.chmod(0o600)
+    key=tmp_path/'storage.key';key.write_text('private');key.chmod(0o600)
+    binding=SimpleNamespace(postgres_file=config,key_file=key,postgres_settings=settings,tenant=spec['tenant'])
+    current=settings.open()
+    try:
+        with current._transaction(write=False) as db:
+            for i in range(66):
+                object=str(i)
+                doc={} if i==65 else {'deletion':{'cleanupComplete':True}}
+                row=(0,b'nonce',json.dumps(doc).encode())
+                db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
+                db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',
+                           (object,media_checkpoint_digest(spec['tenant'],object,*row)))
+            db.execute('INSERT INTO freshness.media_active VALUES(?)',('65',))
+        _provisioned(binding)
+        with current._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',('65',))
+        with pytest.raises(ValueError,match='active checkpoint'):_provisioned(binding)
+    finally:current.close()

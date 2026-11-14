@@ -120,11 +120,19 @@ def _provisioned(binding, *, allow_empty=False):
             raise ValueError('independent private files required')
         with closing(binding.postgres_settings.open()) as store:
             with store._transaction(write=False) as db:
-                objects=db.execute('SELECT object FROM media_sources LIMIT 65').fetchall()
-                if not (0 if allow_empty else 1)<=len(objects)<=64:
+                active=binding.postgres_settings.active_media_index
+                table='freshness.media_active' if active else 'media_sources'
+                objects=db.execute(f'SELECT object FROM {table} LIMIT 65').fetchall()
+                if not (0 if allow_empty or active else 1)<=len(objects)<=64:
                     raise ValueError('media sources not provisioned')
-                if any(not db.execute('SELECT digest FROM freshness.media_checkpoints WHERE object=?',tuple(row)).fetchone() for row in objects):
-                    raise ValueError('media checkpoint not provisioned')
+                for (object,) in objects:
+                    checkpoint=db.execute('SELECT digest FROM freshness.media_checkpoints WHERE object=?',(object,)).fetchone()
+                    if not checkpoint:raise ValueError('media checkpoint not provisioned')
+                    if active:
+                        from acl_service.domain.media_checkpoint import media_checkpoint_digest
+                        row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+                        if row is None or checkpoint!=(media_checkpoint_digest(str(binding.tenant),object,*row),):
+                            raise ValueError('media active checkpoint mismatch')
         return
     for path in (binding.history, binding.freshness, binding.key_file):
         with _private_file(path):
