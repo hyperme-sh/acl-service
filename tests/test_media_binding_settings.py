@@ -190,7 +190,7 @@ class MediaBindingUnits(TestCase):
         postgres_row={key:value for key,value in row().items() if key not in ('historyFile','freshnessFile')}
         postgres_row['postgresFile']='/private/postgres'
         parsed=m.parse_settings(json.dumps({'version':2,'bindings':[postgres_row,{**postgres_row,'subject':'second'}]}).encode())
-        spec=Mock();reader=Mock(return_value=spec)
+        spec=Mock(active_media_index=False);reader=Mock(return_value=spec)
         with patch.dict(sys.modules,{'acl_service.infrastructure.media_postgres_settings':SimpleNamespace(read_postgres_settings=reader)}):
             prepared=m._prepare_settings(parsed)
         reader.assert_called_once()
