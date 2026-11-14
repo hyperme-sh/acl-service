@@ -55,3 +55,14 @@ def test_wraps_do_not_replace_same_or_later_epoch():
 ])
 def test_malformed_refuses(op,payload):
     with pytest.raises(AdmissionRejected):check(doc(),op,payload)
+
+
+def test_missing_grant_refuses_competing_or_later_epoch_progress():
+    old=deepcopy(G);old['claims'].update(epoch=1,grantRevision=1)
+    for epoch in (2,3):
+        for table in ('manifests','finalizations'):
+            d=doc()
+            d[table].append({'document':{'manifest':{'epoch':epoch}}} if table=='manifests' else {'proof':{'epoch':epoch}})
+            assert check(d,'grant',G,{'reader':old})=='conflict'
+    d=doc();d['manifests']=[{'document':{'manifest':{'epoch':1}}}]
+    assert check(d,'grant',G,{'reader':old})=='absent'

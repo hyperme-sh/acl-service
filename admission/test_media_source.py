@@ -504,6 +504,15 @@ class MediaSourceContracts(TestCase):
         self.native[0].matches_grant.return_value=False
         with self.assertRaises(AdmissionRejected):self.source._owner_share_state(*args)
 
+    def test_share_reconciliation_reports_stale_wrap_conflicts_before_publication_checks(self):
+        self.share_ready()
+        payload={'reader':'reader','record':'e'*64,'digest':'f'*64,'epoch':2,'revisionId':'b'*64,
+                 'readerEpub':'reader-epub','itemDigest':'a'*64}
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.assertEqual(self.source._owner_share_state(TENANT,'owner',OBJECT,'wrap',payload,lambda:None),{'at':100,'state':'conflict'})
+        self.mutate('grant',self.grant(epoch=3,grantRevision=3))
+        self.assertEqual(self.source._owner_share_state(TENANT,'owner',OBJECT,'wrap',payload,lambda:None),{'at':100,'state':'conflict'})
+
     def test_epoch_context_is_read_only_and_hides_unrelated_identities(self):
         self.ready()
         self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}

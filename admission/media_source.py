@@ -745,11 +745,11 @@ class MediaSource:
                 claims=payload.get('claims',{})
                 if type(claims) is not dict or type(claims.get('accessor')) is not str or claims['accessor'] not in identities['bindings'] or not self.native[0].matches_grant(encoded(payload.get('proof')),encoded({**claims,'ownerPub':identities['bindings'][writer]['pub']})):
                     raise AdmissionRejected('sharing signature refused')
-            if operation == 'wrap':
+            state = share_state(doc, latest, self._snapshot(doc), writer, operation, payload)
+            if operation == 'wrap' and state != 'conflict':
                 target=self._checked_wrap(doc,identities,payload)
                 if not self.native[0].matches_grant(encoded(target['proof']),encoded({**target['claims'],'ownerPub':identities['bindings'][writer]['pub']})):
                     raise AdmissionRejected('sharing recipient changed')
-            state = share_state(doc, latest, self._snapshot(doc), writer, operation, payload)
             self._guard(at, cancel)
             return {'at': at, 'state': state}
 

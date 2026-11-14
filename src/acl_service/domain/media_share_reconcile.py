@@ -17,6 +17,7 @@ def share_state(doc, latest, snapshot, owner, operation, payload):
         if held and same(held['claims'],claims) and same(held['proof'],payload['proof']): return 'applied'
         # Only the immediate revision can be missing. A changed or later grant
         # must not be overwritten while resuming an older signed plan.
+        if any(r['document']['manifest']['epoch']>=claims['epoch'] for r in doc['manifests']) or any(r['proof']['epoch']>=claims['epoch'] for r in doc['finalizations']): return 'conflict'
         revision=held['claims']['grantRevision'] if held else 0
         return 'absent' if claims['grantRevision']==revision+1 and (not held or held['claims']['epoch']<claims['epoch']) else 'conflict'
     if operation == 'epoch':
