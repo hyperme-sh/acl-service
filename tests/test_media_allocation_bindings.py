@@ -50,7 +50,8 @@ def test_binding_uses_fixed_owner_and_current_native_source(configuration):
 
 def test_conflicting_shared_files_keys_and_configuration_refuse(configuration):
     c=configuration
-    bad=[{**c.row,'extra':True},{**c.row,'issuer':'bad'}, {**c.row,'policyUntil':True},
+    bad=[{**c.row,'extra':True},{**c.row,'issuer':'bad'}, {**c.row,'storageKeyFile':str(c.file)},
+         {**c.row,'issuerKeys':{'bad id':b64(c.issuer.public_key().public_bytes_raw())}}, {**c.row,'policyUntil':True},
          {**c.row,'sourceKeyFile':c.row['policyFile']},{**c.row,'issuerKeys':{}},
          {**c.row,'issuerKeys':{'storage':b64(c.source.public_key().public_bytes_raw())}}]
     for row in bad:

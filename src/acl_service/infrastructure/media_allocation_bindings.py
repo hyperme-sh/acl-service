@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 from acl_service.allocation_protocol.media_allocation_grant import _b64, _uuid, _integer
@@ -34,6 +35,7 @@ def load_allocation_bindings(environ=None, *, source_factory=None, client_factor
             policy_path,key_path=_path(row['policyFile']),_path(row['sourceKeyFile'])
             all_paths=(binding.history,binding.freshness,binding.key_file,policy_path,key_path)
             if len(set(all_paths))!=5 or any(os.path.samefile(a,b) for i,a in enumerate(all_paths) for b in all_paths[i+1:]):raise ValueError()
+            if any(os.path.samefile(_path(configured),path) for path in all_paths):raise ValueError()
             for path in all_paths:
                 if path in paths and paths[path]!=binding.tenant:raise ValueError()
                 paths[path]=binding.tenant
@@ -43,7 +45,8 @@ def load_allocation_bindings(environ=None, *, source_factory=None, client_factor
             if type(policy) is not dict or set(policy)!={'jwks','policy','pinnedIss'}:raise ValueError()
             with _private_file(key_path) as stream:seed=stream.read(44).decode('ascii')
             signing_key=Ed25519PrivateKey.from_private_bytes(_b64(seed,32))
-            if type(row['issuerKeys']) is not dict or not 1<=len(row['issuerKeys'])<=16:raise ValueError()
+            if (type(row['issuerKeys']) is not dict or not 1<=len(row['issuerKeys'])<=16
+                    or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',kid) for kid in row['issuerKeys'])):raise ValueError()
             keys={kid:Ed25519PublicKey.from_public_bytes(_b64(key,32)) for kid,key in row['issuerKeys'].items()}
             if any(key.public_bytes_raw()==signing_key.public_key().public_bytes_raw() for key in keys.values()):raise ValueError()
             signer=AllocationRequestSigner(issuer=issuer,source=source,tenant=str(binding.tenant),
