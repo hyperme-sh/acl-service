@@ -161,5 +161,5 @@ class MediaBindingUnits(TestCase):
         factory.assert_not_called()
         with patch.object(m,'_private_file',return_value=io.BytesIO(encode())),\
                 patch.object(m.os.path,'samefile',return_value=False):
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(RuntimeError,'Invalid private media binding configuration'):
                 m.load_media_bindings({m.CONFIG_NAME:'/private/config'},allocation_bindings={'bound':allocation})
