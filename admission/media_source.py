@@ -16,6 +16,7 @@ from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.private_wrap_delivery import WrapReadPermit
 from acl_service.domain.private_wrap_publication import WrapWritePermit
 from acl_service.infrastructure.authority_checkpoint import authority_digest
+from acl_service.domain.media_checkpoint import media_checkpoint_digest
 from acl_service.infrastructure.epoch_verifier import (
     PrivateGrantVerifier, EpochStatusVerifier, EpochManifestVerifier,
     SettledEpochVerifier, EpochHistoryVerifier,
@@ -73,11 +74,20 @@ class MediaSource:
             peers=_peer_inputs(principal, accounts)))
 
     def _checkpoint(self, db, object, row, *, write=False):
-        digest = hashlib.sha256(encoded(['private-media-v1',self.tenant,object])+self._digest(*row)).digest()
+        digest = media_checkpoint_digest(self.tenant,object,*row)
         if write:
             db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?) ON CONFLICT(object) DO UPDATE SET digest=excluded.digest',(object,digest))
         elif db.execute('SELECT digest FROM freshness.media_checkpoints WHERE object=?',(object,)).fetchone() != (digest,):
             raise AdmissionRejected('media checkpoint mismatch')
+
+    def _capacity(self,db):
+        table='freshness.media_active' if getattr(self.store,'active_media_index',False) else 'media_sources'
+        if db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]>=64:
+            raise AdmissionRejected('media object capacity')
+
+    def _activate(self,db,object):
+        if getattr(self.store,'active_media_index',False):
+            db.execute('INSERT INTO freshness.media_active VALUES(?)',(object,))
 
     def _load(self, db, object, at, *, catalog=False):
         row = db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
@@ -87,6 +97,8 @@ class MediaSource:
         if 'deletion' in doc:
             if catalog: return row,doc  # Only to skip a checkpoint-verified tombstone.
             raise AdmissionRejected('media object deleted')
+        if getattr(self.store,'active_media_index',False) and db.execute('SELECT 1 FROM freshness.media_active WHERE object=?',(object,)).fetchone() is None:
+            raise HistoryConflict('media active checkpoint missing')
         if at >= doc['policyUntil']: raise AdmissionRejected('media policy expired')
         return row,doc
 
@@ -110,8 +122,7 @@ class MediaSource:
              'objectVersion':0,'frozen':[],'conflicts':[]}
         guard()
         with self.store._transaction(write=True,before_commit=guard) as db:
-            if db.execute('SELECT COUNT(*) FROM media_sources').fetchone()[0]>=64:
-                raise AdmissionRejected('media object capacity')
+            self._capacity(db)
             if db.execute('SELECT 1 FROM media_sources WHERE object=?',(object,)).fetchone() or db.execute('SELECT 1 FROM freshness.media_checkpoints WHERE object=?',(object,)).fetchone():
                 raise HistoryConflict('media object already provisioned')
             self.identities(db,object,doc,at)
@@ -119,6 +130,7 @@ class MediaSource:
             if len(row[2])>65536: raise AdmissionRejected('media policy capacity')
             db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
             self._checkpoint(db,object,row,write=True)
+            self._activate(db,object)
 
     def prepare_allocation_request(self, tenant, writer, record, policy, policy_until, *,
                                    sign_request, cancel=lambda:None):
@@ -199,8 +211,7 @@ class MediaSource:
                     raise HistoryConflict('allocation already consumed or checkpoint mismatch')
                 self._load(db,object,at)
                 return False
-            if db.execute('SELECT COUNT(*) FROM media_sources').fetchone()[0]>=64:
-                raise AdmissionRejected('media object capacity')
+            self._capacity(db)
             for table in ('media_sources','freshness.media_checkpoints','media_allocations','freshness.media_allocations'):
                 if db.execute('SELECT 1 FROM '+table+' WHERE object=?',(object,)).fetchone():
                     raise HistoryConflict('media object already provisioned')
@@ -208,6 +219,7 @@ class MediaSource:
             if len(row[2])>65536: raise AdmissionRejected('media policy capacity')
             db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
             self._checkpoint(db,object,row,write=True)
+            self._activate(db,object)
             db.execute('INSERT INTO media_allocations VALUES(?,?,?)',(allocation,object,digest))
             db.execute('INSERT INTO freshness.media_allocations VALUES(?,?,?)',(allocation,object,digest))
             return True
@@ -527,6 +539,9 @@ class MediaSource:
             if deleted.get('cleanupComplete') is True: return False
             deleted['cleanupComplete']=True
             self._save(db,object,row,doc)
+            if getattr(self.store,'active_media_index',False):
+                if db.execute('DELETE FROM freshness.media_active WHERE object=?',(object,)).rowcount!=1:
+                    raise HistoryConflict('media active checkpoint missing')
             return True
 
     def _selected(self, object, doc, at):
@@ -687,7 +702,8 @@ class MediaSource:
             # ID still needs current native owner verification. Other owners do
             # not affect page positions or nextPage. Retained checkpoint IDs
             # prevent a primary rollback from silently removing candidates.
-            rows = db.execute('SELECT object FROM (SELECT object FROM media_sources UNION SELECT object FROM freshness.media_checkpoints) AS candidates WHERE substr(object,1,?)=? ORDER BY object LIMIT 4 OFFSET ?',
+            candidates='freshness.media_active' if getattr(self.store,'active_media_index',False) else '(SELECT object FROM media_sources UNION SELECT object FROM freshness.media_checkpoints) AS candidates'
+            rows = db.execute(f'SELECT object FROM {candidates} WHERE substr(object,1,?)=? ORDER BY object LIMIT 4 OFFSET ?',
                               (len(prefix),prefix,page*4)).fetchall()
             for (object,) in rows:
                 self._guard(at,cancel)

@@ -38,7 +38,7 @@ def test_explicit_source_and_private_address(config, monkeypatch):
     factory=Mock();monkeypatch.setattr(postgres,'PostgresHistoryStore',factory)
     spec.open()
     factory.assert_called_once_with(c.value['databaseUrl'],history_schema='acl_s3rch_history',
-        checkpoint_schema='acl_s3rch_checkpoint',tenant=TENANT,source=SOURCE)
+        checkpoint_schema='acl_s3rch_checkpoint',tenant=TENANT,source=SOURCE,active_media_index=False)
     row=c.binding()
     assert row.history is None and row.freshness is None
     assert bindings._same_source(row,SimpleNamespace(binding_spec=spec))
@@ -47,7 +47,7 @@ def test_explicit_source_and_private_address(config, monkeypatch):
 
 
 @pytest.mark.parametrize('changes',[
-    {'version':True},{'version':2},{'extra':True},{'tenant':str(UUID(int=3))},
+    {'version':True},{'version':3},{'extra':True},{'tenant':str(UUID(int=3))},
     {'source':'bad'},{'source':str(UUID(int=0))},{'source':None},
     {'historySchema':'public'},{'checkpointSchema':'acl_s3rch_history'},
     {'databaseUrl':None},{'databaseUrl':'sqlite:///private'},
@@ -131,3 +131,41 @@ def test_delivery_reuses_only_identical_postgres_allocation(config, monkeypatch)
     with pytest.raises(RuntimeError,match='Invalid private'):
         bindings.load_media_bindings({bindings.CONFIG_NAME:str(file)},source_factory=factory,
             store_factory=Mock(),allocation_bindings={'owner':allocation})
+
+
+def test_v2_explicitly_selects_active_index_and_cannot_reuse_old_source(config, monkeypatch):
+    old=postgres.read_postgres_settings(config.path,UUID(TENANT))
+    current=postgres.read_postgres_settings(config.write(version=2),UUID(TENANT))
+    assert current.active_media_index and not old.active_media_index
+    factory=Mock();monkeypatch.setattr(postgres,'PostgresHistoryStore',factory)
+    current.open()
+    assert factory.call_args.kwargs['active_media_index'] is True
+    assert not bindings._same_source(config.binding(),SimpleNamespace(binding_spec=old))
+
+
+def test_active_startup_counts_only_active_entries_and_checks_primary(config,monkeypatch):
+    from acl_service.domain.media_checkpoint import media_checkpoint_digest
+    config.write(version=2);binding=config.binding();store=Mock();db=Mock()
+    objects=[('media_one',)];row=(1,b'nonce',b'{}');missing=False;corrupt=False
+    def execute(sql,args=()):
+        result=Mock()
+        if sql.startswith('SELECT object'):
+            assert 'FROM freshness.media_active LIMIT 65' in sql
+            result.fetchall.return_value=objects
+        elif sql.startswith('SELECT digest'):
+            result.fetchone.return_value=(b'wrong' if corrupt else media_checkpoint_digest(TENANT,'media_one',*row),)
+        else:result.fetchone.return_value=None if missing else row
+        return result
+    db.execute.side_effect=execute
+    @contextmanager
+    def transaction(**options):yield db
+    store._transaction=transaction
+    monkeypatch.setattr(postgres.PostgresMediaSettings,'open',lambda _:store)
+    bindings._provisioned(binding)
+    missing=True
+    with pytest.raises(ValueError,match='active checkpoint'):bindings._provisioned(binding)
+    missing=False;corrupt=True
+    with pytest.raises(ValueError,match='active checkpoint'):bindings._provisioned(binding)
+    objects=[];bindings._provisioned(binding)
+    objects=[('media_one',)]*65
+    with pytest.raises(ValueError,match='not provisioned'):bindings._provisioned(binding)

@@ -113,7 +113,8 @@ def test_parallel_append_has_one_winner_and_cancel_rolls_back(source):
         assert db.execute('SELECT head FROM history_head_floors').fetchall() == []
 
 
-def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch):
+@pytest.mark.parametrize('active_index',[False,True])
+def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch, request, active_index):
     import hashlib
     import importlib
     from pathlib import Path
@@ -126,6 +127,11 @@ def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch):
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'admission'))
     media = importlib.import_module('media_source')
     store, spec, url = source
+    if active_index:
+        from acl_service.infrastructure.media_active_index import install_active_media_index
+        install_active_media_index(url,**spec)
+        store=PostgresHistoryStore(url,**spec,active_media_index=True)
+        request.addfinalizer(store.close)
     store.enroll('owner', b'genesis')
     authority = media.MediaSource(store, spec['tenant'], clock=lambda:100,
                                  identities=Mock(), native=tuple(Mock() for _ in range(5)))
@@ -153,6 +159,9 @@ def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch):
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sorted(pool.map(lambda _:consume(), range(2))) == [False, True]
     assert consume() is False
+    if active_index:
+        with store._transaction(write=False) as db:
+            assert db.execute('SELECT object FROM freshness.media_active').fetchall()==[('media_new',)]
     engine=create_engine(url)
     try:
         with engine.begin() as db:
@@ -162,3 +171,69 @@ def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch):
             consume()
     finally:
         engine.dispose()
+
+
+def test_active_index_explicit_upgrade_fences_old_writers_and_preserves_checkpoints(source):
+    import json
+    from acl_service.domain.media_checkpoint import media_checkpoint_digest
+    from acl_service.infrastructure.media_active_index import install_active_media_index
+    store,spec,url=source
+    with pytest.raises(StoreRejected):PostgresHistoryStore(url,**spec,active_media_index=True)
+    docs={'active':{},'pending':{'deletion':{'owner':'owner'}},
+          'done':{'deletion':{'cleanupComplete':True,'owner':'owner','command':'command','proofDigest':'digest','claims':{}}}}
+    with store._transaction(write=False) as db:
+        for object,doc in docs.items():
+            row=(0,b'nonce',json.dumps(doc).encode())
+            db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
+            db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',
+                       (object,media_checkpoint_digest(spec['tenant'],object,*row)))
+    install_active_media_index(url,**spec)
+    with pytest.raises(StoreRejected):store.read_authority()
+    with pytest.raises(StoreRejected):PostgresHistoryStore(url,**spec)
+    with pytest.raises(StoreRejected):install_active_media_index(url,**spec)
+    current=PostgresHistoryStore(url,**spec,active_media_index=True)
+    try:
+        with current._transaction(write=False) as db:
+            assert db.execute('SELECT object FROM freshness.media_active ORDER BY object').fetchall()==[('active',),('pending',)]
+            assert db.execute('SELECT COUNT(*) FROM freshness.media_checkpoints').fetchone()==(3,)
+            assert db.execute('SELECT COUNT(*) FROM media_sources').fetchone()==(3,)
+    finally:current.close()
+
+
+def test_active_index_upgrade_refuses_missing_primary_without_changing_mode(source):
+    from acl_service.infrastructure.media_active_index import install_active_media_index
+    store,spec,url=source
+    with store._transaction(write=False) as db:
+        db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',('missing',b'digest'))
+    with pytest.raises(ValueError,match='checkpoint mismatch'):install_active_media_index(url,**spec)
+    assert store.read_authority()==(0,{})
+
+
+def test_active_startup_accepts_more_than_64_retained_tombstones(source,tmp_path):
+    import json
+    from types import SimpleNamespace
+    from acl_service.domain.media_checkpoint import media_checkpoint_digest
+    from acl_service.infrastructure.media_active_index import install_active_media_index
+    from acl_service.infrastructure.media_postgres_settings import PostgresMediaSettings
+    from acl_service.infrastructure.media_bindings import _provisioned
+    _,spec,url=source
+    install_active_media_index(url,**spec)
+    settings=PostgresMediaSettings(url,**spec,active_media_index=True)
+    config=tmp_path/'source.json';config.write_text('{}');config.chmod(0o600)
+    key=tmp_path/'storage.key';key.write_text('private');key.chmod(0o600)
+    binding=SimpleNamespace(postgres_file=config,key_file=key,postgres_settings=settings,tenant=spec['tenant'])
+    current=settings.open()
+    try:
+        with current._transaction(write=False) as db:
+            for i in range(66):
+                object=str(i)
+                doc={} if i==65 else {'deletion':{'cleanupComplete':True}}
+                row=(0,b'nonce',json.dumps(doc).encode())
+                db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
+                db.execute('INSERT INTO freshness.media_checkpoints VALUES(?,?)',
+                           (object,media_checkpoint_digest(spec['tenant'],object,*row)))
+            db.execute('INSERT INTO freshness.media_active VALUES(?)',('65',))
+        _provisioned(binding)
+        with current._transaction(write=False) as db:db.execute('DELETE FROM media_sources WHERE object=?',('65',))
+        with pytest.raises(ValueError,match='active checkpoint'):_provisioned(binding)
+    finally:current.close()

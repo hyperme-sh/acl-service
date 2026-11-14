@@ -649,6 +649,52 @@ class AllocationConsumptionContracts(MediaSourceContracts):
             db.execute('DELETE FROM media_allocations WHERE object=?',('media_new',))
         with self.assertRaises(HistoryConflict):confirm(command=command)
 
+    def enable_active_index(self):
+        with self.store._transaction(write=False) as db:
+            db.execute('CREATE TABLE freshness.media_active (object TEXT PRIMARY KEY)')
+            db.execute('INSERT INTO freshness.media_active SELECT object FROM freshness.media_checkpoints')
+        self.store.active_media_index=True
+
+    def test_active_capacity_released_only_after_confirmed_cleanup(self):
+        self.enable_active_index()
+        record,proof=self.allocation()
+        with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)
+        for i in range(62):self.source.provision('media_fill_'+str(i),{},10000,exclusive_grant=lambda *args:True)
+        def create():self.source.provision('media_next',{},10000,exclusive_grant=lambda *args:True)
+        with self.assertRaises(AdmissionRejected):create()
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        command=self.source.delete(TENANT,'owner','media_new',self.now,{},verifier=verifier)
+        with self.assertRaises(AdmissionRejected):create()
+        calls=0
+        def cancel():
+            nonlocal calls
+            calls+=1
+            if calls==2:raise RuntimeError('cancelled commit')
+        with self.assertRaises(RuntimeError):self.source.confirm_retirement(TENANT,'owner','media_new',command,cancel=cancel)
+        with self.assertRaises(AdmissionRejected):create()
+        self.assertTrue(self.source.confirm_retirement(TENANT,'owner','media_new',command))
+        self.assertFalse(self.source.confirm_retirement(TENANT,'owner','media_new',command))
+        with self.assertRaises(HistoryConflict):self.source.provision('media_new',{},10000,exclusive_grant=lambda *args:True)
+        create()
+        with self.store._transaction(write=False) as db:
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM freshness.media_active').fetchone(),(64,))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM freshness.media_checkpoints').fetchone(),(65,))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM media_sources').fetchone(),(65,))
+
+    def test_active_index_missing_member_refuses_reads(self):
+        self.enable_active_index()
+        with self.store._transaction(write=False) as db:db.execute('DELETE FROM freshness.media_active WHERE object=?',(OBJECT,))
+        with self.assertRaises(HistoryConflict):self.source.read_view(OBJECT,self.now)
+
+    def test_active_catalog_uses_bounded_pending_set_and_detects_primary_rollback(self):
+        owner,objects=self.catalog_fixture();self.enable_active_index()
+        with self.store._transaction(write=False) as db:
+            db.execute('DELETE FROM freshness.media_active WHERE object=?',(objects[0],))
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,0,lambda:None)['objects'],objects[1:5])
+        with self.store._transaction(write=False) as db:
+            db.execute('DELETE FROM media_sources WHERE object=?',(objects[1],))
+        with self.assertRaises(AdmissionRejected):self.source._owner_catalog(TENANT,owner,0,lambda:None)
+
     def test_retirement_refuses_allocation_or_source_rollback(self):
         record,proof=self.allocation()
         with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)

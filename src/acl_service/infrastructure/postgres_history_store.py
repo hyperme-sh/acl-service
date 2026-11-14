@@ -48,7 +48,9 @@ class PostgresHistoryStore(RelationalHistoryStore):
     has_freshness = True
     provisioned_media = True
 
-    def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source):
+    def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False):
+        if type(active_media_index) is not bool:raise ValueError('invalid media index mode')
+        self.active_media_index=active_media_index
         self.history_schema = scope_name(history_schema)
         self.checkpoint_schema = scope_name(checkpoint_schema)
         if self.history_schema == self.checkpoint_schema:
@@ -65,6 +67,7 @@ class PostgresHistoryStore(RelationalHistoryStore):
                 for table in ('history_ciphertext', 'statement_tenant', 'media_sources', 'media_allocations',
                               'freshness.ciphertext_heads', 'freshness.media_checkpoints', 'freshness.media_allocations'):
                     db.execute(f'SELECT 1 FROM {table} LIMIT 1')
+                if self.active_media_index:db.execute('SELECT 1 FROM freshness.media_active LIMIT 1')
                 if db.execute('SELECT tenant FROM statement_tenant WHERE id=1').fetchone() != (tenant,):
                     raise StoreRejected()
         except BaseException:
@@ -82,7 +85,7 @@ class PostgresHistoryStore(RelationalHistoryStore):
                 connection.exec_driver_sql("SET LOCAL statement_timeout = '3000ms'")
                 connection.exec_driver_sql(f'SET LOCAL search_path = "{self.history_schema}", pg_catalog')
                 db = _Connection(connection, self.history_schema, self.checkpoint_schema)
-                expected = (self.tenant, self.source, 1)
+                expected = (self.tenant, self.source, 2 if self.active_media_index else 1)
                 marker = db.execute('SELECT tenant,source,version FROM source_marker WHERE id=1 FOR UPDATE').fetchone()
                 checkpoint = db.execute('SELECT tenant,source,version FROM freshness.source_marker WHERE id=1 FOR UPDATE').fetchone()
                 if marker != expected or checkpoint != expected:
