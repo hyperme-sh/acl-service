@@ -292,3 +292,16 @@ async def test_registration_confirmation_is_fixed_subject_and_read_only(setup):
             assert (await client.post(BASE+'registration',json=bad)).status_code==400
         s.authority.owner_confirm_registration.return_value=False
         assert (await client.post(BASE+'registration',json=body)).status_code==403
+
+
+@pytest.mark.asyncio
+async def test_sharing_reconcile_is_fixed_owner_optional_and_read_only(setup):
+    s=setup;s.authority.owner_share_state=AsyncMock(return_value={'at':100,'state':'absent'})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        body={'object':'media-object','operation':'grant','payload':{'claims':{}}}
+        assert (await client.post(BASE+'share-state',json=body)).status_code==200
+        s.authority.owner_share_state.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','grant',{'claims':{}})
+        assert (await client.post(BASE+'share-state',json={**body,'owner':'other'})).status_code==400
+        s.authority.owner_share_state=None
+        assert (await client.post(BASE+'share-state',json=body)).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()

@@ -851,3 +851,13 @@ intent in protected recovery storage, and reconcile interrupted publication.
 Until the resulting epoch settles and fresh statuses/wraps are accepted, the
 plan itself grants no access. Group expansion and the complete sharing UI remain
 separate work.
+
+### Sharing recovery comparison
+
+`POST /api/v1/acl/sociacl/media/owner/share-state` accepts
+`{object, operation, payload}` and returns `{at, state}` for the fixed owner.
+It compares retained next-epoch grants, epoch pairs and reader wraps without
+changing access. Exact signed values are applied; the immediate missing revision
+is absent; superseding or competing state is conflict. The initial-upload
+endpoint retains its initial-only scope. An absent result is not permission to
+write: ordinary fenced mutation and native signature checks still apply.
