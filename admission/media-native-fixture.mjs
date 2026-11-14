@@ -2,7 +2,7 @@
 import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {p256} from '@noble/curves/nist.js';
-import {lengthPrefixed,formatPrincipalKey} from 'sociacl-ids';
+import {lengthPrefixed,formatPrincipalKey,objectRecordBytes,signWithKeyring} from 'sociacl-ids';
 const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url)));
 const key=new Uint8Array(32);key[31]=1;
 const point=p256.getPublicKey(key,false);
@@ -30,6 +30,10 @@ const status={object,epoch:1,revisionId:manifest.revisionId,accessor:f.genesis,g
   signedAt:(f.now+3600)*1000,maxAgeMs:60000,zookie:{object,objectVersion:3,snapshotHash:aclSnapshot}};
 status.signature=sign(canonical(['s3rch-epoch-status-v1',object,'1',manifest.revisionId,f.genesis,'1','1',
   String(status.signedAt),'60000',object,'3',aclSnapshot]));
-const output={identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const allocationRecord={object:object.slice(0,-32)+'cd'.repeat(16),owner:f.genesis,issuedAt:f.now};
+const signed=signWithKeyring(key,objectRecordBytes(allocationRecord),f.genesis);
+if(!signed.ok)throw Error(signed.reason);
+allocationRecord.sig=signed.value;
+const output={allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

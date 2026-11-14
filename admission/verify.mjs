@@ -4,7 +4,7 @@ import {statementGraph} from './statement-graph.mjs';
 import {delegationGraph} from './delegation-graph.mjs';
 import {
   checkRotationPublish, historyState, lengthPrefixed, linkId, resolveCurrentKey, MAX_RESOLUTION_INPUT, resolveStoreAccount, resolveWalletLink, verifyKeySignature,
-  verifyOidcLink, verifyRevoke, verifyWalletLink, objectPrincipal,
+  verifyOidcLink, verifyRevoke, verifyWalletLink, objectPrincipal, verifyObjectRecord,
 } from 'sociacl-ids';
 
 function requireResult(result) {
@@ -12,7 +12,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, mediaObject}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, mediaObject, mediaRecord}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -88,6 +88,11 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
       if (diagnostics.length || !head.bindingEpub || head.rotations.length !== value.rotations.length)
         throw Error('invalid-media-identity');
       bindings[id] = {pub:head.currentKey, epub:head.currentEpub, head:head.rotations.at(-1)?.seq ?? 0};
+    }
+    if (mediaRecord) {
+      const account = accounts.get(owner);
+      const checked = requireResult(verifyObjectRecord(mediaRecord, account.rotations, contextFor(account, now)));
+      if (checked.record.object !== mediaObject || checked.record.owner !== owner) throw Error('wrong-media-record');
     }
     return JSON.stringify({owner, bindings});
   }

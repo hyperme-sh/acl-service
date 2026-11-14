@@ -568,3 +568,16 @@ The loader uses only the verifier shipped at `/opt/acl-admission` in the service
 image. Signature checks and current-history/checkpoint fences remain enforced by
 the source on every operation. Package-only environments without that bundle
 cannot activate this setting. Configuration changes require a service restart.
+
+`MediaSource.consume_allocation` is the internal atomic consumption boundary for
+new media allocations. Its trusted adapter supplies a configured signature
+verifier bound to issuer, source, tenant and policy; request JSON cannot supply
+that callable or choose those bindings. The method independently verifies the
+canonical signed ownership record against current protected SEA history, checks
+its digest and the configured policy digest, and commits the allocation ID,
+empty media state and independent checkpoints together. An identical retry
+reconciles without replacing state. Conflicting IDs, existing objects, partial
+restores, expired authority and cancellation refuse. Ownership and policy digests
+are SHA-256 of sorted compact JSON with ASCII escaping, including the ownership
+signature. There is no transport route or issuer configuration enabled by this
+internal method; authenticated issuance and runtime wiring remain required.
