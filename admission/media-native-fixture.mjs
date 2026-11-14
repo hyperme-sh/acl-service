@@ -3,6 +3,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {p256} from '@noble/curves/nist.js';
 import {lengthPrefixed,formatPrincipalKey,objectRecordBytes,signWithKeyring} from 'sociacl-ids';
+import {objectSetBytes,objectSetSoul} from 'sociacl/group';
 const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url)));
 const key=new Uint8Array(32);key[31]=1;
 const point=p256.getPublicKey(key,false);
@@ -43,6 +44,13 @@ const groupObjectRecord={object,owner:f.genesis,issuedAt:f.now};
 const groupSigned=signWithKeyring(key,objectRecordBytes(groupObjectRecord),f.genesis);
 if(!groupSigned.ok)throw Error(groupSigned.reason);
 groupObjectRecord.sig=groupSigned.value;
-const output={groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const groupEdges=[1,0].map((stated,index)=>{
+  const row={owner:f.genesis,object,predicate:groupPolicy.predicate,set:groupPolicy.setId,
+    stated,hamState:index+1,issuedAt:f.now,cancels:[]};
+  const signed=signWithKeyring(key,objectSetBytes(row),f.genesis);
+  if(!signed.ok)throw Error(signed.reason);
+  return {kind:'object-set',soul:objectSetSoul(row.owner,object,row.predicate,row.set),record:{...row,sig:signed.value}};
+});
+const output={groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

@@ -251,3 +251,24 @@ class NativeMediaContracts(TestCase):
         self.path.write_bytes(backup)
         with self.assertRaises(AdmissionRejected):
             self.source.group_policy_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+
+    def test_atomic_group_authority_preserves_native_edge_cancellation_and_direct_snapshot(self):
+        policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
+        self.mutate('grant',self.f['grant'])
+        view=lambda:self.source.group_authority_view(self.tenant,self.owner,self.object,self.now)
+        first=view()
+        rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupEdges'][0]]
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,first['fence'],predicate,set_id,rows)
+        self.source.append_group_policy(self.tenant,self.owner,self.object,self.now,view()['fence'],predicate,set_id,policy)
+        live=view()
+        self.assertEqual(live['policy']['config'],policy)
+        self.assertEqual(live['projection']['snapshot']['objectSet']['stated'],1)
+        self.assertEqual(live['direct'],first['direct'])
+        self.assertEqual(set(live['bindings']),{self.owner})
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,live['fence'],predicate,set_id,[self.f['groupEdges'][1]])
+        cancelled=view()
+        self.assertEqual(cancelled['projection']['snapshot']['objectSet']['stated'],0)
+        self.assertEqual(cancelled['projection']['snapshot']['objectSet']['hamState'],2)
+        self.assertEqual(cancelled['projection']['members'],[])
+        self.assertEqual(cancelled['direct'],first['direct'])
+        self.assertGreater(cancelled['objectVersion'],live['objectVersion'])
