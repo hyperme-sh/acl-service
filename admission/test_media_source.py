@@ -143,7 +143,7 @@ class MediaSourceContracts(TestCase):
         draft=self.source.deletion_view(TENANT,'owner',OBJECT)
         expected={**draft['claims'],'ownerPub':'owner-key'}
         verifier=Mock();verifier.matches_deletion.side_effect=lambda p,e,**kw:json.loads(e)==expected
-        self.grant()
+        self.mutate('grant',self.grant())
         with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
         fresh=self.source.deletion_view(TENANT,'owner',OBJECT)
         expected={**fresh['claims'],'ownerPub':'owner-key'}
