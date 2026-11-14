@@ -25,3 +25,15 @@ def test_fixed_sql_binding_does_not_interpolate_values():
     assert str(connection.execute.call_args.args[0]).startswith('INSERT INTO acl_checkpoint.')
     with pytest.raises(ValueError):
         db.execute('SELECT ?', ())
+
+
+@pytest.mark.parametrize('backend', ['store', 'provision'])
+def test_non_postgres_and_invalid_scopes_refuse_before_connecting(backend):
+    from acl_service.infrastructure.postgres_history_store import PostgresHistoryStore
+    from acl_service.infrastructure.postgres_media_provision import provision_empty_media_source
+    factory=PostgresHistoryStore if backend=='store' else provision_empty_media_source
+    options=dict(history_schema='acl_history',checkpoint_schema='acl_checkpoint',
+                 tenant='00000000-0000-0000-0000-000000000001',source='00000000-0000-0000-0000-000000000002')
+    for changes in ({}, {'checkpoint_schema':'acl_history'}, {'tenant':'00000000-0000-0000-0000-000000000000'}):
+        with pytest.raises(ValueError):
+            factory('sqlite://',**{**options,**changes})
