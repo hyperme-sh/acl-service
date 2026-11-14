@@ -190,6 +190,43 @@ class MediaSourceContracts(TestCase):
                 self.assertEqual(self.source._group_policy_context(db,OBJECT,doc,100,'same-group','set_test'),{'owner':'reader'})
                 self.assertEqual(verify.call_args.kwargs['groupPolicyGraph'],{'object':OBJECT,'predicate':'same-group','set':'set_test','rows':[{'signed':'row'}]})
 
+    def test_group_append_reconciliation_is_exact_current_and_read_only(self):
+        view=self.group_fixture()
+        rows=[{'kind':'object'},{'kind':'membership'}]
+        check=lambda values=rows:self.source.group_append_state(TENANT,'owner',OBJECT,100,'same-group','set_test',values)
+        first=view();self.assertEqual(check()['state'],'absent');self.assertEqual(view()['fence'],first['fence'])
+        self.source.append_group(TENANT,'owner',OBJECT,100,first['fence'],'same-group','set_test',rows[:1])
+        self.assertEqual(check()['state'],'absent')
+        held=check();self.source.append_group(TENANT,'owner',OBJECT,100,held['fence'],'same-group','set_test',rows)
+        applied=check();self.assertEqual(applied['state'],'applied')
+        self.assertEqual(check(rows+rows)['state'],'applied')
+        self.assertEqual(check([{'kind':'membership','changed':True}])['state'],'absent')
+        self.assertEqual(view()['fence'],applied['fence'])
+        current=asyncio.run(self.source.owner_group_append_state(TENANT,'owner',OBJECT,'same-group','set_test',rows))
+        self.assertEqual(current,{'at':100,**applied})
+        self.store.append('reader',0,b'{}')
+        self.assertNotEqual(check()['fence'],applied['fence'])
+        with patch('media_source.HistoryAdmission._run_verifier',side_effect=AdmissionRejected('history changed')):
+            with self.assertRaises(AdmissionRejected):check()
+
+    def test_group_append_reconciliation_refuses_boundaries_and_cancellation(self):
+        self.group_fixture()
+        for tenant,writer in [('bad','owner'),(TENANT,'reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.group_append_state(tenant,writer,OBJECT,100,'same-group','set_test',[{}])
+        for rows in [None,[],[{}]*65,[{'large':'x'*65536}],[{'bad':True}]]:
+            with self.assertRaises(AdmissionRejected):self.source.group_append_state(TENANT,'owner',OBJECT,100,'same-group','set_test',rows)
+        calls=0
+        def cancel():
+            nonlocal calls
+            calls+=1
+            if calls>1:raise AdmissionRejected('cancelled')
+        with self.assertRaises(AdmissionRejected):self.source.group_append_state(TENANT,'owner',OBJECT,100,'same-group','set_test',[{}],cancel)
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['groupScopes']={f'same-group:set_{n}':[{}] for n in range(8)}
+            self.source._save(db,OBJECT,row,doc)
+        with self.assertRaises(AdmissionRejected):self.source.group_append_state(TENANT,'owner',OBJECT,100,'same-group','set_new',[{}])
+
     def test_group_journal_retains_cancellation_and_rejects_stale_writes(self):
         view=self.group_fixture()
         first=view();self.assertIsNone(first['projection'])

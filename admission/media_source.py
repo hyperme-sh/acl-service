@@ -151,6 +151,40 @@ class MediaSource:
             projection=self._group_projection(db,object,doc,at,predicate,set_id,rows) if rows else None
             return {'rows':rows,'projection':projection,'fence':self._fence(db,object,row,at)}
 
+    @staticmethod
+    def _group_rows(rows):
+        if type(rows) is not list or not 1<=len(rows)<=64 or len(encoded(rows))>65536:
+            raise AdmissionRejected('invalid group append')
+        return json.loads(encoded(rows))
+
+    @staticmethod
+    def _group_candidate(retained,rows):
+        candidate=list(retained)
+        for item in rows:
+            if item not in candidate:candidate.append(item)
+        if len(candidate)>1024 or len(encoded(candidate))>4*1024*1024:
+            raise AdmissionRejected('group row capacity')
+        return candidate
+
+    def group_append_state(self,tenant,writer,object,at,predicate,set_id,rows,cancel=lambda:None):
+        """Reconcile exact signed rows under current authority without writing."""
+        self._guard(at,cancel)
+        key=self._group_key(predicate,set_id)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        rows=self._group_rows(rows)
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            held,doc=self._load(db,object,at)
+            if writer!=self.identities(db,object,doc,at)['owner']:raise AdmissionRejected('group owner required')
+            scopes=doc.get('groupScopes',{})
+            if key not in scopes and len(scopes)>=8:raise AdmissionRejected('group scope capacity')
+            retained=scopes.get(key,[])
+            candidate=self._group_candidate(retained,rows)
+            self._group_projection(db,object,doc,at,predicate,set_id,candidate)
+            # A batch can legitimately include previously retained object rows.
+            # Partial overlap is still absent until every exact row is retained.
+            return {'state':'applied' if all(item in retained for item in rows) else 'absent',
+                    'fence':self._fence(db,object,held,at)}
+
     def append_group(self,tenant,writer,object,at,fence,predicate,set_id,rows,cancel=lambda:None):
         """Retain bounded signed group rows in the existing protected media journal.
 
@@ -160,9 +194,8 @@ class MediaSource:
         """
         self._guard(at,cancel)
         key=self._group_key(predicate,set_id)
-        if tenant!=self.tenant or type(rows) is not list or not 1<=len(rows)<=64 or len(encoded(rows))>65536:
-            raise AdmissionRejected('invalid group append')
-        rows=json.loads(encoded(rows))
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        rows=self._group_rows(rows)
         with self.store._transaction(write=True,before_commit=lambda:self._guard(at,cancel)) as db:
             held,doc=self._load(db,object,at)
             identities=self.identities(db,object,doc,at)
@@ -172,11 +205,7 @@ class MediaSource:
             scopes=doc.setdefault('groupScopes',{})
             if key not in scopes and len(scopes)>=8: raise AdmissionRejected('group scope capacity')
             retained=scopes.get(key,[])
-            candidate=list(retained)
-            for item in rows:
-                if item not in candidate: candidate.append(item)
-            if len(candidate)>1024 or len(encoded(candidate))>4*1024*1024:
-                raise AdmissionRejected('group row capacity')
+            candidate=self._group_candidate(retained,rows)
             self._group_projection(db,object,doc,at,predicate,set_id,candidate)
             if candidate!=retained:
                 if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
@@ -1170,6 +1199,14 @@ class MediaSource:
 
     async def owner_group_view(self,tenant,writer,object):
         return await self._work(self._owner_group_view,tenant,writer,object)
+
+    def _owner_group_append_state(self,tenant,writer,object,predicate,set_id,rows,cancel):
+        at=int(self.clock())
+        return {'at':at,**self.group_append_state(tenant,writer,object,at,predicate,set_id,rows,cancel)}
+
+    async def owner_group_append_state(self,tenant,writer,object,predicate,set_id,rows):
+        rows=self._group_rows(rows)
+        return await self._work(self._owner_group_append_state,tenant,writer,object,predicate,set_id,rows)
 
     async def owner_append_group(self,tenant,writer,object,at,fence,predicate,set_id,rows):
         if type(rows) is not list or len(encoded(rows))>65536:raise AdmissionRejected('invalid group append')
