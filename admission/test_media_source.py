@@ -39,6 +39,12 @@ class MediaSourceContracts(TestCase):
         self.source=MediaSource(self.store,TENANT,clock=lambda:self.now,identities=self.identities,native=self.native)
         self.source.provision(OBJECT,{},10000,exclusive_grant=lambda *args:True)
 
+    def enable_active_index(self):
+        with self.store._transaction(write=False) as db:
+            db.execute('CREATE TABLE freshness.media_active (object TEXT PRIMARY KEY)')
+            db.execute('INSERT INTO freshness.media_active SELECT object FROM freshness.media_checkpoints')
+        self.store.active_media_index=True
+
     def mutate(self,operation,payload,**kwargs):
         fence=self.source.read_view(OBJECT,self.now)['fence']
         return self.source.mutate(TENANT,'owner',OBJECT,self.now,fence,operation,payload,**kwargs)
@@ -732,12 +738,6 @@ class AllocationConsumptionContracts(MediaSourceContracts):
         with self.store._transaction(write=True) as db:
             db.execute('DELETE FROM media_allocations WHERE object=?',('media_new',))
         with self.assertRaises(HistoryConflict):confirm(command=command)
-
-    def enable_active_index(self):
-        with self.store._transaction(write=False) as db:
-            db.execute('CREATE TABLE freshness.media_active (object TEXT PRIMARY KEY)')
-            db.execute('INSERT INTO freshness.media_active SELECT object FROM freshness.media_checkpoints')
-        self.store.active_media_index=True
 
     def test_active_capacity_released_only_after_confirmed_cleanup(self):
         self.enable_active_index()
