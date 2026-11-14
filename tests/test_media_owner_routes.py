@@ -244,3 +244,18 @@ async def test_cleanup_requires_same_fixed_owner_source_and_allocation_binding(s
             setattr(allocated,field,previous)
         allocated.retire.side_effect=AdmissionRejected()
         assert (await client.post(BASE+'cleanup',json={'object':'media-object'})).status_code==403
+
+
+@pytest.mark.asyncio
+async def test_registration_confirmation_is_fixed_subject_and_read_only(setup):
+    s=setup;s.authority.owner_confirm_registration=AsyncMock(return_value=True)
+    body={'object':'media-object','record':{'object':'media-object','owner':'fixed-owner','issuedAt':100,'sig':'signed'}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'registration',json=body)
+        assert response.status_code==200 and response.json()=={'accepted':True}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_confirm_registration.assert_awaited_once_with(str(s.tenant),'fixed-owner',body['object'],body['record'])
+        for bad in [{},{**body,'writer':'attacker'},{**body,'record':[]}]:
+            assert (await client.post(BASE+'registration',json=bad)).status_code==400
+        s.authority.owner_confirm_registration.return_value=False
+        assert (await client.post(BASE+'registration',json=body)).status_code==403

@@ -619,6 +619,31 @@ class MediaSource:
         self._guard(at, cancel)
         return {'at': at, **view}
 
+    def _confirm_registration(self,tenant,writer,object,record,cancel):
+        at=int(self.clock());guard=lambda:self._guard(at,cancel)
+        guard()
+        if (tenant!=self.tenant or type(record) is not dict
+                or set(record)!={'object','owner','issuedAt','sig'}
+                or record['object']!=object or record['owner']!=writer or len(encoded(record))>2048):
+            raise AdmissionRejected('invalid media registration')
+        record=json.loads(encoded(record))
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            _,doc=self._load(db,object,at)
+            held=db.execute('SELECT allocation,digest FROM media_allocations WHERE object=?',(object,)).fetchone()
+            anchor=db.execute('SELECT allocation,digest FROM freshness.media_allocations WHERE object=?',(object,)).fetchone()
+            if held is None or held!=anchor:
+                raise HistoryConflict('media allocation checkpoint mismatch')
+            identities=self._identities(db,object,doc,at,record)
+            if identities['owner']!=writer:
+                raise AdmissionRejected('media owner required')
+            guard()
+            return True
+
+    async def owner_confirm_registration(self,tenant,writer,object,record):
+        if type(record) is not dict or len(encoded(record))>2048:raise AdmissionRejected('invalid media registration')
+        record=json.loads(encoded(record))
+        return await self._work(self._confirm_registration,tenant,writer,object,record)
+
     def _owner_upload_state(self, tenant, writer, object, operation, payload, cancel):
         from acl_service.domain.media_upload_reconcile import upload_state
         at = int(self.clock()); self._guard(at, cancel)
