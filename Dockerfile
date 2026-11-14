@@ -24,6 +24,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY admission/history_admission.py admission/verify.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs admission/statement-quota.mjs admission/delegation_source.py admission/delegation-graph.mjs admission/media_source.py ./
 
 FROM python:3.13-slim-bookworm AS media-contract
+RUN pip install --no-cache-dir cryptography==50.0.2
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=verifier /usr/local/bin/node /usr/local/bin/node

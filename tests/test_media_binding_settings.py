@@ -142,3 +142,24 @@ class MediaBindingUnits(TestCase):
                 with self.assertRaises(RuntimeError):m.load_media_bindings(
                     {m.CONFIG_NAME:'/private/config'},source_factory=source)
             source.assert_not_called()
+
+    def test_empty_delivery_requires_the_same_explicit_allocation_authority(self):
+        expected=m.parse_settings(encode())[0]
+        authority=SimpleNamespace(production_ready=True,tenant=TENANT,
+            store=SimpleNamespace(path=expected.history,freshness_path=expected.freshness))
+        allocation=SimpleNamespace(tenant=TENANT,authority=authority,client=SimpleNamespace(origin='https://storage.example'))
+        factory=Mock(side_effect=AssertionError('must reuse allocation authority'))
+        module=SimpleNamespace(PrivateWrapBinding=lambda tenant,reader,authority,store:
+            SimpleNamespace(tenant=tenant,reader=reader,authority=authority,store=store))
+        with patch.object(m,'_private_file',side_effect=[io.BytesIO(encode()),io.BytesIO(b'key')]),\
+                patch.object(m,'_provisioned') as provisioned,patch.object(m.os.path,'samefile',return_value=True),\
+                patch.dict(sys.modules,{'acl_service.interfaces.api.private_wrap_routes':module}):
+            result=m.load_media_bindings({m.CONFIG_NAME:'/private/config'},source_factory=factory,store_factory=Mock(),
+                allocation_bindings={'bound':allocation})
+        self.assertIs(next(iter(result.values())).authority,authority)
+        provisioned.assert_called_once_with(expected,allow_empty=True)
+        factory.assert_not_called()
+        with patch.object(m,'_private_file',return_value=io.BytesIO(encode())),\
+                patch.object(m.os.path,'samefile',return_value=False):
+            with self.assertRaisesRegex(RuntimeError,'Invalid private media binding configuration'):
+                m.load_media_bindings({m.CONFIG_NAME:'/private/config'},allocation_bindings={'bound':allocation})
