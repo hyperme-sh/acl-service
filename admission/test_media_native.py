@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 from unittest import TestCase
 from media_source import MediaSource
+from acl_service.infrastructure.epoch_verifier import GroupEpochConfigVerifier
 from history_admission import HistoryAdmission, EnrollmentGrant
 from acl_service.domain.history_store import AdmissionRejected
 from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
@@ -215,3 +216,19 @@ class NativeMediaContracts(TestCase):
         self.path.write_bytes(backup)
         with self.assertRaises(AdmissionRejected):
             asyncio.run(self.source.owner_upload_state(self.tenant,self.owner,self.object,'epoch',self.f['epoch']))
+
+
+    def test_group_policy_native_adapter_uses_independent_owner_scope(self):
+        policy=self.f['groupPolicy']
+        ids=self.source.read_view(self.object,self.now)
+        expected={'owner':self.owner,'ownerPub':ids['bindings'][self.owner]['pub'],
+                  'setId':self.object.replace('media_','set_'),'predicate':'same-group',
+                  'settleWindowMs':3600000,'configRevision':2}
+        verifier=GroupEpochConfigVerifier()
+        raw=json.dumps(policy).encode()
+        self.assertTrue(verifier.matches_config(raw,json.dumps(expected).encode()))
+        for field,value in [('owner','other'),('ownerPub','bad'),('setId','other'),('predicate','named-circle'),
+                            ('settleWindowMs',7200000),('configRevision',3)]:
+            self.assertFalse(verifier.matches_config(raw,json.dumps({**expected,field:value}).encode()))
+        duplicate=raw[:-1]+b',"configRevision":2}'
+        self.assertFalse(verifier.matches_config(duplicate,json.dumps(expected).encode()))

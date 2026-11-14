@@ -136,3 +136,28 @@ class EpochHistoryVerifier:
             return self._verify(buffer, len(history)) == 1
         except (OSError, ValueError, ctypes.ArgumentError):
             return False
+
+
+class GroupEpochConfigVerifier:
+    """Authenticate policy against independently resolved set owner and key.
+
+    The protected caller supplies expected scope, revision and window. This
+    adapter does not select current policy history, grant access or settle keys.
+    """
+    def __init__(self):
+        self._library = ctypes.CDLL(LIBRARY)
+        self._verify = self._library.sociacl_verify_group_epoch_config
+        self._verify.argtypes = [ctypes.c_void_p, ctypes.c_size_t,
+                                ctypes.c_void_p, ctypes.c_size_t]
+        self._verify.restype = ctypes.c_int
+
+    def matches_config(self, proof: bytes, expected: bytes) -> bool:
+        if any(type(value) is not bytes or not 0 < len(value) <= MAX_DOCUMENT
+               for value in (proof, expected)):
+            return False
+        proof_buffer = ctypes.create_string_buffer(proof)
+        expected_buffer = ctypes.create_string_buffer(expected)
+        try:
+            return self._verify(proof_buffer, len(proof), expected_buffer, len(expected)) == 1
+        except (OSError, ValueError, ctypes.ArgumentError):
+            return False

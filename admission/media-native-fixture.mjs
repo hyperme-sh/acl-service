@@ -34,6 +34,9 @@ const allocationRecord={object:object.slice(0,-32)+'cd'.repeat(16),owner:f.genes
 const signed=signWithKeyring(key,objectRecordBytes(allocationRecord),f.genesis);
 if(!signed.ok)throw Error(signed.reason);
 allocationRecord.sig=signed.value;
-const output={allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const groupPolicy={owner:f.genesis,setId:object.replace('media_','set_'),predicate:'same-group',settleWindowMs:3600000,configRevision:2};
+groupPolicy.signature=sign(canonical(['s3rch-group-epoch-config-v1',groupPolicy.owner,groupPolicy.setId,groupPolicy.predicate,
+  String(groupPolicy.settleWindowMs),String(groupPolicy.configRevision)]));
+const output={groupPolicy,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

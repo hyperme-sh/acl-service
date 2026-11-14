@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from acl_service.infrastructure.epoch_verifier import (
     EpochStatusVerifier, EpochManifestVerifier, LIBRARY, MAX_DOCUMENT, MAX_SAFE, MAX_MANIFEST_DOCUMENT,
-    SettledEpochVerifier, MAX_EPOCH_HISTORY, PrivateGrantVerifier, EpochHistoryVerifier,
+    SettledEpochVerifier, MAX_EPOCH_HISTORY, PrivateGrantVerifier, EpochHistoryVerifier, GroupEpochConfigVerifier,
 )
 
 
@@ -180,3 +180,31 @@ class EpochHistoryVerifierTests(TestCase):
         self.assertFalse(verifier.verifies_history(raw))
         native.side_effect=OSError()
         self.assertFalse(verifier.verifies_history(raw))
+
+
+class GroupEpochConfigVerifierTests(TestCase):
+    def test_exact_buffers_boundaries_and_native_refusals(self):
+        native=Mock(return_value=1)
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',return_value=Mock(sociacl_verify_group_epoch_config=native)) as load:
+            verifier=GroupEpochConfigVerifier()
+            load.assert_called_once_with(LIBRARY)
+        proof=b'{"configRevision":1,"configRevision":2}'
+        self.assertTrue(verifier.matches_config(proof,b'{"trusted":true}'))
+        args=native.call_args.args
+        self.assertEqual(ctypes.string_at(args[0],args[1]),proof)
+        self.assertEqual(ctypes.string_at(args[2],args[3]),b'{"trusted":true}')
+        for value in [None,'',bytearray(b'{}'),b'',b'x'*(MAX_DOCUMENT+1)]:
+            native.reset_mock()
+            self.assertFalse(verifier.matches_config(value,b'{}'))
+            self.assertFalse(verifier.matches_config(b'{}',value))
+            native.assert_not_called()
+        for result in [0,-1,2]:
+            native.return_value=result
+            self.assertFalse(verifier.matches_config(b'{}',b'{}'))
+        for error in [OSError(),ValueError(),ctypes.ArgumentError()]:
+            native.side_effect=error
+            self.assertFalse(verifier.matches_config(b'{}',b'{}'))
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',side_effect=OSError()):
+            with self.assertRaises(OSError):GroupEpochConfigVerifier()
+        with patch('acl_service.infrastructure.epoch_verifier.ctypes.CDLL',return_value=object()):
+            with self.assertRaises(AttributeError):GroupEpochConfigVerifier()
