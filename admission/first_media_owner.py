@@ -43,8 +43,9 @@ def admit_first_media_owner(store, grant, genesis, signature, *, resolve_owner, 
             or type(grant.expires_at) is not int or not now<grant.expires_at<=now+60):
         raise AdmissionRejected('invalid first owner grant')
     def current():
+        resolved=resolve_owner(DECLARED_WALLET,grant.tenant)
         at=int(clock())
-        if at<now or at>=grant.expires_at or resolve_owner(DECLARED_WALLET,grant.tenant)!=grant.principal:
+        if at<now or at>=grant.expires_at or resolved!=grant.principal:
             raise AdmissionRejected('first owner resolution changed or unavailable')
     current()
     admission=HistoryAdmission(store,grant_for=lambda _:None,trust_at=trust_at,clock=clock)

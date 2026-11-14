@@ -46,6 +46,15 @@ class FirstOwnerTests(TestCase):
         with self.assertRaises(AdmissionRejected):self.admit(signature='bad')
         self.store.enroll_first_media_owner.assert_not_called()
 
+    def test_resolver_elapsed_time_is_checked_after_resolution(self):
+        initial=self.now
+        for after in (initial-1,self.grant.expires_at):
+            self.now=initial
+            def resolve(*args):self.now=after;return self.principal
+            self.resolve.side_effect=resolve
+            with self.assertRaises(AdmissionRejected):self.admit()
+        self.store.enroll_first_media_owner.assert_not_called()
+
     def test_invalid_grants_expiry_and_clock_regression(self):
         for grant in [object(),replace(self.grant,tenant='bad'),replace(self.grant,source='00000000-0000-0000-0000-000000000003'),
             replace(self.grant,principal='bad'),replace(self.grant,nonce='bad'),replace(self.grant,expires_at=True),
