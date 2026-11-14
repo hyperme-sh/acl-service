@@ -62,7 +62,7 @@ class FirstOwnerTests(TestCase):
             with self.assertRaises(AdmissionRejected):self.admit(grant)
         with patch('first_media_owner.HistoryAdmission._verify',return_value=b'fork'):
             with self.assertRaises(AdmissionRejected):self.admit()
-        def expired(*args):self.now=self.grant.expires_at;return b'accepted'
+        def expired(*args,**kwargs):self.now=self.grant.expires_at;return b'accepted'
         with patch('first_media_owner.HistoryAdmission._verify',side_effect=expired):
             with self.assertRaises(AdmissionRejected):self.admit()
         self.store.enroll_first_media_owner.assert_not_called()
