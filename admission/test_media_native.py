@@ -118,3 +118,23 @@ class NativeMediaContracts(TestCase):
             result=await self.source.owner_catalog(self.tenant,self.owner,0)
             self.assertEqual(result,{'at':self.now,'objects':[self.object],'nextPage':1})
         asyncio.run(run())
+
+
+    def test_allocation_checks_real_current_owner_signature_before_consuming(self):
+        from types import SimpleNamespace
+        from media_source import encoded
+        record=self.f['allocationRecord']
+        policy={k:self.f['identity'][k] for k in ('jwks','policy','pinnedIss')}
+        scope=SimpleNamespace(tenant=self.tenant,owner=self.owner,object=record['object'],
+            ownership_digest=hashlib.sha256(encoded(record)).hexdigest(),
+            policy_digest=hashlib.sha256(encoded(policy)).hexdigest())
+        scope.claims=lambda:{'tenant':self.tenant,'owner':self.owner,'object':record['object']}
+        proof=SimpleNamespace(scope=scope,allocation='01234567-89ab-cdef-0123-456789abcdef',issued_at=self.now,expires_at=self.now+60)
+        def consume(value):
+            return self.source.consume_allocation(self.tenant,self.owner,value,policy,self.now+7200,verify_grant=lambda at:proof)
+        forged={**record,'sig':'A'*86}
+        scope.ownership_digest=hashlib.sha256(encoded(forged)).hexdigest()
+        with self.assertRaises(AdmissionRejected):consume(forged)
+        scope.ownership_digest=hashlib.sha256(encoded(record)).hexdigest()
+        self.assertTrue(consume(record))
+        self.assertFalse(consume(record))

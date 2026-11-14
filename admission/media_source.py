@@ -47,18 +47,20 @@ class MediaSource:
                 raise AdmissionRejected('database belongs to another tenant')
             db.execute('CREATE TABLE IF NOT EXISTS media_sources (object TEXT PRIMARY KEY, revision INTEGER NOT NULL, nonce BLOB NOT NULL, document BLOB NOT NULL)')
             db.execute('CREATE TABLE IF NOT EXISTS freshness.media_checkpoints (object TEXT PRIMARY KEY, digest BLOB NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS media_allocations (allocation TEXT PRIMARY KEY, object TEXT UNIQUE NOT NULL, digest BLOB NOT NULL)')
+            db.execute('CREATE TABLE IF NOT EXISTS freshness.media_allocations (allocation TEXT PRIMARY KEY, object TEXT UNIQUE NOT NULL, digest BLOB NOT NULL)')
 
     _guard=StatementSource._guard
     _accounts=StatementSource._accounts
     _digest=staticmethod(StatementSource._digest)
     _fence=StatementSource._fence
 
-    def _identities(self, db, object, doc, at):
+    def _identities(self, db, object, doc, at, record=None):
         accounts = self._accounts(db)
         principal = next(iter(accounts)); account = accounts[principal]
         runner = HistoryAdmission(self.store, grant_for=lambda _:None,
                                   trust_at=lambda _:doc['policy'], clock=self.clock)
-        return json.loads(runner._run_verifier(principal, at, mediaObject=object,
+        return json.loads(runner._run_verifier(principal, at, mediaObject=object, mediaRecord=record,
             genesis=_record(account.genesis), entries=[_record(row) for row in account.entries],
             peers=_peer_inputs(principal, accounts)))
 
@@ -106,6 +108,68 @@ class MediaSource:
             if len(row[2])>65536: raise AdmissionRejected('media policy capacity')
             db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
             self._checkpoint(db,object,row,write=True)
+
+    def consume_allocation(self, tenant, writer, record, policy, policy_until, *,
+                           verify_grant, cancel=lambda:None):
+        """Consume a configured issuer proof with empty state in one transaction.
+
+        verify_grant(at) is the trusted adapter's bounded signature verifier,
+        already bound to configured issuer/source/tenant/policy and raw proof.
+        It returns the shared VerifiedAllocation value; it is never request data.
+        No source enrollment, policy selection or issuer selection happens here.
+        """
+        at=int(self.clock())
+        if tenant != self.tenant or type(record) is not dict or set(record) != {'object','owner','issuedAt','sig'}:
+            raise AdmissionRejected('invalid allocation ownership')
+        record=json.loads(encoded(record)); policy=json.loads(encoded(policy))
+        if len(encoded(record))>2048 or len(encoded(policy))>65536:
+            raise AdmissionRejected('allocation input capacity')
+        if record['owner'] != writer or type(policy_until) is not int or policy_until<=at:
+            raise AdmissionRejected('invalid allocation owner or policy')
+        proof=verify_grant(at)
+        scope=proof.scope
+        ownership_digest=hashlib.sha256(encoded(record)).hexdigest()
+        policy_digest=hashlib.sha256(encoded(policy)).hexdigest()
+        if (scope.tenant != tenant or scope.owner != writer or scope.object != record['object']
+                or scope.ownership_digest != ownership_digest or scope.policy_digest != policy_digest):
+            raise AdmissionRejected('allocation scope mismatch')
+        allocation=str(UUID(proof.allocation))
+        if allocation != proof.allocation or not UUID(allocation).int:
+            raise AdmissionRejected('invalid allocation identifier')
+        object=record['object']
+        digest=hashlib.sha256(encoded([scope.claims(),allocation,proof.issued_at,proof.expires_at,policy_until])).digest()
+        doc={'policy':policy,'policyUntil':policy_until,'grants':[],
+             'manifests':[],'finalizations':[],'statuses':{},'wraps':{},'anchor':'','floor':0,
+             'objectVersion':0,'frozen':[],'conflicts':[]}
+        def guard():
+            self._guard(at,cancel)
+            if verify_grant(at) != proof:
+                raise AdmissionRejected('allocation authority changed')
+        guard()
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            # Native verification uses current protected history, including rotation.
+            identities=self._identities(db,object,doc,at,record)
+            if identities['owner'] != writer:
+                raise AdmissionRejected('allocation owner mismatch')
+            held=db.execute('SELECT object,digest FROM media_allocations WHERE allocation=?',(allocation,)).fetchone()
+            anchor=db.execute('SELECT object,digest FROM freshness.media_allocations WHERE allocation=?',(allocation,)).fetchone()
+            if held is not None or anchor is not None:
+                if held != (object,digest) or anchor != held:
+                    raise HistoryConflict('allocation already consumed or checkpoint mismatch')
+                self._load(db,object,at)
+                return False
+            if db.execute('SELECT COUNT(*) FROM media_sources').fetchone()[0]>=64:
+                raise AdmissionRejected('media object capacity')
+            for table in ('media_sources','freshness.media_checkpoints','media_allocations','freshness.media_allocations'):
+                if db.execute('SELECT 1 FROM '+table+' WHERE object=?',(object,)).fetchone():
+                    raise HistoryConflict('media object already provisioned')
+            row=(0,secrets.token_bytes(32),encoded(doc))
+            if len(row[2])>65536: raise AdmissionRejected('media policy capacity')
+            db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
+            self._checkpoint(db,object,row,write=True)
+            db.execute('INSERT INTO media_allocations VALUES(?,?,?)',(allocation,object,digest))
+            db.execute('INSERT INTO freshness.media_allocations VALUES(?,?,?)',(allocation,object,digest))
+            return True
 
     @staticmethod
     def _latest(doc):

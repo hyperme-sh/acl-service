@@ -454,3 +454,52 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
             if not source.slots.locked():break
             await asyncio.sleep(.01)
         self.assertFalse(source.slots.locked()); self.assertFalse(committed)
+
+
+class AllocationConsumptionContracts(MediaSourceContracts):
+    def allocation(self):
+        from types import SimpleNamespace
+        record={'object':'media_new','owner':'owner','issuedAt':100,'sig':'signed'}
+        scope=SimpleNamespace(tenant=TENANT,owner='owner',object='media_new',
+            ownership_digest=hashlib.sha256(encoded(record)).hexdigest(),
+            policy_digest=hashlib.sha256(encoded({})).hexdigest())
+        scope.claims=lambda:{'tenant':TENANT,'owner':'owner','object':'media_new'}
+        proof=SimpleNamespace(scope=scope,allocation='01234567-89ab-cdef-0123-456789abcdef',issued_at=100,expires_at=200)
+        return record,proof
+
+    def consume(self,record,proof,**kwargs):
+        return self.source.consume_allocation(TENANT,'owner',record,{},10000,
+            verify_grant=kwargs.pop('verify_grant',lambda at:proof),**kwargs)
+
+    def test_atomic_allocation_retry_and_primary_rollback(self):
+        record,proof=self.allocation();before=self.path.read_bytes()
+        with patch.object(self.source,'_identities',return_value=self.ids):
+            self.assertTrue(self.consume(record,proof))
+            self.assertFalse(self.consume(record,proof))
+            self.assertEqual(self.source.read_view('media_new',self.now)['snapshot'],{'entries':[]})
+            self.path.write_bytes(before)
+            with self.assertRaises(HistoryConflict):self.consume(record,proof)
+
+    def test_cancellation_and_changed_grant_roll_back_all_tables(self):
+        record,proof=self.allocation()
+        def cancelled():raise AdmissionRejected('cancelled')
+        with patch.object(self.source,'_identities',return_value=self.ids):
+            with self.assertRaises(AdmissionRejected):self.consume(record,proof,cancel=cancelled)
+            verifier=Mock(side_effect=[proof,proof,None])
+            with self.assertRaises(AdmissionRejected):self.consume(record,proof,verify_grant=verifier)
+            self.assertTrue(self.consume(record,proof))
+
+    def test_mismatched_scope_owner_and_duplicate_object_refuse(self):
+        record,proof=self.allocation()
+        for name,value in [('tenant','foreign'),('owner','foreign'),('object','foreign'),('policy_digest','wrong'),('ownership_digest','wrong')]:
+            old=getattr(proof.scope,name);setattr(proof.scope,name,value)
+            with self.assertRaises(AdmissionRejected):self.consume(record,proof)
+            setattr(proof.scope,name,old)
+        with patch.object(self.source,'_identities',return_value={'owner':'foreign'}):
+            with self.assertRaises(AdmissionRejected):self.consume(record,proof)
+        with patch.object(self.source,'_identities',return_value=self.ids):
+            self.assertTrue(self.consume(record,proof))
+            proof.allocation='11234567-89ab-cdef-0123-456789abcdef'
+            with self.assertRaises(HistoryConflict):self.consume(record,proof)
+        for invalid in [None,{**record,'extra':True},{**record,'owner':'foreign'}]:
+            with self.assertRaises(AdmissionRejected):self.consume(invalid,proof)
