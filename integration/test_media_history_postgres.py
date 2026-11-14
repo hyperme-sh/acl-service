@@ -109,3 +109,54 @@ def test_parallel_append_has_one_winner_and_cancel_rolls_back(source):
     assert store.read_ciphertext('owner', 'wraps') == (0, b'')
     with store._transaction(write=False) as db:
         assert db.execute('SELECT head FROM history_head_floors').fetchall() == []
+
+
+def test_media_allocation_is_atomic_and_replay_safe(source, monkeypatch):
+    import hashlib
+    import importlib
+    from pathlib import Path
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from acl_service.domain.history_store import AdmissionRejected
+    # The admission bundle is built separately from the installed library. This
+    # contract uses its source with native verification replaced by a fixed
+    # verifier boundary; native signature contracts run in the admission lane.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'admission'))
+    media = importlib.import_module('media_source')
+    store, spec, url = source
+    store.enroll('owner', b'genesis')
+    authority = media.MediaSource(store, spec['tenant'], clock=lambda:100,
+                                 identities=Mock(), native=tuple(Mock() for _ in range(5)))
+    monkeypatch.setattr(authority, '_identities', Mock(return_value={'owner':'owner'}))
+    record = {'object':'media_new', 'owner':'owner', 'issuedAt':100, 'sig':'signed'}
+    scope = SimpleNamespace(tenant=spec['tenant'], owner='owner', object='media_new',
+        ownership_digest=hashlib.sha256(media.encoded(record)).hexdigest(),
+        policy_digest=hashlib.sha256(media.encoded({})).hexdigest())
+    scope.claims=lambda:{'tenant':spec['tenant'],'owner':'owner','object':'media_new'}
+    proof=SimpleNamespace(scope=scope, allocation=str(uuid4()), issued_at=100, expires_at=200)
+    def consume(**kwargs):
+        return authority.consume_allocation(spec['tenant'],'owner',record,{},10000,
+                                             verify_grant=lambda _:proof, **kwargs)
+    guards=0
+    def cancel_commit():
+        nonlocal guards
+        guards+=1
+        if guards==2:
+            raise AdmissionRejected('cancelled at commit')
+    with pytest.raises(AdmissionRejected):
+        consume(cancel=cancel_commit)
+    with store._transaction(write=False) as db:
+        for table in ('media_sources','media_allocations','freshness.media_checkpoints','freshness.media_allocations'):
+            assert db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sorted(pool.map(lambda _:consume(), range(2))) == [False, True]
+    assert consume() is False
+    engine=create_engine(url)
+    try:
+        with engine.begin() as db:
+            db.execute(text(f'DELETE FROM "{spec["history_schema"]}".media_allocations'))
+            db.execute(text(f'DELETE FROM "{spec["history_schema"]}".media_sources'))
+        with pytest.raises(HistoryConflict):
+            consume()
+    finally:
+        engine.dispose()
