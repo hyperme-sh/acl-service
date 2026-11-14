@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: hyperme-sh/controlplane-core
-          ref: c8d3dbfc5890f66bc838ffaf28d40e9f98b3fc80
+          ref: 4c885779a9f2accfeaed88710125f71f7192b67e
           path: core-allocation-wire
           persist-credentials: false
       - name: Refuse drift in the independent allocation wire modules
