@@ -156,6 +156,16 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
         with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
 
+    def test_catalog_skips_verified_tombstones_but_rejects_corruption(self):
+        owner,objects=self.catalog_fixture()
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        self.source.delete(TENANT,owner,objects[0],self.now,{},verifier=verifier)
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,0,lambda:None)['objects'],objects[1:4])
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,1,lambda:None)['objects'],objects[4:])
+        with self.store._transaction(write=True) as db:
+            db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',(objects[0],))
+        with self.assertRaises(AdmissionRejected):self.source._owner_catalog(TENANT,owner,0,lambda:None)
+
     def test_private_view_and_delivery_commit_share_protected_history(self):
         self.ready(); permit=self.permit()
         self.assertEqual((permit.reader_epub,permit.epoch,permit.revision_id),('reader-epub',1,'b'*64))

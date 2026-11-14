@@ -79,12 +79,14 @@ class MediaSource:
         elif db.execute('SELECT digest FROM freshness.media_checkpoints WHERE object=?',(object,)).fetchone() != (digest,):
             raise AdmissionRejected('media checkpoint mismatch')
 
-    def _load(self, db, object, at):
+    def _load(self, db, object, at, *, catalog=False):
         row = db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
         if row is None: raise AdmissionRejected('media source unavailable')
         self._checkpoint(db,object,row)
         doc = json.loads(row[2])
-        if 'deletion' in doc: raise AdmissionRejected('media object deleted')
+        if 'deletion' in doc:
+            if catalog: return row,doc  # Only to skip a checkpoint-verified tombstone.
+            raise AdmissionRejected('media object deleted')
         if at >= doc['policyUntil']: raise AdmissionRejected('media policy expired')
         return row,doc
 
@@ -615,7 +617,8 @@ class MediaSource:
                               (len(prefix),prefix,page*4)).fetchall()
             for (object,) in rows:
                 self._guard(at,cancel)
-                _,doc = self._load(db,object,at)
+                _,doc = self._load(db,object,at,catalog=True)
+                if 'deletion' in doc: continue
                 identities = self.identities(db,object,doc,at)
                 if identities['owner'] == writer:
                     objects.append(object)
