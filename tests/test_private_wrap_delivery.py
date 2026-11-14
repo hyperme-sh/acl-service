@@ -19,6 +19,20 @@ class PrivateWrapDeliveryTests(IsolatedAsyncioTestCase):
         self.store=Mock(tenant='tenant',read=AsyncMock())
         self.store.read.return_value=self.payload
 
+    async def test_allocated_store_binds_only_the_verified_permit_object(self):
+        original=self.store;selected=[]
+        class Store:
+            tenant='tenant'
+            def for_object(self,object):
+                selected.append(object)
+                return original
+        self.store=Store()
+        self.assertEqual(await self.run_delivery(),self.payload)
+        self.assertEqual(selected,['object'])
+        self.authority.authorize_read.return_value=replace(self.permit,object='other')
+        with self.assertRaises(WrapDeliveryRejected):await self.run_delivery()
+        self.assertEqual(selected,['object'])
+
     async def run_delivery(self, **kwargs):
         return await deliver_private_wrap(self.authority,self.store,'tenant','reader','object',
                                     **{'clock':lambda:100,**kwargs})

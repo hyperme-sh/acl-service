@@ -23,6 +23,20 @@ class PublicationUnits(IsolatedAsyncioTestCase):
     async def publish(self,payload=BODY):
         return await publish_private_wrap(self.authority,self.store,'tenant','owner','object',100,'fence',{},payload,clock=lambda:self.now)
 
+    async def test_allocated_store_binds_only_after_accepted_write_permit(self):
+        self.setup_case();original=self.store;selected=[]
+        class Store:
+            tenant='tenant'
+            def for_object(self,object):
+                selected.append(object)
+                return original
+        self.store=Store()
+        self.assertEqual(await self.publish(),DIGEST)
+        self.assertEqual(selected,['object'])
+        self.authority.prepare_wrap_write.return_value=replace(self.permit,object='other')
+        with self.assertRaises(WrapPublicationRejected):await self.publish()
+        self.assertEqual(selected,['object'])
+
     async def test_reservation_precedes_storage_and_exact_permit_commit(self):
         self.setup_case();order=[]
         async def prepare(*args):order.append('reserve');return self.permit

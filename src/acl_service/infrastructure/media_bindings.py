@@ -28,6 +28,7 @@ class MediaSettings:
     key_file: Path
     postgres_file: Path | None = None
     postgres_settings: object | None = None
+    allocated_wraps: bool = False
 
 
 def parse_settings(raw):
@@ -35,7 +36,7 @@ def parse_settings(raw):
         raise ValueError('invalid media configuration')
     value = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique)
     if (type(value) is not dict or set(value) != {'version', 'bindings'}
-            or type(value['version']) is not int or value['version'] not in (1, 2)
+            or type(value['version']) is not int or value['version'] not in (1, 2, 3)
             or type(value['bindings']) is not list or not 1 <= len(value['bindings']) <= 64):
         raise ValueError('invalid media configuration')
     result, keys, tenants, paths = [], set(), {}, {}
@@ -79,7 +80,7 @@ def parse_settings(raw):
             paths[path] = (tenant, spec)
         tenants[tenant] = spec
         keys.add((tenant, subject))
-        result.append(MediaSettings(tenant, subject, reader, history, freshness, origin, key_file, postgres_file))
+        result.append(MediaSettings(tenant, subject, reader, history, freshness, origin, key_file, postgres_file, allocated_wraps=value['version']==3))
     return tuple(result)
 
 
@@ -216,11 +217,12 @@ def load_media_bindings(environ=None, *, source_factory=None, store_factory=None
                     raise ValueError('protected media source required')
                 sources[row.tenant] = source
         from acl_service.infrastructure.private_wrap_store import PrivateWrapStore
+        from acl_service.infrastructure.allocated_wrap_store import AllocatedWrapStore
         from acl_service.interfaces.api.private_wrap_routes import PrivateWrapBinding
         stores, result = {}, {}
         for row in settings:
             if row.tenant not in stores:
-                stores[row.tenant] = (store_factory or PrivateWrapStore)(row.origin, str(row.tenant), secrets[row.tenant])
+                stores[row.tenant] = (store_factory or (AllocatedWrapStore if row.allocated_wraps else PrivateWrapStore))(row.origin, str(row.tenant), secrets[row.tenant])
             result[(row.tenant, row.subject)] = PrivateWrapBinding(
                 str(row.tenant), row.reader, sources[row.tenant], stores[row.tenant])
         return result

@@ -55,6 +55,12 @@ class WrapAuthority(Protocol):
         ...
 
 
+def bind_wrap_store(store,object):
+    """Explicit typed store capability; legacy adapters retain their contract."""
+    bind=getattr(type(store),'for_object',None)
+    return bind(store,object) if callable(bind) else store
+
+
 async def deliver_private_wrap_context(authority: WrapAuthority, store, tenant: str, reader: str,
                          object: str, *, clock=time.time, cancel=lambda: None) -> DeliveredWrap:
     """A trusted internal operation; the public transport must authenticate reader.
@@ -77,7 +83,7 @@ async def deliver_private_wrap_context(authority: WrapAuthority, store, tenant: 
                     or type(permit.expires_at) is not int or not clock() < permit.expires_at
                     or type(permit.reader_epub) is not str or not 0 < len(permit.reader_epub) <= 1024):
                 raise ValueError()
-            payload = await store.read(permit.record,permit.digest,cancel=cancel)
+            payload = await bind_wrap_store(store,permit.object).read(permit.record,permit.digest,cancel=cancel)
             cancel()
             if (type(payload) is not bytes or not 0 < len(payload) <= 65_536
                     or hashlib.sha256(payload).hexdigest() != permit.digest

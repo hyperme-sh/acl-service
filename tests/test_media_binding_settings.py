@@ -24,6 +24,26 @@ def encode(rows=None):
 
 
 class MediaBindingUnits(TestCase):
+    def test_explicit_version_three_selects_allocated_wraps_with_postgres(self):
+        held={key:value for key,value in row().items() if key not in ('historyFile','freshnessFile')}
+        held['postgresFile']='/private/postgres'
+        raw=json.dumps({'version':3,'bindings':[held]}).encode()
+        binding=m.parse_settings(raw)[0]
+        self.assertTrue(binding.allocated_wraps)
+        self.assertFalse(m.parse_settings(encode())[0].allocated_wraps)
+        with self.assertRaises(ValueError):
+            m.parse_settings(json.dumps({'version':3,'bindings':[row()]}).encode())
+        source=SimpleNamespace(production_ready=True,tenant=TENANT)
+        client=Mock(return_value=object())
+        module=SimpleNamespace(PrivateWrapBinding=lambda *args:args)
+        with patch.object(m,'_private_file',side_effect=[io.BytesIO(raw),io.BytesIO(b'key')]), \
+                patch.object(m,'_prepare_settings',side_effect=lambda values:values), \
+                patch.object(m,'_provisioned'), \
+                patch('acl_service.infrastructure.allocated_wrap_store.AllocatedWrapStore',client), \
+                patch.dict(sys.modules,{'acl_service.interfaces.api.private_wrap_routes':module}):
+            m.load_media_bindings({m.CONFIG_NAME:'/private/config'},source_factory=lambda _:source)
+        client.assert_called_once_with('https://storage.example',TENANT,'key')
+
     def test_provisioned_files_require_tenant_and_every_checkpoint(self):
         binding=m.parse_settings(encode())[0]
         for tenant,objects,authority,checkpoint,okay in [

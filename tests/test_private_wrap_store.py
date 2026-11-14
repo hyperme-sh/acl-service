@@ -135,3 +135,34 @@ class PrivateWrapStoreTests(IsolatedAsyncioTestCase):
             PrivateWrapStore('https://storage.example/',TENANT,'secret')
         self.assertEqual(module.AsyncClient.call_args.kwargs['trust_env'],False)
         self.assertEqual(module.AsyncClient.call_args.kwargs['follow_redirects'],False)
+
+
+class AllocatedWrapStoreTests(IsolatedAsyncioTestCase):
+    async def test_object_bound_routes_and_exact_digest_retry(self):
+        import base64
+        from acl_service.infrastructure.allocated_wrap_store import AllocatedWrapStore
+        media='media_p_'+'ab'*64+'_'+'c'*32
+        client=Mock(aclose=AsyncMock())
+        root=AllocatedWrapStore('https://storage.example',TENANT,'secret',client=client)
+        for bad in (None,'media_other',media+'/escape',media.upper()):
+            with self.assertRaises(ValueError):root.for_object(bad)
+        with self.assertRaises(ValueError):await root.read(REV,REV)
+        bound=root.for_object(media)
+        for status in (201,204):
+            client.stream.return_value=Response(status)
+            self.assertEqual(await bound.create_or_reconcile(REV,PAYLOAD),REV)
+            args,kwargs=client.stream.call_args
+            self.assertEqual(args,('PUT','https://storage.example/api/v1/storage/media/payloads/'+media+'/wrap/'+REV))
+            owner=base64.urlsafe_b64encode(bytes.fromhex('ab'*32)).rstrip(b'=').decode()
+            self.assertEqual(kwargs['headers']['X-Media-Owner'],owner+'.'+owner)
+            self.assertEqual(kwargs['headers']['X-Tenant-ID'],TENANT)
+        client.stream.return_value=Response()
+        self.assertEqual(await bound.read(REV,REV),PAYLOAD)
+        calls=client.stream.call_count
+        for operation in (bound.read(NAME,REV),bound.create(NAME,PAYLOAD),bound.create(REV,'bad')):
+            with self.assertRaises(ValueError):await operation
+        self.assertEqual(client.stream.call_count,calls)
+        another=bound.for_object(media[:-1]+'d')
+        self.assertNotEqual(another._path(REV),bound._path(REV))
+        with self.assertRaises(ValueError):root._path(REV)
+        await root.close();client.aclose.assert_awaited_once()
