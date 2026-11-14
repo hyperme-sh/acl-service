@@ -40,6 +40,14 @@ class MediaSource:
                                  SettledEpochVerifier(), EpochHistoryVerifier())
         self.production_ready = identities is None and native is None
         self.slots = asyncio.Semaphore(1)
+        if getattr(store, 'provisioned_media', False):
+            with store._transaction(write=False) as db:
+                if store.tenant != tenant or db.execute('SELECT tenant FROM statement_tenant WHERE id=1').fetchone() != (tenant,):
+                    raise AdmissionRejected('database belongs to another tenant')
+                # A missing table must fail startup, never recreate lost state.
+                for table in ('media_sources', 'media_allocations', 'freshness.media_checkpoints', 'freshness.media_allocations'):
+                    db.execute(f'SELECT 1 FROM {table} LIMIT 1')
+            return
         with store._transaction(write=True) as db:
             db.execute('CREATE TABLE IF NOT EXISTS statement_tenant (id INTEGER PRIMARY KEY CHECK(id=1), tenant TEXT NOT NULL)')
             db.execute('INSERT OR IGNORE INTO statement_tenant VALUES(1,?)',(tenant,))

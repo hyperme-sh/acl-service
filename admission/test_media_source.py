@@ -522,3 +522,27 @@ class AllocationConsumptionContracts(MediaSourceContracts):
         with patch.object(self.source,'_identities',return_value=self.ids):
             with self.assertRaises(AdmissionRejected):
                 self.source.prepare_allocation_request(TENANT,'owner',record,{},10000,sign_request=lambda _:b'')
+
+
+class ProvisionedMediaStartupContracts(TestCase):
+    def test_existing_source_startup_is_read_only_and_checks_all_tables(self):
+        from contextlib import contextmanager
+        queries=[]
+        db=Mock()
+        def execute(sql, *args):
+            queries.append(sql)
+            result=Mock();result.fetchone.return_value=(TENANT,)
+            return result
+        db.execute.side_effect=execute
+        @contextmanager
+        def transaction(**options):
+            self.assertEqual(options, {'write': False})
+            yield db
+        store=Mock(require_authority_checkpoint=True, provisioned_media=True, tenant=TENANT)
+        store._transaction=transaction
+        MediaSource(store,TENANT,identities=Mock(),native=tuple(Mock() for _ in range(5)))
+        self.assertEqual(len(queries),5)
+        self.assertTrue(all(sql.startswith('SELECT ') for sql in queries))
+        store.tenant='11111111-1111-4111-8111-111111111111'
+        with self.assertRaises(AdmissionRejected):
+            MediaSource(store,TENANT,identities=Mock(),native=tuple(Mock() for _ in range(5)))
