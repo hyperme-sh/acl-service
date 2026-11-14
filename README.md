@@ -718,3 +718,11 @@ owner, unallocated legacy objects, rollback, cancellation and invalid signer
 output all refuse. It creates no owner consent, changes no deletion state and
 releases no quota. Runtime route/client binding remains disabled until the
 storage retirement consumer is wired.
+
+The subject-bound media owner API accepts `delete-view` to obtain a current
+owner deletion transcript, and `delete` to submit the owner's SociACL signature.
+Both require the existing fixed subject/tenant binding and `acl:media:write`.
+The browser cannot choose an owner, source or policy. A successful deletion
+response reports accepted consent and `cleanup: pending`; it does not claim
+provider removal or quota release. The permanent source tombstone immediately
+blocks further delivery and writes. Storage cleanup is a separate retryable step.

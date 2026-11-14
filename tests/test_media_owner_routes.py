@@ -184,3 +184,30 @@ async def test_upload_state_is_scoped_read_only_and_exact(setup):
         s.actor.scopes=[]
         assert (await client.post(BASE+'upload-state',json=body)).status_code==403
         assert s.authority.owner_upload_state.await_count==1
+
+
+@pytest.mark.asyncio
+async def test_deletion_uses_fixed_owner_and_reports_only_pending_cleanup(setup):
+    s=setup
+    s.authority.owner_deletion_view=AsyncMock(return_value={'at':100,'claims':{'fence':'a'*64}})
+    s.authority.owner_delete=AsyncMock(return_value='b'*64)
+    body={'object':'media-object','at':100,'proof':{'deletionBytes':'signed','signature':'owner'}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        view=await client.post(BASE+'delete-view',json={'object':'media-object'})
+        result=await client.post(BASE+'delete',json=body)
+        assert view.status_code==result.status_code==200
+        assert result.json()=={'accepted':True,'command':'b'*64,'cleanup':'pending'}
+        assert result.headers['cache-control']=='private, no-store'
+        s.authority.owner_deletion_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object')
+        s.authority.owner_delete.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object',100,body['proof'])
+        for value in [{**body,'writer':'attacker'},{**body,'at':True},{**body,'at':-1},{**body,'proof':[]},{**body,'fence':'a'*64}]:
+            assert (await client.post(BASE+'delete',json=value)).status_code==400
+        assert (await client.post(BASE+'delete',json={**body,'proof':{'oversize':'x'*12288}})).status_code==413
+        for error,status in [(AdmissionRejected('private'),403),(HistoryConflict('private'),409),(TimeoutError(),503)]:
+            s.authority.owner_delete.side_effect=error
+            response=await client.post(BASE+'delete',json=body)
+            assert response.status_code==status and 'private' not in response.text
+        s.authority.owner_delete.side_effect=None;s.authority.owner_delete.return_value=None
+        assert (await client.post(BASE+'delete',json=body)).status_code==403
+        s.actor.scopes=['acl:media:read']
+        assert (await client.post(BASE+'delete',json=body)).status_code==403

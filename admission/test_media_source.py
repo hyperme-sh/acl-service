@@ -502,6 +502,16 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
         source.prepare_write=Mock(return_value='write-permit');source.commit_write=Mock(return_value=True)
         self.assertEqual(await source.prepare_wrap_write(TENANT,'owner',OBJECT,100,'fence',{},'a'*64,1),'write-permit')
         self.assertTrue(await source.commit_wrap_write('write-permit'))
+        source.deletion_view=Mock(return_value={'claims':'current'})
+        self.assertEqual(await source.owner_deletion_view(TENANT,'owner',OBJECT),{'claims':'current'})
+        source.delete=Mock(return_value='a'*64)
+        proof={'deletionBytes':'signed','signature':'owner'}
+        self.assertEqual(await source.owner_delete(TENANT,'owner',OBJECT,100,proof),'a'*64)
+        self.assertEqual(source.delete.call_args.args,(TENANT,'owner',OBJECT,100,proof))
+        self.assertIsNot(source.delete.call_args.args[-1],proof)
+        self.assertTrue(callable(source.delete.call_args.kwargs['cancel']))
+        for invalid in [[],{'oversize':'x'*8192}]:
+            with self.assertRaises(AdmissionRejected):await source.owner_delete(TENANT,'owner',OBJECT,100,invalid)
         source._owner_status_view=Mock(return_value={'draft':'current'})
         self.assertEqual(await source.owner_status_view(TENANT,'owner',OBJECT,'reader'),{'draft':'current'})
 
