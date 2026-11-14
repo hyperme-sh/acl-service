@@ -893,7 +893,7 @@ cancellations and revalidate all retained signatures; limits are eight scopes pe
 object, 1024 rows per scope, 64 rows per append and 512 KiB across all group
 scopes. Documents with group rows reserve space for every remaining direct-grant
 cancellation slot and the deletion tombstone, including on later ordinary writes. Existing direct-grant delivery
-is unchanged. These methods have no HTTP binding and do not issue group grants,
+is unchanged. These methods do not issue group grants,
 epochs or wraps; those consumers remain under #126.
 
 
@@ -907,4 +907,13 @@ cannot supply members, and cancellation of the winning scope does not fall back
 to an older group. Per-scope inspection alone is not a current group grant.
 The internal `groupObjectGraph` verifier input is bounded to eight scopes and
 1 MiB; retained source rows also keep their stricter aggregate journal budget.
-No HTTP binding, group grant, epoch publication or delivery is enabled here.
+No group grant, epoch publication or delivery is enabled here.
+
+
+Authenticated media owners can call `POST /acl/sociacl/media/owner/group-view`
+with only `object`, and `group-append` with `object`, `at`, `fence`, `predicate`,
+`set` and signed `rows`. Both retain the existing fixed subject/tenant binding,
+`acl:media:write` scope, rate limits, body/concurrency limits and private no-store
+responses. Unsupported older authority adapters refuse with 503. A group append
+still verifies every retained signature and preserves cancellations; these routes
+do not issue group grants, epochs or reader wraps, or enable group delivery.

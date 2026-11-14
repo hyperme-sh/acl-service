@@ -330,3 +330,43 @@ async def test_unshare_plan_is_fixed_owner_and_optional(setup):
         s.authority.owner_unshare_view=None
         assert (await client.post(BASE+'unshare-view',json=body)).status_code==503
     s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_view_is_object_only_and_fixed_owner(setup):
+    s=setup;s.authority.owner_group_view=AsyncMock(return_value={'at':100,'projection':None,'fence':'a'*64})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'group-view',json={'object':'media-object'})
+        assert response.status_code==200
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_group_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object')
+        for extra in ({'writer':'other'},{'at':100},{'set':'set_other'}):
+            assert (await client.post(BASE+'group-view',json={'object':'media-object',**extra})).status_code==400
+        assert (await client.post(BASE+'group-view',content=b'x'*2049,headers={'content-type':'application/json'})).status_code==413
+        s.authority.owner_group_view=None
+        assert (await client.post(BASE+'group-view',json={'object':'media-object'})).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_append_is_bounded_fenced_and_fixed_owner(setup):
+    s=setup;s.authority.owner_append_group=AsyncMock(return_value=True)
+    body={'object':'media-object','at':100,'fence':'a'*64,'predicate':'same-group','set':'set_test','rows':[{'signed':'row'}]}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'group-append',json=body)
+        assert response.status_code==200 and response.json()=={'accepted':True}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_append_group.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object',100,'a'*64,'same-group','set_test',[{'signed':'row'}])
+        for changes in ({'writer':'other'},{'predicate':'other'},{'set':None},{'set':'other'},
+                        {'rows':[]},{'rows':[{}]*65},{'rows':{}},{'at':True},{'fence':'bad'}):
+            assert (await client.post(BASE+'group-append',json={**body,**changes})).status_code==400
+        assert (await client.post(BASE+'group-append',content=b'x'*81921,headers={'content-type':'application/json'})).status_code==413
+        s.authority.owner_append_group.return_value=False
+        assert (await client.post(BASE+'group-append',json=body)).status_code==403
+        s.authority.owner_append_group.side_effect=HistoryConflict('stale')
+        assert (await client.post(BASE+'group-append',json=body)).status_code==409
+        s.authority.owner_append_group=None
+        assert (await client.post(BASE+'group-append',json=body)).status_code==503
+        s.actor.scopes=[]
+        assert (await client.post(BASE+'group-append',json=body)).status_code==403
+    s.authority.owner_mutate.assert_not_awaited()

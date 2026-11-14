@@ -1052,6 +1052,18 @@ class MediaSource:
         proof=json.loads(encoded(proof))
         return await self._work(lambda cancel:self.delete(tenant,writer,object,at,proof,cancel=cancel))
 
+    def _owner_group_view(self,tenant,writer,object,cancel):
+        at=int(self.clock())
+        return {'at':at,**self.group_object_view(tenant,writer,object,at,cancel)}
+
+    async def owner_group_view(self,tenant,writer,object):
+        return await self._work(self._owner_group_view,tenant,writer,object)
+
+    async def owner_append_group(self,tenant,writer,object,at,fence,predicate,set_id,rows):
+        if type(rows) is not list or len(encoded(rows))>65536:raise AdmissionRejected('invalid group append')
+        rows=json.loads(encoded(rows))
+        return await self._work(self.append_group,tenant,writer,object,at,fence,predicate,set_id,rows)
+
     async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
         return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)
 
