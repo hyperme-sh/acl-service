@@ -51,6 +51,20 @@ async def test_owner_catalog_uses_fixed_subject_and_bounded_page_only(setup):
 
 
 @pytest.mark.asyncio
+async def test_cleanup_catalog_uses_fixed_subject_and_bounded_page_only(setup):
+    s=setup;s.authority.owner_cleanup_catalog=AsyncMock(return_value={'at':100,'objects':['private-object'],'nextPage':1})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'cleanup-catalog',json={'page':0})
+        assert response.status_code==200
+        assert response.json()=={'at':100,'objects':['private-object'],'nextPage':1}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_cleanup_catalog.assert_awaited_once_with(str(s.tenant),'fixed-owner',0)
+        for body in [{},{'page':True},{'page':-1},{'page':16},{'page':0,'writer':'attacker'},{'page':0,'object':'foreign'}]:
+            assert (await client.post(BASE+'cleanup-catalog',json=body)).status_code==400
+        assert s.authority.owner_cleanup_catalog.await_count==1
+
+
+@pytest.mark.asyncio
 async def test_owner_status_view_only_selects_a_recipient_of_the_fixed_owner(setup):
     s=setup;s.authority.owner_status_view=AsyncMock(return_value={'status':{'accessor':'recipient'}})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:

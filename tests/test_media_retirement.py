@@ -24,6 +24,10 @@ def setup():
     state={'claims':{'tenant':tenant,'object':object,'owner':owner,'command':'a'*64,'issuedAt':100,'expiresAt':130},'error':None,'calls':0}
     class Authority:
         async def _work(self,fn):return fn(lambda:None)
+        def confirm_retirement(self,t,r,o,command,*,cancel):
+            cancel()
+            assert (t,r,o,command)==(tenant,owner,object,state['claims']['command'])
+            state['confirmed']=state.get('confirmed',0)+1
         def prepare_retirement_request(self,t,r,o,*,sign_request,cancel):
             assert (t,r,o)==(tenant,owner,object);cancel();state['calls']+=1
             if state['error']:raise state['error']
@@ -79,6 +83,7 @@ async def test_allocation_binding_connects_protected_command_to_configured_clien
     binding=AllocationBinding(protected.tenant,protected.reader,protected.authority,client,protected.signer,
         protected.signer.issuer,protected.signer.source,{},0,{})
     assert await binding.retire(object)==expected
+    assert state['confirmed']==1
     sent,raw=client.retire.call_args.args
     assert sent.command==state['claims']['command'] and sent.owner==protected.reader
     verify_retirement_request(raw,expected=sent,keys={'source':key.public_key()},now=100)
@@ -88,3 +93,7 @@ async def test_allocation_binding_connects_protected_command_to_configured_clien
     with pytest.raises(asyncio.CancelledError):await binding.retire(object)
     state['error']=None;client.retire.side_effect=TimeoutError()
     with pytest.raises(AdmissionRejected):await binding.retire(object)
+    assert state['confirmed']==1
+    client.retire.side_effect=None;client.retire.return_value=dict(expected,cleanup='pending')
+    with pytest.raises(AdmissionRejected):await binding.retire(object)
+    assert state['confirmed']==1

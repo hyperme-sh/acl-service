@@ -726,3 +726,16 @@ The browser cannot choose an owner, source or policy. A successful deletion
 response reports accepted consent and `cleanup: pending`; it does not claim
 provider removal or quota release. The permanent source tombstone immediately
 blocks further delivery and writes. Storage cleanup is a separate retryable step.
+
+
+Owner cleanup recovery uses `POST /api/v1/acl/sociacl/media/owner/cleanup-catalog`
+with only `{page}` (0 through 15). It returns `{at, objects, nextPage}`;
+each item is `{object, command}` for an accepted owner deletion whose storage
+completion has not been checkpointed. Pages contain at most four items, including
+empty pages, and retain the existing fixed sixteen-page envelope. Accepted
+commands remain available after delivery-policy expiry. The authenticated
+subject still supplies the owner; callers cannot select another owner.
+The configured cleanup adapter records completion only after the storage client
+confirms the same permanent command. Lost acknowledgements leave the command
+available for explicit retry. Completion does not erase the permanent tombstone
+or reclaim protected-source capacity; that requires separate indexed accounting.
