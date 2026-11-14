@@ -280,6 +280,12 @@ class NativeMediaContracts(TestCase):
         pending=check(rows);self.assertEqual(pending['state'],'absent')
         self.source.append_group(self.tenant,self.owner,self.object,self.now,pending['fence'],predicate,set_id,rows)
         self.assertEqual(check(rows)['state'],'applied')
+        boolean=json.loads(json.dumps(rows));boolean[1]['record']['stated']=True
+        with self.assertRaises(AdmissionRejected):check(boolean)
+        held=check(rows)
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(self.tenant,self.owner,self.object,self.now,held['fence'],predicate,set_id,boolean)
+        self.assertEqual(check(rows),held)
         withdrawal=[self.f['groupEdges'][1]];pending=check(withdrawal)
         current=lambda:self.source.group_object_view(self.tenant,self.owner,self.object,self.now)['projection']['snapshot']['objectSet']['stated']
         self.assertEqual(pending['state'],'absent');self.assertEqual(current(),1)

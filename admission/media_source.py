@@ -160,8 +160,12 @@ class MediaSource:
     @staticmethod
     def _group_candidate(retained,rows):
         candidate=list(retained)
+        seen={encoded(item) for item in retained}
         for item in rows:
-            if item not in candidate:candidate.append(item)
+            key=encoded(item)
+            if key not in seen:
+                candidate.append(item)
+                seen.add(key)
         if len(candidate)>1024 or len(encoded(candidate))>4*1024*1024:
             raise AdmissionRejected('group row capacity')
         return candidate
@@ -182,7 +186,8 @@ class MediaSource:
             self._group_projection(db,object,doc,at,predicate,set_id,candidate)
             # A batch can legitimately include previously retained object rows.
             # Partial overlap is still absent until every exact row is retained.
-            return {'state':'applied' if all(item in retained for item in rows) else 'absent',
+            retained_bytes={encoded(item) for item in retained}
+            return {'state':'applied' if all(encoded(item) in retained_bytes for item in rows) else 'absent',
                     'fence':self._fence(db,object,held,at)}
 
     def append_group(self,tenant,writer,object,at,fence,predicate,set_id,rows,cancel=lambda:None):
@@ -207,7 +212,7 @@ class MediaSource:
             retained=scopes.get(key,[])
             candidate=self._group_candidate(retained,rows)
             self._group_projection(db,object,doc,at,predicate,set_id,candidate)
-            if candidate!=retained:
+            if len(candidate)!=len(retained):
                 if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
                 doc['objectVersion']+=1
                 scopes[key]=candidate

@@ -209,6 +209,22 @@ class MediaSourceContracts(TestCase):
         with patch('media_source.HistoryAdmission._run_verifier',side_effect=AdmissionRejected('history changed')):
             with self.assertRaises(AdmissionRejected):check()
 
+    def test_group_reconciliation_and_deduplication_preserve_json_types(self):
+        view=self.group_fixture()
+        numeric={'kind':'row','record':{'stated':1,'nested':[0]}}
+        reordered={'record':{'nested':[0],'stated':1},'kind':'row'}
+        boolean={'kind':'row','record':{'stated':True,'nested':[False]}}
+        self.assertEqual(len(self.source._group_candidate([numeric],[reordered])),1)
+        self.assertEqual(len(self.source._group_candidate([numeric],[boolean,boolean])),2)
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[numeric])
+        check=lambda row:self.source.group_append_state(TENANT,'owner',OBJECT,100,'same-group','set_test',[row])
+        self.assertEqual(check(reordered)['state'],'applied')
+        self.assertEqual(check(boolean)['state'],'absent')
+        # The mock verifier accepts arbitrary rows; the native contract below
+        # separately requires the differently typed signed row to be refused.
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[boolean])
+        self.assertEqual(len(view()['rows']),2)
+
     def test_group_append_reconciliation_refuses_boundaries_and_cancellation(self):
         self.group_fixture()
         for tenant,writer in [('bad','owner'),(TENANT,'reader')]:
