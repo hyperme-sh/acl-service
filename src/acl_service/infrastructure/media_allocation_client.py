@@ -19,6 +19,7 @@ class AllocationClient:
                 or type(api_key) is not str or not re.fullmatch(r'[\x21-\x7e]{1,4096}',api_key)):
             raise ValueError('Invalid allocation transport configuration')
         self.tenant=tenant
+        self.origin=origin
         self._url=origin+'/api/v1/storage/allocations/issue'
         self._headers={'X-Api-Key':api_key,'X-Tenant-ID':tenant,'Accept-Encoding':'identity'}
         if client is None:

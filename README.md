@@ -608,7 +608,10 @@ of current SEA ownership.
 
 The history and independent checkpoint databases must already be provisioned.
 An explicitly configured allocation source may initially contain zero media
-objects; ordinary private-wrap delivery still requires provisioned objects.
+objects; ordinary private-wrap delivery still requires provisioned objects unless it shares
+the exact configured allocation authority, history/checkpoint files and Storage
+origin. In that case it reuses that authority and can serve the first object
+without a restart. Existing checks on every delivery remain unchanged.
 Loading allocation settings never enrolls identities, creates credentials or
 bootstraps the Storage registry. Missing configuration disables this route and
 invalid configuration fails startup. Operator staging and registry initialization

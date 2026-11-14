@@ -115,16 +115,32 @@ def _source(binding):
     return sys.modules['media_source'].MediaSource(store, str(binding.tenant))
 
 
-def load_media_bindings(environ=None, *, source_factory=None, store_factory=None):
+def load_media_bindings(environ=None, *, source_factory=None, store_factory=None, allocation_bindings=None):
     configured = (os.environ if environ is None else environ).get(CONFIG_NAME)
     if configured is None:
         return None
     try:
         with _private_file(_path(configured)) as stream:
             settings = parse_settings(stream.read(MAX_CONFIG_BYTES + 1))
+        allocation_sources = {}
+        for binding in (allocation_bindings or {}).values():
+            key = UUID(binding.tenant)
+            spec = (binding.authority, binding.client.origin)
+            if key in allocation_sources and allocation_sources[key] != spec:
+                raise ValueError('conflicting allocation authority')
+            allocation_sources[key] = spec
         secrets = {}
         for row in settings:
-            _provisioned(row)
+            allocation = allocation_sources.get(row.tenant)
+            if allocation:
+                authority, origin = allocation
+                if (not authority.production_ready or authority.tenant != str(row.tenant) or origin != row.origin
+                        or not os.path.samefile(row.history, authority.store.path)
+                        or not os.path.samefile(row.freshness, authority.store.freshness_path)):
+                    raise ValueError('allocation and delivery sources differ')
+                _provisioned(row, allow_empty=True)
+            else:
+                _provisioned(row)
             if row.tenant not in secrets:
                 with _private_file(row.key_file) as stream:
                     key = stream.read(4097).decode('ascii')
@@ -135,7 +151,7 @@ def load_media_bindings(environ=None, *, source_factory=None, store_factory=None
         sources = {}
         for row in settings:
             if row.tenant not in sources:
-                source = (source_factory or _source)(row)
+                source = allocation_sources[row.tenant][0] if row.tenant in allocation_sources else (source_factory or _source)(row)
                 if not source.production_ready or source.tenant != str(row.tenant):
                     raise ValueError('protected media source required')
                 sources[row.tenant] = source

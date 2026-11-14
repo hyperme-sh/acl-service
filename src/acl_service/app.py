@@ -64,14 +64,15 @@ def create_app(
     if delegation_bindings is None:
         from acl_service.infrastructure.delegation_bindings import load_delegation_bindings
         delegation_bindings = load_delegation_bindings()
-    owns_media_stores = private_wrap_bindings is None
-    if owns_media_stores:
-        from acl_service.infrastructure.media_bindings import load_media_bindings
-        private_wrap_bindings = load_media_bindings()
     owns_allocation_clients = media_allocation_bindings is None
     if owns_allocation_clients:
         from acl_service.infrastructure.media_allocation_bindings import load_allocation_bindings
         media_allocation_bindings = load_allocation_bindings()
+    owns_media_stores = private_wrap_bindings is None
+    if owns_media_stores:
+        from acl_service.infrastructure.media_bindings import load_media_bindings
+        private_wrap_bindings = (load_media_bindings(allocation_bindings=media_allocation_bindings)
+                                 if media_allocation_bindings else load_media_bindings())
     svc_name = service_name or settings.service_name
     from acl_service.lane_access_log import install_lane_log_filter
     install_lane_log_filter()
