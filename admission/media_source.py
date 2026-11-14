@@ -481,6 +481,33 @@ class MediaSource:
             self._save(db,object,row,doc)
             return command
 
+    def prepare_retirement_request(self, tenant, writer, object, *, sign_request, cancel=lambda:None):
+        """Sign only the permanent, checkpointed owner deletion command.
+
+        The trusted adapter supplies the configured source signer. Expired
+        delivery policy does not erase an accepted deletion, and this method
+        never reconstructs owner consent or changes the stored command.
+        """
+        at=int(self.clock());guard=lambda:self._guard(at,cancel)
+        guard()
+        if tenant!=self.tenant: raise AdmissionRejected('wrong media tenant')
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+            if row is None: raise AdmissionRejected('media source unavailable')
+            self._checkpoint(db,object,row);doc=json.loads(row[2])
+            deleted=doc.get('deletion')
+            if not deleted or deleted['owner']!=writer:
+                raise AdmissionRejected('accepted owner deletion required')
+            held=db.execute('SELECT allocation,digest FROM media_allocations WHERE object=?',(object,)).fetchone()
+            anchor=db.execute('SELECT allocation,digest FROM freshness.media_allocations WHERE object=?',(object,)).fetchone()
+            if held is None or held!=anchor:
+                raise HistoryConflict('retirement allocation checkpoint mismatch')
+            request=sign_request({'tenant':tenant,'object':object,'owner':writer,
+                'command':deleted['command'],'issuedAt':at,'expiresAt':at+30})
+            if type(request) is not bytes or not 1<=len(request)<=4096:
+                raise AdmissionRejected('invalid signed retirement request')
+            return request
+
     def _selected(self, object, doc, at):
         for row in reversed(doc['finalizations']):
             fin=row['proof']

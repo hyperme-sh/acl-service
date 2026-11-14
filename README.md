@@ -709,3 +709,12 @@ must account for writes already in flight, delete all reserved wraps and stored
 ciphertext, and only then release quota once without erasing the tombstone or
 allowing reuse of the object identifier. No activation or operator provisioning
 is performed by these primitives.
+
+The protected media source exposes `prepare_retirement_request` to a trusted
+signer adapter. It reads the accepted owner deletion, verifies its independent
+checkpoint and the consumed allocation checkpoint, and supplies only the stored
+command with a fresh short transport window. Missing deletion, a different
+owner, unallocated legacy objects, rollback, cancellation and invalid signer
+output all refuse. It creates no owner consent, changes no deletion state and
+releases no quota. Runtime route/client binding remains disabled until the
+storage retirement consumer is wired.
