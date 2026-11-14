@@ -74,3 +74,23 @@ Expired and cancelled rows still count. Verified duplicate-only retries consume
 no additional share. Administrative forum/grant records use the separately
 bounded operator path. Identity enrollment changes the denominator and therefore
 invalidates old fences; existing rows are never discarded to reclaim capacity.
+
+## Signed rooms under the fixed forum
+
+The same append boundary admits `room_` objects owned by a currently enrolled
+principal with both direct see and post on the provisioned parent forum. This
+adds application objects within the existing scope; it cannot create a scope,
+bootstrap a forum, enroll an identity or change parent grants. Object ownership,
+room see grants and room post grants remain owner-signed. A room grant must have
+an existing or same-append signed ownership record. Active see recipients must
+currently see the parent; active post recipients must also currently post there.
+Grant validity is bounded to one hour. Signed cancellations remain admissible for
+former recipients while the owner still has current parent write access.
+
+Room object, see and post rows share the statement writer's retained row/byte
+quota, and each principal may retain at most 32 room ownership objects. Existing
+cancellations and expired rows continue to count. The same protected CAS fence
+covers all identity and parent authority checks. Consumers must check current
+parent see/post as well as current room rights on every message read/write; a
+child grant never bypasses revoked parent membership. This extension does not
+make rooms public or add a room discovery endpoint.

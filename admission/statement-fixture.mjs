@@ -1,5 +1,5 @@
 import {readFileSync} from 'node:fs';
-import {MAX_RESOLUTION_INPUT, formatPrincipalKey, objectRecordBytes, signWithKeyring, seeGrantBytes, grantSoul} from 'sociacl-ids';
+import {MAX_RESOLUTION_INPUT, formatPrincipalKey, objectRecordBytes, signWithKeyring, seeGrantBytes, grantSoul, postGrantBytes, postSoul} from 'sociacl-ids';
 const f = JSON.parse(readFileSync(new URL('./fixture.json', import.meta.url)));
 const owner = f.genesis, key = new Uint8Array(32); key[31] = 1;
 const sign = bytes => { const value = signWithKeyring(key, bytes, owner); if (!value.ok) throw Error(value.reason); return value.value; };
@@ -12,4 +12,10 @@ function ownership(object) {
 const grant = {owner, object, accessor:owner, stated:1, from:f.now, until:f.now+60, hamState:f.now, issuedAt:f.now};
 grant.sig = sign(seeGrantBytes(grant));
 const quotaRows = Array.from({length:129}, (_,i) => ownership(`stmt_${formatPrincipalKey(owner)}_${(i+16).toString(16).padStart(32,'0')}`));
-console.log(JSON.stringify({quotaRows, maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));
+const room = `room_${formatPrincipalKey(owner)}_${'03'.repeat(16)}`;
+const roomRows = [ownership(room), ...['see','post'].map(kind => {
+  const record = {...grant, object:room};
+  record.sig = sign((kind === 'see' ? seeGrantBytes : postGrantBytes)(record));
+  return {kind, soul:(kind === 'see' ? grantSoul : postSoul)(owner,room,owner), record};
+})];
+console.log(JSON.stringify({room, roomRows, quotaRows, maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));

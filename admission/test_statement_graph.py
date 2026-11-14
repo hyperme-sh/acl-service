@@ -49,6 +49,19 @@ class GraphContracts(unittest.TestCase):
         initial = self.source.read('test', f['now'])
         self.source.append('test', f['now'], initial['fence'], [self.rows['initial']], statement_only=False)
 
+    def test_signed_room_owner_and_grants_share_the_protected_fence(self):
+        at = self.f['now']
+        held = self.source.read('test', at)
+        self.source.append('test', at, held['fence'], self.rows['roomRows'])
+        current = self.source.read('test', at)
+        self.assertEqual(len(current['snapshot']['rows']), 4)
+        self.source.append('test', at, current['fence'], self.rows['roomRows'])
+        self.assertEqual(self.source.read('test', at)['fence'], current['fence'])
+        forged = json.loads(json.dumps(self.rows['roomRows']))
+        forged[0]['record']['sig'] = 'bad'
+        with self.assertRaises(AdmissionRejected):
+            self.source.append('test', at, current['fence'], forged)
+
     def test_signed_statement_roundtrip(self):
         held = self.source.read('test', self.f['now'])
         self.source.append('test', self.f['now'], held['fence'], self.rows['rows'])
