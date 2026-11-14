@@ -5,7 +5,7 @@ import {MemoryGroupGraph,parseMembershipAssent,parseObjectSet,parseGroupCancel,
 const take=result=>{if(!result.ok)throw Error(result.reason);return result.value;};
 
 /** Pure projection from protected rows and authenticated histories. No grants or writes. */
-export function groupAuthority(accounts,contextFor,now,input) {
+function admittedGroupGraph(accounts,contextFor,now,input) {
   if(!Number.isSafeInteger(now)||now<0||!input||Object.keys(input).sort().join()!=='object,predicate,rows,set' ||
       !['same-group','named-circle'].includes(input.predicate)||typeof input.object!=='string'||!input.object.startsWith('media_')||
       typeof input.set!=='string'||!input.set.startsWith('set_')||!Array.isArray(input.rows)||input.rows.length>1024||
@@ -48,9 +48,47 @@ export function groupAuthority(accounts,contextFor,now,input) {
     take(admit(graph,row,resolver(signer)));
   }
   if(!graph.hasObject(input.object))throw Error('missing-group-object');
-  const members=[...accounts.keys()].filter(principal=>{
-    const result=checkGroupPresentation(graph,input.set,input.object,principal,{stated:1,from:0,until:Number.MAX_SAFE_INTEGER},now,null,null);
-    return result.allowed&&result.reason===input.predicate;
+  return graph;
+}
+
+function membersOf(accounts,now,graph,object,set,predicate) {
+  return [...accounts.keys()].filter(principal=>{
+    const result=checkGroupPresentation(graph,set,object,principal,{stated:1,from:0,until:Number.MAX_SAFE_INTEGER},now,null,null);
+    return result.allowed&&result.reason===predicate;
   }).sort();
-  return {object:input.object,set:input.set,predicate:input.predicate,members,snapshot:groupSnapshot(graph,input.object)};
+}
+
+export function groupAuthority(accounts,contextFor,now,input) {
+  const graph=admittedGroupGraph(accounts,contextFor,now,input);
+  return {object:input.object,set:input.set,predicate:input.predicate,
+    members:membersOf(accounts,now,graph,input.object,input.set,input.predicate),snapshot:groupSnapshot(graph,input.object)};
+}
+
+/** Resolve all retained scopes before selecting the current object-set edge. */
+export function groupObjectAuthority(accounts,contextFor,now,input) {
+  if(!input||Object.keys(input).sort().join()!=='object,scopes'||!Array.isArray(input.scopes)||
+      !input.scopes.length||input.scopes.length>8||Buffer.byteLength(JSON.stringify(input))>1024*1024)throw Error('invalid-group-object-input');
+  const seen=new Set(),graphs=[];
+  for(const scope of input.scopes) {
+    if(!scope||Object.keys(scope).sort().join()!=='predicate,rows,set')throw Error('invalid-group-object-scope');
+    const key=JSON.stringify([scope.predicate,scope.set]);
+    if(seen.has(key))throw Error('duplicate-group-object-scope');seen.add(key);
+    graphs.push(admittedGroupGraph(accounts,contextFor,now,{object:input.object,...scope}));
+  }
+  // All contexts share this source's trust policy. Include every enrolled party's
+  // authenticated bindings/links so mergeFrom can reverify each signer itself.
+  const contexts=[...accounts.values()].map(account=>contextFor(account,now));
+  const resolver={ctx:{...contexts[0],
+    links:new Map(contexts.flatMap(context=>[...context.links])),
+    revocations:[...new Map(contexts.flatMap(context=>context.revocations).map(row=>[JSON.stringify(row),row])).values()],
+    genesisEpubBindings:contexts.flatMap(context=>context.genesisEpubBindings)},
+    rotations:principal=>accounts.get(principal)?.rotations};
+  const graph=new MemoryGroupGraph();
+  const owned=input.scopes[0].rows.find(row=>row.kind==='object');
+  take(putObject(graph,owned.record,resolver));
+  for(const admitted of graphs)graph.mergeFrom(admitted,resolver);
+  const snapshot=groupSnapshot(graph,input.object);
+  const set=snapshot?.objectSet.setId??null,predicate=snapshot?.objectSet.predicate??null;
+  return {object:input.object,set,predicate,snapshot,
+    members:snapshot?membersOf(accounts,now,graph,input.object,set,predicate):[]};
 }
