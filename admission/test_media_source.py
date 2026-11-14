@@ -39,6 +39,106 @@ class MediaSourceContracts(TestCase):
         self.source=MediaSource(self.store,TENANT,clock=lambda:self.now,identities=self.identities,native=self.native)
         self.source.provision(OBJECT,{},10000,exclusive_grant=lambda *args:True)
 
+    def group_fixture(self):
+        def verify(principal,at,**inputs):
+            graph=inputs['groupGraph']
+            self.assertEqual(graph['object'],OBJECT)
+            if any(row.get('bad') for row in graph['rows']): raise AdmissionRejected('signature refused')
+            return encoded({**{k:v for k,v in graph.items() if k!='rows'},'members':[]})
+        held=patch('media_source.HistoryAdmission._run_verifier',side_effect=verify)
+        held.start();self.addCleanup(held.stop)
+        return lambda:self.source.group_view(TENANT,'owner',OBJECT,self.now,'same-group','set_test')
+
+    def test_group_journal_retains_cancellation_and_rejects_stale_writes(self):
+        view=self.group_fixture()
+        first=view();self.assertIsNone(first['projection'])
+        rows=[{'kind':'object'},{'kind':'membership'},{'kind':'cancel'}]
+        self.source.append_group(TENANT,'owner',OBJECT,100,first['fence'],'same-group','set_test',rows)
+        current=view();self.assertEqual(current['rows'],rows)
+        self.assertEqual(current['projection']['members'],[])
+        with self.assertRaises(HistoryConflict):
+            self.source.append_group(TENANT,'owner',OBJECT,100,first['fence'],'same-group','set_test',rows)
+        self.source.append_group(TENANT,'owner',OBJECT,100,current['fence'],'same-group','set_test',rows)
+        self.assertEqual(view()['fence'],current['fence'])
+        self.assertEqual(self.source.read_view(OBJECT,100)['snapshot'],{'entries':[]})
+        self.store.append('reader',0,b'{}')
+        with self.assertRaises(HistoryConflict):
+            self.source.append_group(TENANT,'owner',OBJECT,100,current['fence'],'same-group','set_test',[{}])
+
+    def test_group_journal_deduplicates_inside_batch(self):
+        view=self.group_fixture()
+        rows=[{'kind':'object'}]*3
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',rows)
+        self.assertEqual(view()['rows'],rows[:1])
+
+    def test_group_journal_reserves_direct_cancellation_and_deletion_capacity(self):
+        view=self.group_fixture()
+        self.mutate('grant',self.grant())
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['padding']='x'*(6*1024*1024-64*17*1024-4096-len(encoded(doc))-100)
+            self.source._save(db,OBJECT,row,doc)
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'][0]['stated'],0)
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['padding']+='x'*18000
+            with self.assertRaises(AdmissionRejected):self.source._save(db,OBJECT,row,doc)
+            doc['padding']=doc['padding'][:-18000]
+            doc['deletion']={'command':'deleted'}
+            self.source._save(db,OBJECT,row,doc)
+
+    def test_group_journal_aggregate_byte_limit_rolls_back(self):
+        view=self.group_fixture()
+        for i in range(8):
+            self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{'n':i,'value':'x'*65000}])
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{'n':9,'value':'x'*65000}])
+        self.assertEqual(len(view()['rows']),8)
+
+    def test_group_journal_rejects_invalid_access_input_and_signature(self):
+        view=self.group_fixture();fence=view()['fence']
+        for tenant,writer in [('foreign','owner'),(TENANT,'reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.group_view(tenant,writer,OBJECT,100,'same-group','set_test')
+            with self.assertRaises(AdmissionRejected):self.source.append_group(tenant,writer,OBJECT,100,fence,'same-group','set_test',[{}])
+        for predicate,set_id in [('other','set_test'),('same-group','wrong'),('same-group',None)]:
+            with self.assertRaises(AdmissionRejected):self.source.group_view(TENANT,'owner',OBJECT,100,predicate,set_id)
+        for rows in [[],[{}]*65,{'row':1},[{'value':'x'*65536}],[{'bad':True}]]:
+            with self.assertRaises(AdmissionRejected):self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_test',rows)
+        self.assertEqual(view()['rows'],[])
+        self.assertEqual(view()['fence'],fence)
+
+    def test_group_journal_commit_cancellation_and_checkpoint_rollback(self):
+        view=self.group_fixture();fence=view()['fence'];calls=0
+        def cancel():
+            nonlocal calls
+            calls+=1
+            if calls==2:raise HistoryConflict('cancelled')
+        with self.assertRaises(HistoryConflict):
+            self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_test',[{}],cancel)
+        self.assertEqual(view()['rows'],[])
+        backup=self.path.read_bytes()
+        self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_test',[{}])
+        self.path.write_bytes(backup)
+        with self.assertRaises(AdmissionRejected):view()
+
+    def test_group_journal_bounds_scopes_and_rows(self):
+        self.group_fixture()
+        for i in range(8):
+            fence=self.source.read_view(OBJECT,100)['fence']
+            self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_'+str(i),[{}])
+        fence=self.source.read_view(OBJECT,100)['fence']
+        with self.assertRaises(AdmissionRejected):self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_ninth',[{}])
+        for i in range(16):
+            fence=self.source.read_view(OBJECT,100)['fence']
+            rows=[{'n':i*64+j} for j in range(64)]
+            if i<15:self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_0',rows)
+            else:
+                with self.assertRaises(AdmissionRejected):self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_0',rows)
+                self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_0',rows[:-1]+rows[:1])
+        self.assertEqual(len(self.source.group_view(TENANT,'owner',OBJECT,100,'same-group','set_0')['rows']),1024)
+
     def enable_active_index(self):
         with self.store._transaction(write=False) as db:
             db.execute('CREATE TABLE freshness.media_active (object TEXT PRIMARY KEY)')
