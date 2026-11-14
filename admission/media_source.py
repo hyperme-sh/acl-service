@@ -743,7 +743,7 @@ class MediaSource:
                     raise AdmissionRejected('private grant owner changed')
             if operation == 'grant':
                 claims=payload.get('claims',{})
-                if type(claims) is not dict or type(claims.get('accessor')) is not str or claims['accessor'] not in identities['bindings'] or not self.native[0].matches_grant(encoded(payload.get('proof')),encoded({**claims,'ownerPub':identities['bindings'][writer]['pub']})):
+                if type(claims) is not dict or claims.get('object') != object or type(claims.get('accessor')) is not str or claims['accessor'] not in identities['bindings'] or not self.native[0].matches_grant(encoded(payload.get('proof')),encoded({**claims,'ownerPub':identities['bindings'][writer]['pub']})):
                     raise AdmissionRejected('sharing signature refused')
             state = share_state(doc, latest, self._snapshot(doc), writer, operation, payload)
             if operation == 'wrap' and state != 'conflict':

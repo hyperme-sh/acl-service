@@ -501,6 +501,7 @@ class MediaSourceContracts(TestCase):
         self.assertEqual(self.source.read_view(OBJECT,self.now),before)
         with self.assertRaises(AdmissionRejected):self.source._owner_share_state(TENANT,'reader',OBJECT,'grant',payload,lambda:None)
         with self.assertRaises(AdmissionRejected):self.source._owner_share_state('other','owner',OBJECT,'grant',payload,lambda:None)
+        with self.assertRaises(AdmissionRejected):self.source._owner_share_state(TENANT,'owner',OBJECT,'grant',self.grant(object='other',epoch=2,grantRevision=2),lambda:None)
         self.native[0].matches_grant.return_value=False
         with self.assertRaises(AdmissionRejected):self.source._owner_share_state(*args)
 
