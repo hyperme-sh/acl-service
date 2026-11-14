@@ -370,3 +370,37 @@ async def test_group_append_is_bounded_fenced_and_fixed_owner(setup):
         s.actor.scopes=[]
         assert (await client.post(BASE+'group-append',json=body)).status_code==403
     s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_policy_routes_bind_owner_and_reject_untrusted_context(setup):
+    s=setup
+    s.authority.owner_group_policy_view=AsyncMock(return_value={'at':100,'context':{'owner':'set-owner'},'config':None,'fence':'a'*64})
+    s.authority.owner_append_group_policy=AsyncMock(return_value=True)
+    scope={'object':'media-object','predicate':'named-circle','set':'set_test'}
+    body={**scope,'at':100,'fence':'a'*64,'config':{'signed':'policy'}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'group-policy-view',json=scope)
+        assert response.status_code==200 and response.json()['context']=={'owner':'set-owner'}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_group_policy_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','named-circle','set_test')
+        response=await client.post(BASE+'group-policy-append',json=body)
+        assert response.status_code==200 and response.json()=={'accepted':True}
+        s.authority.owner_append_group_policy.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object',100,'a'*64,'named-circle','set_test',{'signed':'policy'})
+        for action,valid,limit in [('group-policy-view',scope,2048),('group-policy-append',body,18432)]:
+            for change in [{'writer':'other'},{'ownerPub':'forged'},{'predicate':'other'},{'set':None},{'set':'bad'}]:
+                assert (await client.post(BASE+action,json={**valid,**change})).status_code==400
+            assert (await client.post(BASE+action,content=b'x'*(limit+1),headers={'content-type':'application/json'})).status_code==413
+        for change in [{'config':[]},{'at':True},{'fence':'bad'}]:
+            assert (await client.post(BASE+'group-policy-append',json={**body,**change})).status_code==400
+        s.authority.owner_append_group_policy.return_value=False
+        assert (await client.post(BASE+'group-policy-append',json=body)).status_code==403
+        s.authority.owner_append_group_policy.side_effect=HistoryConflict('stale')
+        assert (await client.post(BASE+'group-policy-append',json=body)).status_code==409
+        s.authority.owner_append_group_policy=None;s.authority.owner_group_policy_view=None
+        assert (await client.post(BASE+'group-policy-append',json=body)).status_code==503
+        assert (await client.post(BASE+'group-policy-view',json=scope)).status_code==503
+        s.actor.scopes=[]
+        assert (await client.post(BASE+'group-policy-view',json=scope)).status_code==403
+        assert (await client.post(BASE+'group-policy-append',json=body)).status_code==403
+    s.authority.owner_mutate.assert_not_awaited()
