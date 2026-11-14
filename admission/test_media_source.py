@@ -65,6 +65,38 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(HistoryConflict):
             self.source.append_group(TENANT,'owner',OBJECT,100,current['fence'],'same-group','set_test',[{}])
 
+    def test_group_journal_deduplicates_inside_batch(self):
+        view=self.group_fixture()
+        rows=[{'kind':'object'}]*3
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',rows)
+        self.assertEqual(view()['rows'],rows[:1])
+
+    def test_group_journal_reserves_direct_cancellation_and_deletion_capacity(self):
+        view=self.group_fixture()
+        self.mutate('grant',self.grant())
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['padding']='x'*(6*1024*1024-64*17*1024-4096-len(encoded(doc))-100)
+            self.source._save(db,OBJECT,row,doc)
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'][0]['stated'],0)
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['padding']+='x'*18000
+            with self.assertRaises(AdmissionRejected):self.source._save(db,OBJECT,row,doc)
+            doc['padding']=doc['padding'][:-18000]
+            doc['deletion']={'command':'deleted'}
+            self.source._save(db,OBJECT,row,doc)
+
+    def test_group_journal_aggregate_byte_limit_rolls_back(self):
+        view=self.group_fixture()
+        for i in range(8):
+            self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{'n':i,'value':'x'*65000}])
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{'n':9,'value':'x'*65000}])
+        self.assertEqual(len(view()['rows']),8)
+
     def test_group_journal_rejects_invalid_access_input_and_signature(self):
         view=self.group_fixture();fence=view()['fence']
         for tenant,writer in [('foreign','owner'),(TENANT,'reader')]:

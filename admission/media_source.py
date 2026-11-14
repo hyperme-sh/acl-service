@@ -123,7 +123,9 @@ class MediaSource:
             scopes=doc.setdefault('groupScopes',{})
             if key not in scopes and len(scopes)>=8: raise AdmissionRejected('group scope capacity')
             retained=scopes.get(key,[])
-            candidate=retained+[row for row in rows if row not in retained]
+            candidate=list(retained)
+            for item in rows:
+                if item not in candidate: candidate.append(item)
             if len(candidate)>1024 or len(encoded(candidate))>4*1024*1024:
                 raise AdmissionRejected('group row capacity')
             self._group_projection(db,object,doc,at,predicate,set_id,candidate)
@@ -163,7 +165,16 @@ class MediaSource:
 
     def _save(self, db, object, row, doc):
         raw=encoded(doc)
-        if len(raw)>6*1024*1024: raise AdmissionRejected('media capacity')
+        reserve=0
+        if doc.get('groupScopes'):
+            if len(encoded(doc['groupScopes']))>512*1024: raise AdmissionRejected('aggregate group capacity')
+            # A cancellation payload is at most 16 KiB, plus retained metadata.
+            # Keep all remaining cancellation slots and the deletion tombstone
+            # writable even after later ordinary direct-media mutations.
+            if 'deletion' not in doc:
+                cancellations=sum(row['claims']['stated']==0 for row in doc['grants'])
+                reserve=max(0,64-cancellations)*17*1024+4096
+        if len(raw)+reserve>6*1024*1024: raise AdmissionRejected('media capacity')
         updated=(row[0]+1,row[1],raw)
         db.execute('UPDATE media_sources SET revision=?,nonce=?,document=? WHERE object=?',(*updated,object))
         self._checkpoint(db,object,updated,write=True)

@@ -890,6 +890,8 @@ The internal media source can retain signed group rows with `append_group` and
 return an owner-only `group_view`. These use the existing PostgreSQL-backed media
 journal, independent checkpoint and current identity fence. Appends preserve
 cancellations and revalidate all retained signatures; limits are eight scopes per
-object, 1024 rows per scope and 64 rows per append. Existing direct-grant delivery
+object, 1024 rows per scope, 64 rows per append and 512 KiB across all group
+scopes. Documents with group rows reserve space for every remaining direct-grant
+cancellation slot and the deletion tombstone, including on later ordinary writes. Existing direct-grant delivery
 is unchanged. These methods have no HTTP binding and do not issue group grants,
 epochs or wraps; those consumers remain under #126.
