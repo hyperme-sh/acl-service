@@ -503,3 +503,22 @@ class AllocationConsumptionContracts(MediaSourceContracts):
             with self.assertRaises(HistoryConflict):self.consume(record,proof)
         for invalid in [None,{**record,'extra':True},{**record,'owner':'foreign'}]:
             with self.assertRaises(AdmissionRejected):self.consume(invalid,proof)
+
+
+    def test_source_request_signer_runs_only_after_current_ownership_check(self):
+        record,proof=self.allocation();signer=Mock(return_value=b'signed request')
+        with patch.object(self.source,'_identities',return_value=self.ids):
+            result=self.source.prepare_allocation_request(TENANT,'owner',record,{},10000,sign_request=signer)
+            self.assertEqual(result,b'signed request')
+            self.assertEqual(signer.call_args.args[0],{'tenant':TENANT,'owner':'owner','object':'media_new',
+                'policyDigest':proof.scope.policy_digest,'ownershipDigest':proof.scope.ownership_digest,
+                'issuedAt':100,'expiresAt':130})
+            with self.assertRaises(AdmissionRejected):self.source.read_view('media_new',100)
+        signer.reset_mock()
+        with patch.object(self.source,'_identities',side_effect=AdmissionRejected('retired key')):
+            with self.assertRaises(AdmissionRejected):
+                self.source.prepare_allocation_request(TENANT,'owner',record,{},10000,sign_request=signer)
+        signer.assert_not_called()
+        with patch.object(self.source,'_identities',return_value=self.ids):
+            with self.assertRaises(AdmissionRejected):
+                self.source.prepare_allocation_request(TENANT,'owner',record,{},10000,sign_request=lambda _:b'')

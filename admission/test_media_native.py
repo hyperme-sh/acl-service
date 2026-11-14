@@ -136,5 +136,8 @@ class NativeMediaContracts(TestCase):
         scope.ownership_digest=hashlib.sha256(encoded(forged)).hexdigest()
         with self.assertRaises(AdmissionRejected):consume(forged)
         scope.ownership_digest=hashlib.sha256(encoded(record)).hexdigest()
+        request=self.source.prepare_allocation_request(self.tenant,self.owner,record,policy,self.now+7200,
+            sign_request=lambda claims:encoded(claims))
+        self.assertEqual(json.loads(request)['ownershipDigest'],scope.ownership_digest)
         self.assertTrue(consume(record))
         self.assertFalse(consume(record))

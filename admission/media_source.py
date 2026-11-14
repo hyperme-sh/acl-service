@@ -109,6 +109,36 @@ class MediaSource:
             db.execute('INSERT INTO media_sources VALUES(?,?,?,?)',(object,*row))
             self._checkpoint(db,object,row,write=True)
 
+    def prepare_allocation_request(self, tenant, writer, record, policy, policy_until, *,
+                                   sign_request, cancel=lambda:None):
+        """Authorize a configured source request signer against current history.
+
+        The adapter fixes policy, issuer/source and its private signing key. The
+        caller supplies only the canonical ownership record and bound identity.
+        No media state is created while preparing this short-lived request.
+        """
+        at=int(self.clock())
+        if (tenant != self.tenant or type(record) is not dict
+                or set(record) != {'object','owner','issuedAt','sig'} or record['owner'] != writer
+                or type(policy_until) is not int or policy_until<=at):
+            raise AdmissionRejected('invalid allocation ownership or policy')
+        record=json.loads(encoded(record)); policy=json.loads(encoded(policy))
+        if len(encoded(record))>2048 or len(encoded(policy))>65536:
+            raise AdmissionRejected('allocation input capacity')
+        guard=lambda:self._guard(at,cancel)
+        guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            identities=self._identities(db,record['object'],{'policy':policy},at,record)
+            if identities['owner'] != writer:
+                raise AdmissionRejected('allocation owner mismatch')
+            request=sign_request({'tenant':tenant,'object':record['object'],'owner':writer,
+                'policyDigest':hashlib.sha256(encoded(policy)).hexdigest(),
+                'ownershipDigest':hashlib.sha256(encoded(record)).hexdigest(),
+                'issuedAt':at,'expiresAt':min(at+30,policy_until)})
+            if type(request) is not bytes or not 1<=len(request)<=4096:
+                raise AdmissionRejected('invalid signed allocation request')
+            return request
+
     def consume_allocation(self, tenant, writer, record, policy, policy_until, *,
                            verify_grant, cancel=lambda:None):
         """Consume a configured issuer proof with empty state in one transaction.
