@@ -65,6 +65,14 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(HistoryConflict):
             self.source.append_group(TENANT,'owner',OBJECT,100,current['fence'],'same-group','set_test',[{}])
 
+    def test_group_owner_async_bridge_uses_current_view_and_protected_append(self):
+        self.group_fixture()
+        view=asyncio.run(self.source.owner_group_view(TENANT,'owner',OBJECT))
+        self.assertEqual(view['at'],100);self.assertIsNone(view['projection'])
+        self.assertTrue(asyncio.run(self.source.owner_append_group(TENANT,'owner',OBJECT,100,view['fence'],'same-group','set_test',[{}])))
+        for rows in ({},[{'large':'x'*65536}]):
+            with self.assertRaises(AdmissionRejected):asyncio.run(self.source.owner_append_group(TENANT,'owner',OBJECT,100,view['fence'],'same-group','set_test',rows))
+
     def test_full_group_view_uses_all_retained_scopes_and_owner_boundary(self):
         view=self.group_fixture()
         self.assertIsNone(self.source.group_object_view(TENANT,'owner',OBJECT,100)['projection'])
