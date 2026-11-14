@@ -660,13 +660,15 @@ class MediaSource:
         with self.store._transaction(write=False, before_commit=lambda:self._guard(at,cancel)) as db:
             # The canonical owner prefix only narrows candidates. Every returned
             # ID still needs current native owner verification. Other owners do
-            # not affect page positions or nextPage.
-            rows = db.execute('SELECT object FROM media_sources WHERE substr(object,1,?)=? ORDER BY object LIMIT 4 OFFSET ?',
+            # not affect page positions or nextPage. Retained checkpoint IDs
+            # prevent a primary rollback from silently removing candidates.
+            rows = db.execute('SELECT object FROM (SELECT object FROM media_sources UNION SELECT object FROM freshness.media_checkpoints) AS candidates WHERE substr(object,1,?)=? ORDER BY object LIMIT 4 OFFSET ?',
                               (len(prefix),prefix,page*4)).fetchall()
             for (object,) in rows:
                 self._guard(at,cancel)
                 if cleanup:
                     row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+                    if row is None: raise AdmissionRejected('media source unavailable')
                     self._checkpoint(db,object,row);doc=json.loads(row[2])
                     deleted=doc.get('deletion')
                     if deleted and deleted['owner']==writer and deleted.get('cleanupComplete') is not True:

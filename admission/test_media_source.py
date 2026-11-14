@@ -156,6 +156,17 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
         with self.assertRaises(AdmissionRejected):self.source.delete(TENANT,'owner',OBJECT,self.now,{},verifier=verifier)
 
+    def test_both_catalogs_refuse_missing_primary_rows_retained_in_checkpoints(self):
+        owner,objects=self.catalog_fixture()
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        self.source.delete(TENANT,owner,objects[0],self.now,{},verifier=verifier)
+        with self.store._transaction(write=True) as db:
+            db.execute('DELETE FROM media_sources WHERE object=?',(objects[0],))
+        for cleanup in (False,True):
+            with self.assertRaises(AdmissionRejected):
+                self.source._owner_catalog(TENANT,owner,0,lambda:None,cleanup=cleanup)
+        self.assertEqual(self.source._owner_catalog(TENANT,owner,1,lambda:None)['objects'],objects[4:])
+
     def test_cleanup_catalog_uses_permanent_owner_command_after_policy_expiry(self):
         owner,objects=self.catalog_fixture()
         verifier=Mock();verifier.matches_deletion.return_value=True
