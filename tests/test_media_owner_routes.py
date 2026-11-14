@@ -37,6 +37,23 @@ WRITE={'object':'media-object','at':100,'fence':'a'*64,'operation':'grant','payl
 
 
 @pytest.mark.asyncio
+async def test_epoch_context_uses_fixed_owner_and_refuses_old_adapters(setup):
+    s=setup;s.authority.owner_epoch_view=AsyncMock(return_value={'previousEpoch':1,'previousFinalizationId':'d'*64})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'epoch-view',json={'object':'media-object'})
+        assert response.status_code==200
+        assert response.json()=={'previousEpoch':1,'previousFinalizationId':'d'*64}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_epoch_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object')
+        for body in [{},{'object':'media-object','writer':'other'},{'object':'media-object','at':100}]:
+            assert (await client.post(BASE+'epoch-view',json=body)).status_code==400
+        assert (await client.post(BASE+'epoch-view',content=b'x'*2049,headers={'content-type':'application/json'})).status_code==413
+        s.authority.owner_epoch_view=None
+        assert (await client.post(BASE+'epoch-view',json={'object':'media-object'})).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_owner_catalog_uses_fixed_subject_and_bounded_page_only(setup):
     s=setup;s.authority.owner_catalog=AsyncMock(return_value={'at':100,'objects':['private-object'],'nextPage':1})
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:

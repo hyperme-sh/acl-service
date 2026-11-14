@@ -544,12 +544,16 @@ class MediaSource:
                     raise HistoryConflict('media active checkpoint missing')
             return True
 
-    def _selected(self, object, doc, at):
+    def _selected_finalization(self, object, doc, at):
         for row in reversed(doc['finalizations']):
             fin=row['proof']
             if self.native[3].matches_settled(encoded(self._history(object,doc,at,fin))):
-                return next(r['document']['manifest'] for r in doc['manifests'] if r['document']['manifest']['revisionId']==fin['revisionId'])
+                return fin
         raise AdmissionRejected('no current settled epoch')
+
+    def _selected(self, object, doc, at):
+        fin=self._selected_finalization(object,doc,at)
+        return next(r['document']['manifest'] for r in doc['manifests'] if r['document']['manifest']['revisionId']==fin['revisionId'])
 
     def _status(self, object, doc, grant, proof, owner_pub, at):
         selected=self._selected(object,doc,at); claims=grant['claims']
@@ -685,6 +689,28 @@ class MediaSource:
 
     async def owner_view(self, tenant, writer, object):
         return await self._work(self._owner_view, tenant, writer, object)
+
+    def _owner_epoch_view(self, tenant, writer, object, cancel):
+        at=int(self.clock());guard=lambda:self._guard(at,cancel)
+        guard()
+        if tenant!=self.tenant: raise AdmissionRejected('media tenant mismatch')
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer!=identities['owner']: raise AdmissionRejected('media owner required')
+            parent=self._selected_finalization(object,doc,at)
+            if type(parent['epoch']) is not int or not 1<=parent['epoch']<9007199254740991:
+                raise AdmissionRejected('media epoch exhausted')
+            snapshot=self._snapshot(doc)
+            named={writer}|{entry['accessor'] for entry in snapshot['entries']}
+            guard()
+            return {'at':at,'fence':self._fence(db,object,row,at),'snapshot':snapshot,
+                    'owner':writer,'ownerPub':identities['bindings'][writer]['pub'],
+                    'previousEpoch':parent['epoch'],'previousFinalizationId':parent['finalizationId'],
+                    'bindings':{who:binding for who,binding in identities['bindings'].items() if who in named}}
+
+    async def owner_epoch_view(self, tenant, writer, object):
+        return await self._work(self._owner_epoch_view,tenant,writer,object)
 
     def _owner_catalog(self, tenant, writer, page, cancel, *, cleanup=False):
         if tenant != self.tenant or type(writer) is not str or type(page) is not int or not 0 <= page < 16:

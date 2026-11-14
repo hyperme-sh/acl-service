@@ -780,3 +780,17 @@ reuse. Owner pages enumerate at most 64 active entries, so completed tombstones
 do not permanently exhaust capacity or hide later objects. Missing primary rows
 remain represented independently and cause refusal. This does not activate a
 provider, install anything in a running tenant, or import existing objects.
+
+### Protected next-epoch context
+
+`POST /acl/sociacl/media/owner/epoch-view` accepts only `{object}` under the
+existing fixed owner binding and write scope. It returns the current snapshot,
+write fence, owner key, named recipient bindings and the finalization ID/epoch
+selected by the native settled-history verifier. Unrelated enrolled identities
+are omitted. Unsettled history, exhausted epoch numbers and foreign owners are
+refused; older adapters without this operation return unavailable.
+
+This read-only preparation does not change grants, publish wraps or advance an
+epoch. Subsequent owner signatures still require the current write fence. The
+browser must preserve its intended signed changes across interrupted publication;
+this endpoint alone does not implement sharing or recovery.
