@@ -642,3 +642,27 @@ never means the epoch has settled or reader delivery is permitted. `absent` is
 not a write permit: another write still needs a fresh view/fence and all ordinary
 signature checks. Conflicting or superseded state requires explicit reconciliation.
 No operation automatically retries, creates an object, or releases quota.
+
+### PostgreSQL protected source storage
+
+`PostgresHistoryStore` provides serialized history transactions over separate
+history and checkpoint schemas in ACL's PostgreSQL database. The configured
+canonical tenant and source UUID must match both pre-existing markers. Runtime
+construction performs no DDL or repair. Missing scopes, markers, or authority
+snapshots refuse; every transaction checks the independent authority digest.
+History admission, ciphertext generation and media allocations share the source
+row lock. Contention is bounded and requires a fresh caller fence, with no replay.
+
+The explicit `provision_empty_media_source` operator function creates both new
+schemas atomically and refuses either existing schema, including an empty one.
+It creates no identities, private keys, media objects, policy or grants. Existing
+owner admission still requires verified native history and the separately tracked
+wallet-to-SEA resolution. This is not an import or runtime enrollment API.
+
+Use separate restore scopes and restricted runtime database roles: history must
+never be restored together with its checkpoint authority. A full rollback of
+both scopes is outside the independent-checkpoint guarantee. Keep schema creation
+privilege with the provisioning role. PostgreSQL binding-file routing and the
+operator's owner-admission entrypoint remain tracked by #103; existing runtime
+binding files retain their current format until that work lands. No service or
+storage activation is enabled by this adapter.
