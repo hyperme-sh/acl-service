@@ -136,6 +136,8 @@ class MediaSourceContracts(TestCase):
             if i<15:self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_0',rows)
             else:
                 with self.assertRaises(AdmissionRejected):self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_0',rows)
+                self.source.append_group(TENANT,'owner',OBJECT,100,fence,'same-group','set_0',rows[:-1]+rows[:1])
+        self.assertEqual(len(self.source.group_view(TENANT,'owner',OBJECT,100,'same-group','set_0')['rows']),1024)
 
     def enable_active_index(self):
         with self.store._transaction(write=False) as db:
