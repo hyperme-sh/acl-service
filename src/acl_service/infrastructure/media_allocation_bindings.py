@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 from acl_service.allocation_protocol.media_allocation_grant import _b64, _uuid, _integer
 from acl_service.allocation_protocol.media_allocation_request import AllocationRequestSigner
 from acl_service.domain.media_allocation import AllocationBinding, canonical
-from acl_service.infrastructure.media_bindings import parse_settings, _provisioned, _source
+from acl_service.infrastructure.media_bindings import parse_settings, _prepare_settings, _provisioned, _source
 from acl_service.infrastructure.statement_bindings import _path, _private_file, _unique
 from acl_service.infrastructure.media_allocation_client import AllocationClient
 
@@ -25,16 +25,18 @@ def load_allocation_bindings(environ=None, *, source_factory=None, client_factor
         if len(raw)>65536:raise ValueError()
         value=json.loads(raw,object_pairs_hook=_unique)
         if (type(value) is not dict or set(value)!={'version','bindings'} or type(value['version']) is not int
-                or value['version']!=1 or type(value['bindings']) is not list or not 1<=len(value['bindings'])<=64):raise ValueError()
-        if any(type(row) is not dict or set(row)!=BASE|EXTRA for row in value['bindings']):raise ValueError()
-        settings=parse_settings(canonical({'version':1,'bindings':[{key:row[key] for key in BASE} for row in value['bindings']]}))
+                or value['version'] not in (1,2) or type(value['bindings']) is not list or not 1<=len(value['bindings'])<=64):raise ValueError()
+        base=BASE if value['version']==1 else (BASE-{'historyFile','freshnessFile'})|{'postgresFile'}
+        if any(type(row) is not dict or set(row)!=base|EXTRA for row in value['bindings']):raise ValueError()
+        settings=_prepare_settings(parse_settings(canonical({'version':value['version'],'bindings':[{key:row[key] for key in base} for row in value['bindings']]})))
         prepared=[];tenants={};paths={}
         for binding,row in zip(settings,value['bindings']):
             _provisioned(binding,allow_empty=True)
             issuer,source=_uuid(row['issuer']),_uuid(row['source']);_integer(row['policyUntil'])
             policy_path,key_path=_path(row['policyFile']),_path(row['sourceKeyFile'])
-            all_paths=(binding.history,binding.freshness,binding.key_file,policy_path,key_path)
-            if len(set(all_paths))!=5 or any(os.path.samefile(a,b) for i,a in enumerate(all_paths) for b in all_paths[i+1:]):raise ValueError()
+            if binding.postgres_settings is not None and binding.postgres_settings.source!=source:raise ValueError()
+            all_paths=tuple(p for p in (binding.history,binding.freshness,binding.postgres_file,binding.key_file,policy_path,key_path) if p is not None)
+            if len(set(all_paths))!=len(all_paths) or any(os.path.samefile(a,b) for i,a in enumerate(all_paths) for b in all_paths[i+1:]):raise ValueError()
             if any(os.path.samefile(_path(configured),path) for path in all_paths):raise ValueError()
             for path in all_paths:
                 if path in paths and paths[path]!=binding.tenant:raise ValueError()

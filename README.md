@@ -666,3 +666,24 @@ privilege with the provisioning role. PostgreSQL binding-file routing and the
 operator's owner-admission entrypoint remain tracked by #103; existing runtime
 binding files retain their current format until that work lands. No service or
 storage activation is enabled by this adapter.
+
+Private media and allocation binding envelopes also accept `version: 2`.
+Each row replaces `historyFile` and `freshnessFile` with `postgresFile`, an
+absolute private regular file. All other subject, reader, storage and allocation
+fields retain their existing meaning. Version 1 remains compatible.
+
+The private PostgreSQL file contains exactly `version: 1`, `databaseUrl`
+(an explicit `postgresql+psycopg` address), `historySchema`, `checkpointSchema`,
+`tenant`, and `source`. Schema identifiers begin with `acl_` and contain only
+lowercase letters, digits and underscores. Tenant/source UUIDs must be canonical
+and match the provisioned source. The database address is secret configuration;
+it is neither returned over HTTP nor printed in configuration errors.
+
+The loader reads each tenant's PostgreSQL configuration once. Allocation fixes
+the same source UUID as its issuer contract. Delivery can reuse an empty source
+only when allocation already binds the identical database address, schemas,
+tenant, source and storage origin. All checks precede storage-client creation.
+Runtime configuration never invokes provisioning or creates an owner; missing
+configuration keeps the feature disabled, while invalid configuration refuses
+startup. Verified existing owner admission and operator provisioning remain
+open work under #103 and s3r.ch #440.

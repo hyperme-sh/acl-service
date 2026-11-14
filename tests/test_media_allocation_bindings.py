@@ -64,3 +64,23 @@ def test_conflicting_shared_files_keys_and_configuration_refuse(configuration):
     c.source_factory.return_value.production_ready=False
     with pytest.raises(ValueError):
         module.load_allocation_bindings(c.write(),source_factory=c.source_factory,client_factory=c.client_factory)
+
+
+def test_postgres_allocation_requires_the_same_source_identifier(configuration):
+    c=configuration
+    postgres_file=c.tmp_path/'postgres.json'
+    postgres_file.write_text(json.dumps({'version':1,'databaseUrl':'postgresql+psycopg://runtime:private@db/acl',
+        'historySchema':'acl_history','checkpointSchema':'acl_checkpoint','tenant':c.tenant,'source':c.row['source']}))
+    postgres_file.chmod(0o600)
+    row={key:value for key,value in c.row.items() if key not in ('historyFile','freshnessFile')}
+    row['postgresFile']=str(postgres_file)
+    def configured(row):
+        c.file.write_text(json.dumps({'version':2,'bindings':[row]}));c.file.chmod(0o600)
+        return {'SOCIACL_MEDIA_ALLOCATION_FILE':str(c.file)}
+    values=module.load_allocation_bindings(configured(row),source_factory=c.source_factory,client_factory=c.client_factory)
+    assert values[(UUID(c.tenant),'subject')].source==c.row['source']
+    prepared=c.source_factory.call_args.args[0]
+    assert prepared.history is None and prepared.postgres_settings.source==c.row['source']
+    with pytest.raises(ValueError,match='Invalid private'):
+        module.load_allocation_bindings(configured({**row,'source':str(UUID(int=99))}),
+            source_factory=c.source_factory,client_factory=c.client_factory)
