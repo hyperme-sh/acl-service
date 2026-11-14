@@ -47,6 +47,11 @@ export function statementGraph(accounts, contextFor, now, graph) {
     if (!row || row.record.stated !== 1 || row.record.from > now || row.record.until <= now) return false;
     verify(row); return true;
   };
+  if (graph.statementOnly && proposed.some(row => row.record.object.startsWith('room_'))) {
+    const parent = held.find(row => row.kind === 'object' && row.record.object === graph.forum && row.record.owner === forumOwner);
+    if (!parent) throw Error('missing-parent-owner');
+    verify(parent);
+  }
   if (graph.statementOnly) authorizeAppObjectAppend(proposed, held, allowed, now);
   // Retain every admitted cancellation and prior record. No overwriting history.
   const identity = row => JSON.stringify([row.kind, row.soul, Buffer.from(row.bytes).toString('base64')]);

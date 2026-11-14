@@ -49,6 +49,14 @@ class GraphContracts(unittest.TestCase):
         initial = self.source.read('test', f['now'])
         self.source.append('test', f['now'], initial['fence'], [self.rows['initial']], statement_only=False)
 
+    def test_room_cannot_bootstrap_its_parent_ownership(self):
+        at = self.f['now']
+        trust = {k:self.f[k] for k in ('jwks','policy','pinnedIss')}
+        self.source.provision('empty', self.rows['forum'], trust, at+60, exclusive_grant=lambda *a: True)
+        held = self.source.read('empty', at)
+        with self.assertRaises(AdmissionRejected):
+            self.source.append('empty', at, held['fence'], self.rows['roomRows'])
+
     def test_signed_room_owner_and_grants_share_the_protected_fence(self):
         at = self.f['now']
         held = self.source.read('test', at)
