@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
 import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
-import {groupAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority} from './group-authority.mjs';
 const now=1700000060;
 const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
@@ -75,4 +75,45 @@ test('epoch material keeps independent membership and object-set HAM and removal
  const detached=run(input([...rows(),cancel('object-set')]));
  assert.equal(detached.snapshot.members[0].stated,1);assert.equal(detached.snapshot.objectSet.stated,0);
  assert.equal(run(input([owned])).snapshot,null);
+});
+
+function scope(values=rows(),setId=set){return {predicate:'same-group',set:setId,rows:values};}
+function competingScope(hamState=2){
+ const setId=set.slice(0,-32)+'fa'.repeat(16),who=outsider;
+ const values=[owned];
+ for(const role of ['member','set']){
+  const record={role,predicate:'same-group',set:setId,member:who,setOwner:owner,stated:1,hamState:1,issuedAt:now,cancels:[]};
+  record.sig=sign(membershipAssentBytes(record),role==='member'?3:1);
+  values.push({kind:'membership',soul:membershipSoul(owner,'same-group',setId,who),record});
+ }
+ const record={owner,object,predicate:'same-group',set:setId,stated:1,hamState,issuedAt:now,cancels:[]};
+ record.sig=sign(objectSetBytes(record),1);
+ values.push({kind:'object-set',soul:objectSetSoul(owner,object,'same-group',setId),record});
+ return scope(values,setId);
+}
+const all=scopes=>groupObjectAuthority(accounts,contextFor,now,{object,scopes});
+test('full object authority selects one winning group independent of scope order',()=>{
+ const old=scope(),next=competingScope();
+ for(const scopes of [[old,next],[next,old]]){
+  const result=all(scopes);assert.equal(result.set,next.set);assert.deepEqual(result.members,[outsider]);
+  assert.equal(result.snapshot.objectSet.hamState,2);
+ }
+ const revoked=competingScope();
+ const withdrawal={kind:'membership',rowSoul:revoked.rows[1].soul,cancelId:'d'.repeat(64),prior:[],signer:outsider,
+  predicate:'same-group',set:revoked.set,member:outsider,setOwner:owner,issuedAt:now};
+ withdrawal.sig=sign(groupCancelBytes(withdrawal),3);
+ revoked.rows.push({kind:'cancel',soul:withdrawal.rowSoul,record:withdrawal});
+ assert.deepEqual(all([old,revoked]).members,[]);
+ assert.deepEqual(all([scope([...rows(),cancel('object-set')]),next]).members,[outsider]);
+ assert.deepEqual(all([scope([...rows(),cancel()])]).members,[]);
+ assert.deepEqual(all([scope([...rows(),cancel('object-set')])]).members,[]);
+ assert.deepEqual(all([scope([owned])]),{object,set:null,predicate:null,snapshot:null,members:[]});
+ const tied=competingScope(1);
+ assert.deepEqual(all([old,tied]),all([tied,old]));
+});
+test('full object authority refuses partial, duplicate and oversized scope input',()=>{
+ for(const scopes of [[],Array(9).fill(scope()),[null],[{}],[scope(),scope()]])assert.throws(()=>all(scopes));
+ assert.throws(()=>groupObjectAuthority(accounts,contextFor,now,{object,scopes:[scope()],extra:true}));
+ assert.throws(()=>groupObjectAuthority(accounts,contextFor,now,{object,scopes:[scope([{large:'x'.repeat(1024*1024)}])]}));
+ const bad=competingScope();bad.rows[1].record.sig='bad';assert.throws(()=>all([scope(),bad]));
 });

@@ -83,6 +83,31 @@ class MediaSource:
             peers=_peer_inputs(principal,accounts),
             groupGraph={'object':object,'predicate':predicate,'set':set_id,'rows':rows}))
 
+    def _group_object_projection(self,db,object,doc,at):
+        scopes=[]
+        for key,rows in sorted(doc.get('groupScopes',{}).items()):
+            predicate,_,set_id=key.partition(':')
+            scopes.append({'predicate':predicate,'set':set_id,'rows':rows})
+        if not scopes:return None
+        accounts=self._accounts(db)
+        principal=next(iter(accounts));account=accounts[principal]
+        runner=HistoryAdmission(self.store,grant_for=lambda _:None,
+                                trust_at=lambda _:doc['policy'],clock=self.clock)
+        return json.loads(runner._run_verifier(principal,at,
+            genesis=_record(account.genesis),entries=[_record(row) for row in account.entries],
+            peers=_peer_inputs(principal,accounts),groupObjectGraph={'object':object,'scopes':scopes}))
+
+    def group_object_view(self,tenant,writer,object,at,cancel=lambda:None):
+        """Resolve every retained group scope under one current transaction."""
+        self._guard(at,cancel)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer!=identities['owner']:raise AdmissionRejected('group owner required')
+            return {'projection':self._group_object_projection(db,object,doc,at),
+                    'fence':self._fence(db,object,row,at),'objectVersion':doc['objectVersion']}
+
     @staticmethod
     def _group_key(predicate,set_id):
         if predicate not in ('same-group','named-circle') or type(set_id) is not str or not set_id.startswith('set_') or len(set_id)>512:

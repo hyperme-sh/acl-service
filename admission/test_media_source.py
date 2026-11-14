@@ -65,6 +65,22 @@ class MediaSourceContracts(TestCase):
         with self.assertRaises(HistoryConflict):
             self.source.append_group(TENANT,'owner',OBJECT,100,current['fence'],'same-group','set_test',[{}])
 
+    def test_full_group_view_uses_all_retained_scopes_and_owner_boundary(self):
+        view=self.group_fixture()
+        self.assertIsNone(self.source.group_object_view(TENANT,'owner',OBJECT,100)['projection'])
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'named-circle','set_other',[{}])
+        with patch('media_source.HistoryAdmission._run_verifier',return_value=b'{"members":[]}') as verify:
+            result=self.source.group_object_view(TENANT,'owner',OBJECT,100)
+            self.assertEqual(result['projection'],{'members':[]})
+            graph=verify.call_args.kwargs['groupObjectGraph']
+            self.assertEqual(graph['object'],OBJECT)
+            self.assertEqual({row['set'] for row in graph['scopes']},{'set_test','set_other'})
+        for tenant,writer in [('wrong','owner'),(TENANT,'reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.group_object_view(tenant,writer,OBJECT,100)
+        with patch('media_source.HistoryAdmission._run_verifier',side_effect=AdmissionRejected('history changed')):
+            with self.assertRaises(AdmissionRejected):self.source.group_object_view(TENANT,'owner',OBJECT,100)
+
     def test_group_journal_deduplicates_inside_batch(self):
         view=self.group_fixture()
         rows=[{'kind':'object'}]*3

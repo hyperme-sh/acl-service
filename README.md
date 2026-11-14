@@ -900,6 +900,11 @@ epochs or wraps; those consumers remain under #126.
 Group projection also returns detached canonical `snapshot` material from the
 shared SociACL implementation. Membership and object-set edges keep separate HAM
 values and removal states; an absent object-set edge returns null. This prepares
-epoch construction and does not activate group delivery. Before delivery is
-implemented, competing object-set scopes must be resolved over the object's full
-retained authority; per-scope inspection alone is not a current group grant.
+epoch construction and does not activate group delivery. The owner-only
+`group_object_view` reads all retained scopes in one protected transaction and
+uses SociACL's merge rules to select the current object-set edge. A losing scope
+cannot supply members, and cancellation of the winning scope does not fall back
+to an older group. Per-scope inspection alone is not a current group grant.
+The internal `groupObjectGraph` verifier input is bounded to eight scopes and
+1 MiB; retained source rows also keep their stricter aggregate journal budget.
+No HTTP binding, group grant, epoch publication or delivery is enabled here.
