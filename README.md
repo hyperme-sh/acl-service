@@ -867,3 +867,11 @@ write: ordinary fenced mutation and native signature checks still apply.
 exact `at` and `fence`, without obtaining a replacement view. An intervening
 change then refuses at the mutation boundary rather than converting a stale
 plan into a conflicting grant. `share-state` keeps its existing response shape.
+
+`unshare-view` prepares the same read-only next-epoch plan while cancelling the
+selected recipient and renewing the remaining unexpired readers. The cancelled
+reader receives no new wrap binding; its dates are preserved. The owner must
+capture current key material and save the full plan before publishing the
+cancellation. Sharing reconciliation also recognizes exact cancellation intents.
+This lets removal resume the remaining readers' epoch instead of leaving only a
+cancellation with an unmatched current snapshot.

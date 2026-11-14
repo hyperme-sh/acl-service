@@ -66,3 +66,13 @@ def test_missing_grant_refuses_competing_or_later_epoch_progress():
             assert check(d,'grant',G,{'reader':old})=='conflict'
     d=doc();d['manifests']=[{'document':{'manifest':{'epoch':1}}}]
     assert check(d,'grant',G,{'reader':old})=='absent'
+
+
+def test_cancellation_intent_reconciles_only_existing_live_grant():
+    old=deepcopy(G);old['claims'].update(epoch=1,grantRevision=1)
+    cancel=deepcopy(G);cancel['claims']['stated']=0
+    assert check(doc(),'grant',cancel,{'reader':old})=='absent'
+    assert check(doc(),'grant',cancel,{'reader':cancel})=='applied'
+    assert check(doc(),'grant',cancel)=='conflict'
+    old['claims']['stated']=0
+    assert check(doc(),'grant',cancel,{'reader':old})=='conflict'

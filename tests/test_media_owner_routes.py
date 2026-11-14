@@ -318,3 +318,15 @@ async def test_share_check_preserves_reconciliation_fence_and_optional_adapter(s
         s.authority.owner_share_check=None
         assert (await client.post(BASE+'share-check',json=body)).status_code==503
     s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unshare_plan_is_fixed_owner_and_optional(setup):
+    s=setup;s.authority.owner_unshare_view=AsyncMock(return_value={'grants':[]})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        body={'object':'media-object','reader':'recipient'}
+        assert (await client.post(BASE+'unshare-view',json=body)).status_code==200
+        s.authority.owner_unshare_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object','recipient')
+        s.authority.owner_unshare_view=None
+        assert (await client.post(BASE+'unshare-view',json=body)).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()

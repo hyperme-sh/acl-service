@@ -10,11 +10,12 @@ def share_state(doc, latest, snapshot, owner, operation, payload):
         claims=payload.get('claims')
         if (set(payload)!={'claims','proof'} or type(claims) is not dict or claims.get('owner')!=owner
                 or type(claims.get('accessor')) is not str or type(claims.get('epoch')) is not int or claims['epoch']<2
-                or type(claims.get('grantRevision')) is not int or claims['grantRevision']<1 or claims.get('stated')!=1):
+                or type(claims.get('grantRevision')) is not int or claims['grantRevision']<1 or type(claims.get('stated')) is not int or claims['stated'] not in (0,1)):
             raise AdmissionRejected('sharing grant required')
         who=claims['accessor'];held=latest.get(who)
         if who in doc['frozen']: return 'conflict'
         if held and same(held['claims'],claims) and same(held['proof'],payload['proof']): return 'applied'
+        if claims['stated']==0 and (not held or held['claims']['stated']!=1): return 'conflict'
         # Only the immediate revision can be missing. A changed or later grant
         # must not be overwritten while resuming an older signed plan.
         if any(r['document']['manifest']['epoch']>=claims['epoch'] for r in doc['manifests']) or any(r['proof']['epoch']>=claims['epoch'] for r in doc['finalizations']): return 'conflict'
