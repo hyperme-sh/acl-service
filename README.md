@@ -752,3 +752,12 @@ needs separate payload read/write permissions; deletion remains a distinct
 permission and operation. Source authorization and post-storage commit checks
 remain mandatory. Selecting version 3 requires the dedicated registry/provider
 data and scopes to be staged first; there is no fallback, import or activation.
+
+
+`POST /api/v1/acl/sociacl/media/owner/registration` takes `{object, record}`
+and confirms a signed ownership record against the authenticated owner, current
+native protected history, active media policy and matching allocation anchors.
+It returns `{accepted:true}` only after that read-only transaction completes.
+It does not allocate an object, store another ownership copy, extend policy or
+change grants. This lets allocated-storage consumers replace their legacy
+registration index while keeping signature verification in the protected source.

@@ -579,6 +579,28 @@ class AllocationConsumptionContracts(MediaSourceContracts):
         return self.source.consume_allocation(TENANT,'owner',record,{},10000,
             verify_grant=kwargs.pop('verify_grant',lambda at:proof),**kwargs)
 
+    def test_registration_confirmation_requires_current_owner_and_allocation_anchors(self):
+        record,proof=self.allocation()
+        with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)
+        before=self.source.read_view('media_new',self.now)['fence']
+        def confirm(tenant=TENANT,writer='owner',object='media_new',candidate=record,cancel=lambda:None):
+            return self.source._confirm_registration(tenant,writer,object,candidate,cancel)
+        with patch.object(self.source,'_identities',return_value=self.ids) as verify:
+            self.assertTrue(confirm())
+            self.assertEqual(verify.call_args.args[-1],record)
+        self.assertEqual(self.source.read_view('media_new',self.now)['fence'],before)
+        for args in [{'tenant':'other'},{'writer':'reader'},{'object':'other'},{'candidate':{}},{'candidate':[]}]:
+            with self.assertRaises(AdmissionRejected):confirm(**args)
+        with patch.object(self.source,'_identities',return_value={'owner':'other'}):
+            with self.assertRaises(AdmissionRejected):confirm()
+        with patch.object(self.source,'_identities',side_effect=AdmissionRejected('signature')):
+            with self.assertRaises(AdmissionRejected):confirm()
+        def cancel():raise RuntimeError('cancelled')
+        with self.assertRaises(RuntimeError):confirm(cancel=cancel)
+        with self.store._transaction(write=True) as db:
+            db.execute('DELETE FROM media_allocations WHERE object=?',('media_new',))
+        with self.assertRaises(HistoryConflict):confirm()
+
     def test_retirement_signer_uses_only_accepted_checkpointed_command(self):
         record,proof=self.allocation()
         with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)
