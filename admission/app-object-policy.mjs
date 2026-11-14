@@ -18,10 +18,10 @@ export function authorizeAppObjectAppend(proposed, held, allowed, now) {
 
 // Retained history may start with an ownership row signed by a retired key.
 // Only a currently verified matching row can establish the parent.
-export function requireCurrentParentOwner(held, forum, owner, verify) {
+export function requireCurrentParentOwner(held, forum, owner, verify, denial = 'missing-parent-owner') {
   const current = held.some(row => {
     if (row.kind !== 'object' || row.record.object !== forum || row.record.owner !== owner) return false;
     try { verify(row); return true; } catch { return false; }
   });
-  if (!current) throw Error('missing-parent-owner');
+  if (!current) throw Error(denial);
 }

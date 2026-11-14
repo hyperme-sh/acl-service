@@ -49,6 +49,8 @@ export function statementGraph(accounts, contextFor, now, graph) {
   };
   if (graph.statementOnly && proposed.some(row => row.record.object.startsWith('room_'))) {
     requireCurrentParentOwner(held, graph.forum, forumOwner, verify);
+    const child = proposed.find(row => row.record.object.startsWith('room_'));
+    requireCurrentParentOwner([...held, ...proposed], child.record.object, child.record.owner, verify, 'missing-room-owner');
   }
   if (graph.statementOnly) authorizeAppObjectAppend(proposed, held, allowed, now);
   // Retain every admitted cancellation and prior record. No overwriting history.

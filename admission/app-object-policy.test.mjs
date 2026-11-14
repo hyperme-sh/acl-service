@@ -43,7 +43,7 @@ test('current parent selection retains history without trusting invalid-only own
 
 test('refreshed parent ownership survives real signing-key rotation with retained old rows', async () => {
   const {readFileSync} = await import('node:fs');
-  const {formatPrincipalKey, objectRecordBytes, signWithKeyring, verifyObjectRecord, linkId, historyState} = await import('sociacl-ids');
+  const {formatPrincipalKey, objectRecordBytes, signWithKeyring, verifyObjectRecord, linkId, historyState, seeGrantBytes, grantSoul} = await import('sociacl-ids');
   const f = JSON.parse(readFileSync(new URL('./fixture.json', import.meta.url)));
   const forum = `forum_${formatPrincipalKey(f.genesis)}_${'04'.repeat(16)}`;
   const context = {jwks:f.jwks,policy:f.policy,pinnedIss:new Set(f.pinnedIss),
@@ -52,14 +52,26 @@ test('refreshed parent ownership survives real signing-key rotation with retaine
   context.history = (principal, at, until) => principal === f.genesis
     ? {ok:true,value:historyState(principal,rotations.filter(row=>row.issuedAt<=until),at,until)}
     : {ok:false,reason:'missing-history'};
-  function ownership(n, issuedAt) {
+  function ownership(n, issuedAt, object = forum) {
     const privateKey = new Uint8Array(32); privateKey[31] = n;
-    const record = {object:forum,owner:f.genesis,issuedAt};
+    const record = {object,owner:f.genesis,issuedAt};
     const signed = signWithKeyring(privateKey,objectRecordBytes(record),n === 1 ? f.genesis : rotations[0].nextKey);
     assert.ok(signed.ok); record.sig = signed.value;
-    return {kind:'object',soul:forum,record};
+    return {kind:'object',soul:object,record};
   }
   const old = ownership(1,1700000010), fresh = ownership(2,1700000040);
+  const {statementGraph} = await import('./statement-graph.mjs');
+  const room = forum.replace('forum_', 'room_'), oldRoom = ownership(1,1700000010,room), freshRoom = ownership(2,1700000040,room);
+  const grant = {object:room,owner:f.genesis,accessor:f.genesis,stated:1,from:f.now,until:f.now+30,hamState:f.now,issuedAt:f.now};
+  const nextSecret = new Uint8Array(32); nextSecret[31]=2;
+  grant.sig=signWithKeyring(nextSecret,seeGrantBytes(grant),rotations[0].nextKey).value;
+  const candidate={kind:'see',soul:grantSoul(f.genesis,room,f.genesis),record:grant};
+  const account={genesis:f.binding,rotations,links:context.links,ownRevokes:[],entries:[f.oidc,...rotations]};
+  const accounts=new Map([[f.genesis,account]]);
+  const append = rows => statementGraph(accounts,()=>context,f.now,{forum,rows,candidates:[candidate],statementOnly:true});
+  assert.throws(()=>append([old,fresh,oldRoom]),/missing-room-owner/);
+  assert.equal(append([old,fresh,oldRoom,freshRoom]).snapshot.rows.length,5);
+
   const verify = candidate => {
     const result = verifyObjectRecord(candidate.record,rotations,context);
     if (!result.ok) throw Error(result.reason);
