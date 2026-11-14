@@ -917,3 +917,9 @@ with only `object`, and `group-append` with `object`, `at`, `fence`, `predicate`
 responses. Unsupported older authority adapters refuse with 503. A group append
 still verifies every retained signature and preserves cancellations; these routes
 do not issue group grants, epochs or reader wraps, or enable group delivery.
+
+The native group settlement-policy adapter verifies an existing signed
+`GroupEpochConfig` against independently resolved owner/key/scope/window/revision
+fields. It does not select the current policy, establish set ownership or grant
+media delivery. Protected group policy persistence and source consumption remain
+separate from this bounded adapter; existing direct-media routes are unchanged.
