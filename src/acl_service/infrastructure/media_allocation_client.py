@@ -5,6 +5,7 @@ import json
 import re
 from urllib.parse import urlsplit
 from uuid import UUID
+from acl_service.allocation_protocol.media_allocation_grant import _unique
 
 
 class AllocationUnavailable(ValueError):
@@ -36,8 +37,27 @@ class AllocationClient:
             raise AllocationUnavailable('Invalid allocation request')
         body={'object':scope.object,'owner':scope.owner,'ownershipDigest':scope.ownership_digest,
               'request':base64.b64encode(request).decode('ascii')}
+        return await self._exchange(self._url,body)
+
+    async def retire(self, scope, request):
+        if scope.tenant!=self.tenant or type(request) is not bytes or not 1<=len(request)<=4096:
+            raise AllocationUnavailable('Invalid retirement request')
+        scope.claims()
+        body={'object':scope.object,'owner':scope.owner,'command':scope.command,
+              'request':base64.b64encode(request).decode('ascii')}
+        raw=await self._exchange(self.origin+'/api/v1/storage/media/retire',body)
         try:
-            async with asyncio.timeout(2), self._client.stream('POST',self._url,headers=self._headers,
+            result=json.loads(raw,object_pairs_hook=_unique)
+            if (type(result) is not dict or set(result)!={'accepted','command','cleanup'}
+                    or result['accepted'] is not True or result['command']!=scope.command
+                    or result['cleanup']!='complete'):raise ValueError()
+            return result
+        except (ValueError,TypeError,RecursionError):
+            raise AllocationUnavailable('Retirement confirmation unavailable') from None
+
+    async def _exchange(self, url, body):
+        try:
+            async with asyncio.timeout(2), self._client.stream('POST',url,headers=self._headers,
                     json=body,follow_redirects=False,timeout=2) as response:
                 if response.status_code!=200 or response.headers.get('content-encoding','identity')!='identity':
                     raise ValueError()
