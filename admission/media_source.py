@@ -108,6 +108,30 @@ class MediaSource:
             return {'projection':self._group_object_projection(db,object,doc,at),
                     'fence':self._fence(db,object,row,at),'objectVersion':doc['objectVersion']}
 
+    def group_authority_view(self,tenant,writer,object,at,cancel=lambda:None):
+        """Read preparation inputs together; neither snapshot grants delivery."""
+        self._guard(at,cancel)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer!=identities['owner']:raise AdmissionRejected('group owner required')
+            direct=self._snapshot(doc)
+            projection=self._group_object_projection(db,object,doc,at)
+            policy=None
+            named={writer}|{entry['accessor'] for entry in direct['entries']}
+            if projection and projection['snapshot'] is not None:
+                edge=projection['snapshot']['objectSet']
+                context=self._group_policy_context(db,object,doc,at,edge['predicate'],edge['setId'])
+                policy={'context':context,'config':self._selected_group_policy(doc,context)}
+                named.add(context['owner'])
+                named.update(member['accessor'] for member in projection['snapshot']['members'])
+            if not named.issubset(identities['bindings']):
+                raise AdmissionRejected('group identity unavailable')
+            return {'direct':direct,'projection':projection,'policy':policy,'owner':writer,
+                    'bindings':{who:identities['bindings'][who] for who in sorted(named)},
+                    'objectVersion':doc['objectVersion'],'fence':self._fence(db,object,row,at)}
+
     @staticmethod
     def _group_key(predicate,set_id):
         if predicate not in ('same-group','named-circle') or type(set_id) is not str or not set_id.startswith('set_') or len(set_id)>512:
@@ -155,6 +179,8 @@ class MediaSource:
                 raise AdmissionRejected('group row capacity')
             self._group_projection(db,object,doc,at,predicate,set_id,candidate)
             if candidate!=retained:
+                if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
+                doc['objectVersion']+=1
                 scopes[key]=candidate
                 self._save(db,object,held,doc)
         return True
@@ -1134,6 +1160,13 @@ class MediaSource:
     def _owner_group_view(self,tenant,writer,object,cancel):
         at=int(self.clock())
         return {'at':at,**self.group_object_view(tenant,writer,object,at,cancel)}
+
+    def _owner_group_authority_view(self,tenant,writer,object,cancel):
+        at=int(self.clock())
+        return {'at':at,**self.group_authority_view(tenant,writer,object,at,cancel)}
+
+    async def owner_group_authority_view(self,tenant,writer,object):
+        return await self._work(self._owner_group_authority_view,tenant,writer,object)
 
     async def owner_group_view(self,tenant,writer,object):
         return await self._work(self._owner_group_view,tenant,writer,object)

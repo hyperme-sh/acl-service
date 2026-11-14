@@ -62,6 +62,69 @@ class MediaSourceContracts(TestCase):
         def append(value,fence=None,**kwargs):return self.source.append_group_policy(TENANT,'owner',OBJECT,100,fence or view()['fence'],'same-group','set_test',value,**kwargs)
         return context,config,view,append
 
+    def test_group_authority_view_reads_direct_group_policy_and_keys_in_one_transaction(self):
+        context,config,policy_view,append=self.policy_fixture()
+        append(config)
+        self.mutate('grant',self.grant())
+        projection={'object':OBJECT,'predicate':'same-group','set':'set_test','members':['reader'],
+                    'snapshot':{'objectSet':{'predicate':'same-group','setId':'set_test','stated':1,'hamState':7},
+                                'members':[{'accessor':'reader','predicate':'same-group','setId':'set_test','stated':1,'hamState':5}]}}
+        connections=[]
+        self.identities.side_effect=lambda db,*args:(connections.append(db) or json.loads(json.dumps(self.ids)))
+        def project(db,*args):
+            connections.append(db)
+            return json.loads(json.dumps(projection))
+        def current(db,*args):
+            connections.append(db)
+            return context
+        with patch.object(self.source,'_group_object_projection',side_effect=project), patch.object(self.source,'_group_policy_context',side_effect=current):
+            held=asyncio.run(self.source.owner_group_authority_view(TENANT,'owner',OBJECT))
+            self.assertEqual(held['at'],100)
+            self.assertEqual(held['projection'],projection)
+            self.assertEqual(held['policy'],{'context':context,'config':config})
+            self.assertEqual(set(held['bindings']),{'owner','reader'})
+            self.assertEqual(held['direct']['entries'][0]['scope'],'direct')
+            self.assertTrue(all(db is connections[0] for db in connections))
+            before=held['fence']
+            self.store.append('reader',0,b'{}')
+            after=self.source.group_authority_view(TENANT,'owner',OBJECT,100)
+            self.assertNotEqual(before,after['fence'])
+            context['ownerPub']='rotated'
+            self.assertIsNone(self.source.group_authority_view(TENANT,'owner',OBJECT,100)['policy']['config'])
+            del self.ids['bindings']['reader']
+            with self.assertRaises(AdmissionRejected):self.source.group_authority_view(TENANT,'owner',OBJECT,100)
+
+    def test_group_authority_view_empty_cancelled_and_unauthorized(self):
+        held=self.source.group_authority_view(TENANT,'owner',OBJECT,100)
+        self.assertIsNone(held['projection']);self.assertIsNone(held['policy'])
+        self.assertEqual(held['direct'],{'entries':[]});self.assertEqual(set(held['bindings']),{'owner'})
+        with patch.object(self.source,'_group_object_projection',return_value={'snapshot':None}), patch.object(self.source,'_group_policy_context') as policy:
+            self.assertIsNone(self.source.group_authority_view(TENANT,'owner',OBJECT,100)['policy'])
+            policy.assert_not_called()
+        for tenant,writer in [('bad','owner'),(TENANT,'reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.group_authority_view(tenant,writer,OBJECT,100)
+        calls=0
+        def cancel():
+            nonlocal calls
+            calls+=1
+            if calls>1:raise AdmissionRejected('cancelled')
+        with self.assertRaises(AdmissionRejected):self.source.group_authority_view(TENANT,'owner',OBJECT,100,cancel)
+
+    def test_group_append_advances_object_version_only_for_changed_rows(self):
+        view=self.group_fixture()
+        before=self.source.read_view(OBJECT,100)['objectVersion']
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
+        self.assertEqual(self.source.read_view(OBJECT,100)['objectVersion'],before+1)
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
+        self.assertEqual(self.source.read_view(OBJECT,100)['objectVersion'],before+1)
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['objectVersion']=9007199254740991
+            self.source._save(db,OBJECT,row,doc)
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{'new':1}])
+        self.assertEqual(view()['rows'],[{}])
+
     def test_group_policy_current_owner_selection_and_detached_storage(self):
         context,config,view,append=self.policy_fixture()
         self.assertIsNone(view()['config'])

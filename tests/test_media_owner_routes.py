@@ -404,3 +404,20 @@ async def test_group_policy_routes_bind_owner_and_reject_untrusted_context(setup
         assert (await client.post(BASE+'group-policy-view',json=scope)).status_code==403
         assert (await client.post(BASE+'group-policy-append',json=body)).status_code==403
     s.authority.owner_mutate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_authority_view_is_object_only_and_fixed_owner(setup):
+    s=setup;s.authority.owner_group_authority_view=AsyncMock(return_value={'at':100,'projection':None,'fence':'a'*64})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        response=await client.post(BASE+'group-authority-view',json={'object':'media-object'})
+        assert response.status_code==200
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.owner_group_authority_view.assert_awaited_once_with(str(s.tenant),'fixed-owner','media-object')
+        for extra in ({'writer':'other'},{'at':100},{'set':'set_other'}):
+            assert (await client.post(BASE+'group-authority-view',json={'object':'media-object',**extra})).status_code==400
+        assert (await client.post(BASE+'group-authority-view',content=b'x'*2049,headers={'content-type':'application/json'})).status_code==413
+        s.authority.owner_group_authority_view=None
+        assert (await client.post(BASE+'group-authority-view',json={'object':'media-object'})).status_code==503
+    s.authority.owner_mutate.assert_not_awaited()
+

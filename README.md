@@ -950,3 +950,15 @@ after protected admission. Both use the fixed authenticated writer binding and
 The view is capped at 2 KiB and append at 18 KiB; duplicate JSON fields refuse.
 Stale writes return 409 without automatic retry. Older sources without these
 methods return 503; direct owner routes keep their existing contracts.
+
+`POST /api/v1/acl/sociacl/media/owner/group-authority-view` takes only
+`{object}`. The fixed authenticated media owner receives `at`, `fence`,
+`objectVersion`, `owner`, the direct `direct` snapshot, the independently admitted
+all-scope group `projection`, selected signed `policy` (current set-owner context
+and nullable config), and current `bindings` limited to the named parties.
+All inputs share one protected database transaction and current identity history.
+Missing named bindings refuse. A missing or no-longer-valid signed policy is null,
+so consumers cannot treat a pending policy as authorization. Direct entries and
+group membership remain separate; this preparation view creates no epoch, wrap,
+or delivery grant. Group row changes advance the object version; exact retries
+do not. Existing direct and group-view routes retain their response shapes.
