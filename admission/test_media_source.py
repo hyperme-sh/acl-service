@@ -541,6 +541,50 @@ class AllocationConsumptionContracts(MediaSourceContracts):
         return self.source.consume_allocation(TENANT,'owner',record,{},10000,
             verify_grant=kwargs.pop('verify_grant',lambda at:proof),**kwargs)
 
+    def test_retirement_signer_uses_only_accepted_checkpointed_command(self):
+        record,proof=self.allocation()
+        with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)
+        signer=Mock(return_value=b'signed retirement')
+        def prepare(**kw):
+            return self.source.prepare_retirement_request(TENANT,'owner','media_new',sign_request=signer,**kw)
+        with self.assertRaises(AdmissionRejected):prepare()
+        signer.assert_not_called()
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        command=self.source.delete(TENANT,'owner','media_new',self.now,{},verifier=verifier)
+        self.assertEqual(prepare(),b'signed retirement')
+        self.assertEqual(signer.call_args.args[0],{'tenant':TENANT,'object':'media_new','owner':'owner','command':command,'issuedAt':100,'expiresAt':130})
+        self.now=11000
+        self.assertEqual(prepare(),b'signed retirement')
+        self.assertEqual(signer.call_args.args[0]['command'],command)
+        self.assertEqual(signer.call_args.args[0]['issuedAt'],11000)
+        for tenant,writer,object in [('other','owner','media_new'),(TENANT,'reader','media_new'),(TENANT,'owner','missing')]:
+            signer.reset_mock()
+            with self.assertRaises(AdmissionRejected):self.source.prepare_retirement_request(tenant,writer,object,sign_request=signer)
+            signer.assert_not_called()
+        for result in [None,b'',b'x'*4097]:
+            signer.return_value=result
+            with self.assertRaises(AdmissionRejected):prepare()
+        signer.return_value=b'valid'
+        def cancel():raise RuntimeError('cancelled')
+        with self.assertRaises(RuntimeError):prepare(cancel=cancel)
+        signer.side_effect=lambda claims:setattr(self,'now',self.now+1) or b'valid'
+        with self.assertRaises(HistoryConflict):prepare()
+
+    def test_retirement_refuses_allocation_or_source_rollback(self):
+        record,proof=self.allocation()
+        with patch.object(self.source,'_identities',return_value=self.ids):self.consume(record,proof)
+        verifier=Mock();verifier.matches_deletion.return_value=True
+        self.source.delete(TENANT,'owner','media_new',self.now,{},verifier=verifier)
+        signer=Mock(return_value=b'signed')
+        with self.store._transaction(write=True) as db:
+            db.execute('DELETE FROM media_allocations WHERE object=?',('media_new',))
+        with self.assertRaises(HistoryConflict):self.source.prepare_retirement_request(TENANT,'owner','media_new',sign_request=signer)
+        signer.assert_not_called()
+        with self.store._transaction(write=True) as db:
+            db.execute('UPDATE media_sources SET revision=revision+1 WHERE object=?',('media_new',))
+        with self.assertRaises(AdmissionRejected):self.source.prepare_retirement_request(TENANT,'owner','media_new',sign_request=signer)
+        signer.assert_not_called()
+
     def test_atomic_allocation_retry_and_primary_rollback(self):
         record,proof=self.allocation();before=self.path.read_bytes()
         with patch.object(self.source,'_identities',return_value=self.ids):
