@@ -21,7 +21,7 @@ router = APIRouter(prefix='/acl/sociacl/media/owner', tags=['SociACL'])
 async def owner_operation(action: str, request: Request,
                           tenant: UUID = Depends(require_matched_tenant),
                           user: AuthMeResponse = Depends(get_current_user)):
-    if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state'):
+    if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state', 'delete-view', 'delete'):
         raise refused(404, 'Unknown media operation')
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
@@ -41,14 +41,15 @@ async def owner_operation(action: str, request: Request,
             async with capacity(request.app.state.private_wrap_body_slots[(tenant, user.sub)]):
                 async with asyncio.timeout(1.0):
                     async for chunk in request.stream():
-                        limit = 2048 if action in ('catalog', 'view', 'status-view', 'cancel-view') else 100000 if action == 'publish-wrap' else 81920
+                        limit = 2048 if action in ('catalog', 'view', 'status-view', 'cancel-view', 'delete-view') else 12288 if action == 'delete' else 100000 if action == 'publish-wrap' else 81920
                         if len(data) + len(chunk) > limit:
                             raise refused(413, 'Request too large')
                         data.extend(chunk)
             try:
                 body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields,
                                   parse_constant=_invalid_constant)
-                expected = {'object'} if action == 'view' else {'object', 'at', 'fence', 'operation', 'payload'}
+                expected = {'object'} if action in ('view', 'delete-view') else {'object', 'at', 'fence', 'operation', 'payload'}
+                if action == 'delete': expected = {'object', 'at', 'proof'}
                 if action == 'catalog': expected = {'page'}
                 if action == 'upload-state': expected = {'object', 'operation', 'payload'}
                 if action in ('status-view', 'cancel-view'): expected = {'object', 'reader'}
@@ -63,9 +64,11 @@ async def owner_operation(action: str, request: Request,
                 if action in ('status-view', 'cancel-view') and (type(body['reader']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['reader']) is None):
                     raise ValueError()
-                if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'upload-state') and (
+                if action not in ('catalog', 'view', 'status-view', 'cancel-view', 'upload-state', 'delete-view', 'delete') and (
                         type(body['at']) is not int or not 0 <= body['at'] <= 9007199254740991
                         or type(body['fence']) is not str or re.fullmatch(r'[0-9a-f]{64}', body['fence']) is None):
+                    raise ValueError()
+                if action == 'delete' and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991 or type(body['proof']) is not dict):
                     raise ValueError()
                 if action == 'mutate' and (type(body['operation']) is not str
                         or body['operation'] not in ('grant', 'epoch', 'status', 'wrap') or type(body['payload']) is not dict):
@@ -86,6 +89,13 @@ async def owner_operation(action: str, request: Request,
                         result = await binding.authority.owner_catalog(str(tenant),binding.reader,body['page'])
                     elif action == 'upload-state':
                         result = await binding.authority.owner_upload_state(str(tenant), binding.reader, body['object'], body['operation'], body['payload'])
+                    elif action == 'delete-view':
+                        result = await binding.authority.owner_deletion_view(str(tenant),binding.reader,body['object'])
+                    elif action == 'delete':
+                        command = await binding.authority.owner_delete(str(tenant),binding.reader,body['object'],body['at'],body['proof'])
+                        if type(command) is not str or re.fullmatch(r'[0-9a-f]{64}',command) is None:
+                            raise AdmissionRejected('media deletion refused')
+                        result = {'accepted':True,'command':command,'cleanup':'pending'}
                     elif action == 'view':
                         result = await binding.authority.owner_view(str(tenant), binding.reader, body['object'])
                     elif action == 'status-view':

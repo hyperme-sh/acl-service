@@ -712,6 +712,15 @@ class MediaSource:
     async def owner_cancel_view(self, tenant, writer, object, reader):
         return await self._work(self._owner_cancel_view,tenant,writer,object,reader)
 
+    async def owner_deletion_view(self, tenant, writer, object):
+        return await self._work(self.deletion_view,tenant,writer,object)
+
+    async def owner_delete(self, tenant, writer, object, at, proof):
+        if type(proof) is not dict or len(encoded(proof))>8192:
+            raise AdmissionRejected('invalid media deletion')
+        proof=json.loads(encoded(proof))
+        return await self._work(lambda cancel:self.delete(tenant,writer,object,at,proof,cancel=cancel))
+
     async def owner_mutate(self, tenant, writer, object, at, fence, operation, payload):
         return await self._work(self.mutate, tenant, writer, object, at, fence, operation, payload)
 
