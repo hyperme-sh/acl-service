@@ -1,4 +1,4 @@
-import {authorizeAppObjectAppend} from "./app-object-policy.mjs";
+import {authorizeAppObjectAppend, requireCurrentParentOwner} from "./app-object-policy.mjs";
 import {enforceStatementQuota} from './statement-quota.mjs';
 // Uses the same authenticated identity contexts as recovery admission.
 import {resolveStoreAccount, verifyObjectRecord, verifySeeGrant, verifyPostGrant,
@@ -48,9 +48,7 @@ export function statementGraph(accounts, contextFor, now, graph) {
     verify(row); return true;
   };
   if (graph.statementOnly && proposed.some(row => row.record.object.startsWith('room_'))) {
-    const parent = held.find(row => row.kind === 'object' && row.record.object === graph.forum && row.record.owner === forumOwner);
-    if (!parent) throw Error('missing-parent-owner');
-    verify(parent);
+    requireCurrentParentOwner(held, graph.forum, forumOwner, verify);
   }
   if (graph.statementOnly) authorizeAppObjectAppend(proposed, held, allowed, now);
   // Retain every admitted cancellation and prior record. No overwriting history.

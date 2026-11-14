@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {authorizeAppObjectAppend} from './app-object-policy.mjs';
+import {authorizeAppObjectAppend, requireCurrentParentOwner} from './app-object-policy.mjs';
 import {enforceStatementQuota} from './statement-quota.mjs';
 const row = (kind='object', owner='alice', object='room_alice_1', extra={}) =>
   ({kind, soul:object, record:{owner, object, ...extra}});
@@ -30,4 +30,42 @@ test('rooms share the retained per-principal quota and have a bounded object cou
   enforceStatementQuota(rooms,[grant('see','bob')],'alice',['alice','bob']);
   const full=Array(128).fill(row('see','alice','stmt_alice_1'));
   assert.throws(()=>enforceStatementQuota(full,[row()],'alice',['alice']),/capacity/);
+});
+
+
+test('current parent selection retains history without trusting invalid-only ownership', () => {
+  const old = row('object','alice','forum_alice_1'), fresh = {...old, record:{...old.record, sig:'current'}};
+  const verify = candidate => { if (candidate.record.sig !== 'current') throw Error('retired-key'); };
+  for (const held of [[old,fresh],[fresh,old]]) requireCurrentParentOwner(held,'forum_alice_1','alice',verify);
+  for (const held of [[],[old],[{...fresh,record:{...fresh.record,owner:'bob'}}]])
+    assert.throws(()=>requireCurrentParentOwner(held,'forum_alice_1','alice',verify),/missing-parent-owner/);
+});
+
+test('refreshed parent ownership survives real signing-key rotation with retained old rows', async () => {
+  const {readFileSync} = await import('node:fs');
+  const {formatPrincipalKey, objectRecordBytes, signWithKeyring, verifyObjectRecord, linkId, historyState} = await import('sociacl-ids');
+  const f = JSON.parse(readFileSync(new URL('./fixture.json', import.meta.url)));
+  const forum = `forum_${formatPrincipalKey(f.genesis)}_${'04'.repeat(16)}`;
+  const context = {jwks:f.jwks,policy:f.policy,pinnedIss:new Set(f.pinnedIss),
+    links:new Map([[linkId(f.oidc).value,f.oidc]]),revocations:[],genesisEpubBindings:[f.binding],now:f.now};
+  const rotations = [f['oidc-rotate']];
+  context.history = (principal, at, until) => principal === f.genesis
+    ? {ok:true,value:historyState(principal,rotations.filter(row=>row.issuedAt<=until),at,until)}
+    : {ok:false,reason:'missing-history'};
+  function ownership(n, issuedAt) {
+    const privateKey = new Uint8Array(32); privateKey[31] = n;
+    const record = {object:forum,owner:f.genesis,issuedAt};
+    const signed = signWithKeyring(privateKey,objectRecordBytes(record),n === 1 ? f.genesis : rotations[0].nextKey);
+    assert.ok(signed.ok); record.sig = signed.value;
+    return {kind:'object',soul:forum,record};
+  }
+  const old = ownership(1,1700000010), fresh = ownership(2,1700000040);
+  const verify = candidate => {
+    const result = verifyObjectRecord(candidate.record,rotations,context);
+    if (!result.ok) throw Error(result.reason);
+  };
+  assert.throws(()=>verify(old)); verify(fresh);
+  for (const held of [[old,fresh],[fresh,old]]) requireCurrentParentOwner(held,forum,f.genesis,verify);
+  for (const held of [[old],[{...fresh,record:{...fresh.record,sig:old.record.sig}}]])
+    assert.throws(()=>requireCurrentParentOwner(held,forum,f.genesis,verify),/missing-parent-owner/);
 });

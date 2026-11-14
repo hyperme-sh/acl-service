@@ -15,3 +15,13 @@ export function authorizeAppObjectAppend(proposed, held, allowed, now) {
       throw Error('reader-denied');
   }
 }
+
+// Retained history may start with an ownership row signed by a retired key.
+// Only a currently verified matching row can establish the parent.
+export function requireCurrentParentOwner(held, forum, owner, verify) {
+  const current = held.some(row => {
+    if (row.kind !== 'object' || row.record.object !== forum || row.record.owner !== owner) return false;
+    try { verify(row); return true; } catch { return false; }
+  });
+  if (!current) throw Error('missing-parent-owner');
+}
