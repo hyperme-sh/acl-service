@@ -79,11 +79,14 @@ class MediaSource:
         elif db.execute('SELECT digest FROM freshness.media_checkpoints WHERE object=?',(object,)).fetchone() != (digest,):
             raise AdmissionRejected('media checkpoint mismatch')
 
-    def _load(self, db, object, at):
+    def _load(self, db, object, at, *, catalog=False):
         row = db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
         if row is None: raise AdmissionRejected('media source unavailable')
         self._checkpoint(db,object,row)
         doc = json.loads(row[2])
+        if 'deletion' in doc:
+            if catalog: return row,doc  # Only to skip a checkpoint-verified tombstone.
+            raise AdmissionRejected('media object deleted')
         if at >= doc['policyUntil']: raise AdmissionRejected('media policy expired')
         return row,doc
 
@@ -420,10 +423,63 @@ class MediaSource:
             row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
             if row is None or row[0]!=expected_revision: raise HistoryConflict('media policy changed')
             self._checkpoint(db,object,row); doc=json.loads(row[2])
+            if 'deletion' in doc: raise AdmissionRejected('media object deleted')
             doc.update(policy=policy,policyUntil=policy_until)
             self.identities(db,object,doc,at)
             doc['objectVersion']+=1
             self._save(db,object,row,doc)
+
+    def deletion_view(self, tenant, writer, object, cancel=lambda:None):
+        at=int(self.clock());self._guard(at,cancel)
+        if tenant!=self.tenant: raise AdmissionRejected('wrong media tenant')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            ids=self.identities(db,object,doc,at)
+            if writer!=ids['owner']: raise AdmissionRejected('media owner required')
+            claims={'tenant':tenant,'object':object,'owner':writer,'objectVersion':doc['objectVersion'],
+                    'fence':self._fence(db,object,row,at),'issuedAt':at*1000,
+                    'expiresAt':min(at+60,doc['policyUntil'])*1000}
+            return {'at':at,'ownerPub':ids['bindings'][writer]['pub'],'claims':claims}
+
+    def delete(self, tenant, writer, object, at, proof, *, verifier=None, cancel=lambda:None):
+        """Persist owner deletion intent before any provider cleanup.
+
+        The trusted adapter supplies the fixed native verifier. No storage is
+        contacted and no quota is released here. The original source row and
+        independent checkpoint are retained permanently; retries cannot broaden
+        the accepted command. Existing readers also refuse policyUntil zero.
+        """
+        now=int(self.clock());self._guard(now,cancel)
+        if tenant!=self.tenant or type(proof) is not dict or len(encoded(proof))>8192:
+            raise AdmissionRejected('invalid media deletion')
+        proof=json.loads(encoded(proof));proof_digest=hashlib.sha256(encoded(proof)).hexdigest()
+        with self.store._transaction(write=True,before_commit=lambda:self._guard(now,cancel)) as db:
+            row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+            if row is None: raise AdmissionRejected('media source unavailable')
+            self._checkpoint(db,object,row);doc=json.loads(row[2])
+            deleted=doc.get('deletion')
+            if deleted:
+                if writer!=deleted['owner'] or not hmac.compare_digest(proof_digest,deleted['proofDigest']):
+                    raise HistoryConflict('different media deletion command')
+                return deleted['command']
+            self._guard(at,cancel)
+            if now>=doc['policyUntil']: raise AdmissionRejected('media policy expired')
+            ids=self.identities(db,object,doc,now)
+            if writer!=ids['owner']: raise AdmissionRejected('media owner required')
+            claims={'tenant':tenant,'object':object,'owner':writer,'objectVersion':doc['objectVersion'],
+                    'fence':self._fence(db,object,row,at),'issuedAt':at*1000,
+                    'expiresAt':min(at+60,doc['policyUntil'])*1000}
+            if verifier is None:
+                from acl_service.infrastructure.private_deletion_verifier import PrivateDeletionVerifier
+                verifier=PrivateDeletionVerifier()
+            if not verifier.matches_deletion(encoded(proof),encoded({**claims,'ownerPub':ids['bindings'][writer]['pub']}),now_ms=now*1000):
+                raise AdmissionRejected('media deletion signature refused')
+            command=hashlib.sha256(encoded(['private-media-deletion-v1',claims])).hexdigest()
+            doc['deletion']={'owner':writer,'command':command,'proofDigest':proof_digest,'claims':claims}
+            doc['policyUntil']=0
+            doc['objectVersion']+=1
+            self._save(db,object,row,doc)
+            return command
 
     def _selected(self, object, doc, at):
         for row in reversed(doc['finalizations']):
@@ -561,7 +617,8 @@ class MediaSource:
                               (len(prefix),prefix,page*4)).fetchall()
             for (object,) in rows:
                 self._guard(at,cancel)
-                _,doc = self._load(db,object,at)
+                _,doc = self._load(db,object,at,catalog=True)
+                if 'deletion' in doc: continue
                 identities = self.identities(db,object,doc,at)
                 if identities['owner'] == writer:
                     objects.append(object)
