@@ -412,6 +412,18 @@ class MediaSourceContracts(TestCase):
         def cancelled():raise AdmissionRejected('cancelled')
         with self.assertRaises(AdmissionRejected):context(cancel=cancelled)
 
+    def test_epoch_parent_survives_grant_change_without_authorizing_old_reads(self):
+        self.ready()
+        previous=self.source.read_view(OBJECT,self.now)['snapshot']
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.native[3].matches_settled.side_effect=lambda raw:json.loads(raw)['current']==previous
+        context=self.source._owner_epoch_view(TENANT,'owner',OBJECT,lambda:None)
+        self.assertEqual(context['previousFinalizationId'],'d'*64)
+        self.assertEqual(context['snapshot']['entries'][0]['stated'],0)
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,self.now)
+            with self.assertRaises(AdmissionRejected):self.source._selected(OBJECT,doc,self.now)
+
     def test_owner_view_restricts_identity_inventory_and_requires_fixed_owner(self):
         view=self.source._owner_view(TENANT,'owner',OBJECT,lambda:None)
         self.assertEqual(set(view['bindings']),{'owner'})

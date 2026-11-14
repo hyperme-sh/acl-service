@@ -544,10 +544,16 @@ class MediaSource:
                     raise HistoryConflict('media active checkpoint missing')
             return True
 
-    def _selected_finalization(self, object, doc, at):
+    def _selected_finalization(self, object, doc, at, *, historical=False):
         for row in reversed(doc['finalizations']):
             fin=row['proof']
-            if self.native[3].matches_settled(encoded(self._history(object,doc,at,fin))):
+            history=self._history(object,doc,at,fin)
+            if historical:
+                # Parent preparation authenticates the retained signed snapshot.
+                # Delivery must still compare against the current grant snapshot.
+                document=next(r['document'] for r in doc['manifests'] if r['document']['manifest']['revisionId']==fin['revisionId'])
+                history['current']=document['snapshot']
+            if self.native[3].matches_settled(encoded(history)):
                 return fin
         raise AdmissionRejected('no current settled epoch')
 
@@ -698,7 +704,7 @@ class MediaSource:
             row,doc=self._load(db,object,at)
             identities=self.identities(db,object,doc,at)
             if writer!=identities['owner']: raise AdmissionRejected('media owner required')
-            parent=self._selected_finalization(object,doc,at)
+            parent=self._selected_finalization(object,doc,at,historical=True)
             if type(parent['epoch']) is not int or not 1<=parent['epoch']<9007199254740991:
                 raise AdmissionRejected('media epoch exhausted')
             snapshot=self._snapshot(doc)
