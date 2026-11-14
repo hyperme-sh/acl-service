@@ -875,3 +875,12 @@ capture current key material and save the full plan before publishing the
 cancellation. Sharing reconciliation also recognizes exact cancellation intents.
 This lets removal resume the remaining readers' epoch instead of leaving only a
 cancellation with an unmatched current snapshot.
+
+The internal history verifier accepts a bounded `groupGraph` projection for one
+media object and one named group/circle. It consumes canonical signed ownership,
+membership, object-set and cancellation rows through the published `sociacl/group`
+contract. Both membership assents and current authenticated histories are required;
+the owner shortcut is not returned as group membership. The result is read-only
+routing input, not a media grant, key wrap, status or delivery permit. No HTTP
+endpoint or group-media activation is introduced by this projection. Protected
+storage, epoch snapshot and delivery integration remain under issue #126.

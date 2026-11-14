@@ -6,6 +6,7 @@
     "node": ">=24"
   },
   "dependencies": {
-    "sociacl-ids": "https://github.com/FyberLabs/SociACL/releases/download/ids-test-145cbb693556eab4a023fdfcaedc6641e35bc4ed/sociacl-ids-0.11.1.tgz"
+    "sociacl-ids": "https://github.com/FyberLabs/SociACL/releases/download/ids-test-145cbb693556eab4a023fdfcaedc6641e35bc4ed/sociacl-ids-0.11.1.tgz",
+    "sociacl": "https://github.com/FyberLabs/SociACL/releases/download/sociacl-test-3f6b2aae2d8e6eb2b6db561a4d383d24053cc1fe/sociacl-0.1.0.tgz"
   }
 }

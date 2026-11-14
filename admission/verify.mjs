@@ -1,3 +1,4 @@
+import {groupAuthority} from './group-authority.mjs';
 // Private subprocess protocol. Policy, snapshot, clock and grant come from the adapter.
 import {readFileSync} from 'node:fs';
 import {statementGraph} from './statement-graph.mjs';
@@ -12,7 +13,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, mediaObject, mediaRecord}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, groupGraph, mediaObject, mediaRecord}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -39,7 +40,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     accounts.set(account.principal, {...account, rotations, links, ownRevokes});
   }
-  if (!observe && !graph && !agentGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
+  if (!observe && !graph && !agentGraph && !groupGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
 
   function contextFor(account, until) {
     const links = new Map(account.links);
@@ -79,6 +80,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
 
   if (graph) return JSON.stringify(statementGraph(accounts, contextFor, now, graph));
   if (agentGraph) return JSON.stringify(delegationGraph(accounts, contextFor, now, agentGraph));
+  if (groupGraph) return JSON.stringify(groupAuthority(accounts, contextFor, now, groupGraph));
   if (mediaObject) {
     const owner = requireResult(objectPrincipal(mediaObject)), bindings = {};
     if (!accounts.has(owner) || accounts.size > 64) throw Error('unknown-media-owner');

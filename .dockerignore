@@ -14,6 +14,7 @@
 !admission/package-lock.json
 !admission/history_admission.py
 !admission/verify.mjs
+!admission/group-authority.mjs
 !admission/store-operation.mjs
 !admission/sociacl-native.rev
 !admission/test_epoch_native.py
