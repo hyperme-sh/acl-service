@@ -21,7 +21,7 @@ router = APIRouter(prefix='/acl/sociacl/media/owner', tags=['SociACL'])
 async def owner_operation(action: str, request: Request,
                           tenant: UUID = Depends(require_matched_tenant),
                           user: AuthMeResponse = Depends(get_current_user)):
-    if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state', 'delete-view', 'delete', 'cleanup', 'registration'):
+    if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'mutate', 'publish-wrap', 'upload-state', 'delete-view', 'delete', 'cleanup', 'registration'):
         raise refused(404, 'Unknown media operation')
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
@@ -41,7 +41,7 @@ async def owner_operation(action: str, request: Request,
             async with capacity(request.app.state.private_wrap_body_slots[(tenant, user.sub)]):
                 async with asyncio.timeout(1.0):
                     async for chunk in request.stream():
-                        limit = 4096 if action == 'registration' else 2048 if action in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'cancel-view', 'delete-view', 'cleanup') else 12288 if action == 'delete' else 100000 if action == 'publish-wrap' else 81920
+                        limit = 4096 if action == 'registration' else 2048 if action in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'delete-view', 'cleanup') else 12288 if action == 'delete' else 100000 if action == 'publish-wrap' else 81920
                         if len(data) + len(chunk) > limit:
                             raise refused(413, 'Request too large')
                         data.extend(chunk)
@@ -53,7 +53,7 @@ async def owner_operation(action: str, request: Request,
                 if action == 'delete': expected = {'object', 'at', 'proof'}
                 if action in ('catalog', 'cleanup-catalog'): expected = {'page'}
                 if action == 'upload-state': expected = {'object', 'operation', 'payload'}
-                if action in ('status-view', 'cancel-view'): expected = {'object', 'reader'}
+                if action in ('status-view', 'share-view', 'cancel-view'): expected = {'object', 'reader'}
                 if action == 'publish-wrap': expected = {'object', 'at', 'fence', 'metadata', 'wrapBase64'}
                 if type(body) is not dict or set(body) != expected:
                     raise ValueError()
@@ -62,10 +62,10 @@ async def owner_operation(action: str, request: Request,
                         raise ValueError()
                 elif (type(body['object']) is not str or re.fullmatch(r'[\x21-\x7e]{1,512}', body['object']) is None):
                     raise ValueError()
-                if action in ('status-view', 'cancel-view') and (type(body['reader']) is not str
+                if action in ('status-view', 'share-view', 'cancel-view') and (type(body['reader']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['reader']) is None):
                     raise ValueError()
-                if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'cancel-view', 'upload-state', 'delete-view', 'delete', 'cleanup', 'registration') and (
+                if action not in ('catalog', 'cleanup-catalog', 'view', 'epoch-view', 'status-view', 'share-view', 'cancel-view', 'upload-state', 'delete-view', 'delete', 'cleanup', 'registration') and (
                         type(body['at']) is not int or not 0 <= body['at'] <= 9007199254740991
                         or type(body['fence']) is not str or re.fullmatch(r'[0-9a-f]{64}', body['fence']) is None):
                     raise ValueError()
@@ -116,6 +116,10 @@ async def owner_operation(action: str, request: Request,
                         prepare=getattr(binding.authority,'owner_epoch_view',None)
                         if not callable(prepare): raise refused(503,'Private media source unavailable')
                         result=await prepare(str(tenant),binding.reader,body['object'])
+                    elif action == 'share-view':
+                        prepare=getattr(binding.authority,'owner_share_view',None)
+                        if not callable(prepare): raise refused(503,'Private media source unavailable')
+                        result=await prepare(str(tenant),binding.reader,body['object'],body['reader'])
                     elif action == 'status-view':
                         result = await binding.authority.owner_status_view(str(tenant),binding.reader,body['object'],body['reader'])
                     elif action == 'cancel-view':

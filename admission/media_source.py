@@ -750,6 +750,53 @@ class MediaSource:
     async def owner_epoch_view(self, tenant, writer, object):
         return await self._work(self._owner_epoch_view,tenant,writer,object)
 
+    def _owner_share_view(self, tenant, writer, object, reader, cancel):
+        at=int(self.clock());guard=lambda:self._guard(at,cancel)
+        guard()
+        if tenant!=self.tenant or type(reader) is not str or reader==writer:
+            raise AdmissionRejected('invalid media share target')
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            _,ids,row,doc=self._permit(db,tenant,writer,object,at)
+            if writer!=ids['owner'] or reader not in ids['bindings'] or reader in doc['frozen']:
+                raise AdmissionRejected('media owner and enrolled recipient required')
+            parent=self._selected_finalization(object,doc,at)
+            epoch=parent['epoch']
+            if type(epoch) is not int or not 1<=epoch<9007199254740991:
+                raise AdmissionRejected('media epoch exhausted')
+            latest=self._latest(doc);owner_pub=ids['bindings'][writer]['pub']
+            owner_claims=latest[writer]['claims'];item=owner_claims['itemCiphertextDigest']
+            claims={who:value['claims'] for who,value in latest.items()}
+            targets={reader}|{who for who,value in claims.items() if value['stated']==1 and at*1000<value['until']}
+            if (len(targets)>64 or sum(value['claims']['stated']==1 for value in doc['grants'])+len(targets)>64
+                    or len(doc['manifests'])>=64 or len(doc['finalizations'])>=64):
+                raise AdmissionRejected('media share capacity')
+            drafts=[]
+            for who in sorted(targets):
+                held=claims.get(who)
+                if who not in ids['bindings'] or who in doc['frozen']:
+                    raise AdmissionRejected('media recipient unavailable')
+                if held and (held['owner']!=writer or held['itemCiphertextDigest']!=item
+                        or not self.native[0].matches_grant(encoded(latest[who]['proof']),encoded({**held,'ownerPub':owner_pub}))):
+                    raise AdmissionRejected('media recipient grant changed')
+                revision=held['grantRevision'] if held else 0
+                if type(revision) is not int or not 0<=revision<9007199254740991:
+                    raise AdmissionRejected('media grant revision exhausted')
+                active=held and held['stated']==1 and at*1000<held['until']
+                draft={'object':object,'owner':writer,'accessor':who,'from':held['from'] if active else at*1000,
+                       'until':min(held['until'] if active else owner_claims['until'],doc['policyUntil']*1000),
+                       'stated':1,'epoch':epoch+1,'grantRevision':revision+1,'itemCiphertextDigest':item}
+                if draft['until']<=draft['from']:raise AdmissionRejected('media share policy expires before grant')
+                drafts.append(draft);claims[who]=draft
+            snapshot=self._snapshot({'grants':[{'claims':value} for value in claims.values()]})
+            guard()
+            return {'at':at,'fence':self._fence(db,object,row,at),'owner':writer,'ownerPub':owner_pub,
+                    'reader':reader,'previousEpoch':epoch,'previousFinalizationId':parent['finalizationId'],
+                    'grants':drafts,'snapshot':snapshot,
+                    'bindings':{who:ids['bindings'][who] for who in sorted(targets)}}
+
+    async def owner_share_view(self, tenant, writer, object, reader):
+        return await self._work(self._owner_share_view,tenant,writer,object,reader)
+
     def _owner_catalog(self, tenant, writer, page, cancel, *, cleanup=False):
         if tenant != self.tenant or type(writer) is not str or type(page) is not int or not 0 <= page < 16:
             raise AdmissionRejected('invalid media catalog request')

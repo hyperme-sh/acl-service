@@ -432,6 +432,66 @@ class MediaSourceContracts(TestCase):
         self.now=10000
         with self.assertRaises(AdmissionRejected):self.source.read_view(OBJECT,self.now)
 
+    def share_ready(self):
+        self.mutate('grant',self.grant(accessor='owner'))
+        self.ready()
+        self.mutate('wrap',{'reader':'owner','record':'e'*64,'digest':'f'*64,'epoch':1,'revisionId':'b'*64,
+                            'readerEpub':'owner-epub','itemDigest':'a'*64})
+        self.mutate('status',{'accessor':'owner','signedAt':100000,'maxAgeMs':60000})
+        self.ids['bindings']['new']={'pub':'new-key','epub':'new-epub','head':0}
+
+    def share_plan(self,**changes):
+        return self.source._owner_share_view(**{'tenant':TENANT,'writer':'owner','object':OBJECT,'reader':'new','cancel':lambda:None,**changes})
+
+    def test_share_plan_preserves_recipients_and_does_not_mutate(self):
+        self.share_ready();self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}
+        before=self.source.read_view(OBJECT,self.now)
+        plan=self.share_plan()
+        self.assertEqual(set(plan['bindings']),{'owner','reader','new'})
+        self.assertEqual(plan['previousFinalizationId'],'d'*64)
+        self.assertEqual(plan['fence'],before['fence'])
+        drafts={row['accessor']:row for row in plan['grants']}
+        self.assertEqual({row['epoch'] for row in drafts.values()},{2})
+        self.assertEqual(drafts['new']['grantRevision'],1)
+        self.assertEqual(drafts['new']['from'],100000)
+        self.assertEqual(drafts['owner']['grantRevision'],2)
+        self.assertEqual(drafts['reader']['grantRevision'],2)
+        self.assertEqual([row['accessor'] for row in plan['snapshot']['entries']],['new','owner','reader'])
+        self.assertEqual(self.source.read_view(OBJECT,self.now),before)
+        self.mutate('grant',self.grant(**{'grantRevision':2,'from':200000}))
+        self.assertEqual(next(row for row in self.share_plan()['grants'] if row['accessor']=='reader')['from'],200000)
+
+    def test_share_plan_requires_owner_delivery_enrollment_and_unfrozen_grants(self):
+        self.share_ready()
+        for changes in ({'tenant':'other'},{'reader':'owner'},{'reader':'unknown'},{'writer':'reader'},{'reader':[]}):
+            with self.assertRaises(AdmissionRejected):self.share_plan(**changes)
+        self.native[1].matches_status.return_value=False
+        with self.assertRaises(AdmissionRejected):self.share_plan()
+        self.native[1].matches_status.return_value=True
+        with self.assertRaises(AdmissionRejected):self.mutate('grant',self.grant(itemCiphertextDigest='c'*64))
+        with self.assertRaises(AdmissionRejected):self.share_plan()
+
+    def test_share_plan_renews_cancelled_target_and_refuses_capacity(self):
+        self.share_ready()
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        target=next(row for row in self.share_plan(reader='reader')['grants'] if row['accessor']=='reader')
+        self.assertEqual((target['grantRevision'],target['stated'],target['from']),(3,1,100000))
+        for revision in range(3,64):self.mutate('grant',self.grant(grantRevision=revision))
+        with self.assertRaises(AdmissionRejected):self.share_plan()
+
+    def test_share_plan_refuses_exhausted_revision(self):
+        self.share_ready()
+        self.mutate('grant',self.grant(grantRevision=9007199254740991))
+        with self.assertRaises(AdmissionRejected):self.share_plan()
+
+    def test_share_plan_does_not_shorten_future_grants_into_invalid_intervals(self):
+        self.share_ready()
+        self.mutate('grant',self.grant(**{'grantRevision':2,'from':200000,'until':300000}))
+        with self.store._transaction(write=False) as db:
+            revision=db.execute('SELECT revision FROM media_sources WHERE object=?',(OBJECT,)).fetchone()[0]
+        self.source.replace_policy(OBJECT,revision,{},150,authorize=lambda *args:True)
+        with self.assertRaises(AdmissionRejected):self.share_plan()
+
     def test_epoch_context_is_read_only_and_hides_unrelated_identities(self):
         self.ready()
         self.ids['bindings']['unrelated']={'pub':'other','epub':'other','head':0}
@@ -622,6 +682,9 @@ class MediaAuthorityCancellationContracts(IsolatedAsyncioTestCase):
         source._owner_epoch_view=Mock(return_value={'previousEpoch':1})
         self.assertEqual(await source.owner_epoch_view(TENANT,'owner',OBJECT),{'previousEpoch':1})
         self.assertEqual(source._owner_epoch_view.call_args.args[:-1],(TENANT,'owner',OBJECT))
+        source._owner_share_view=Mock(return_value={'grants':[]})
+        self.assertEqual(await source.owner_share_view(TENANT,'owner',OBJECT,'reader'),{'grants':[]})
+        self.assertEqual(source._owner_share_view.call_args.args[:-1],(TENANT,'owner',OBJECT,'reader'))
         self.assertTrue(await source.owner_mutate(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
         self.assertEqual(source.mutate.call_args.args[:-1],(TENANT,'owner',OBJECT,100,'fence','grant',{'signed':True}))
         source.prepare_write=Mock(return_value='write-permit');source.commit_write=Mock(return_value=True)
