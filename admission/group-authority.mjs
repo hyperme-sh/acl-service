@@ -92,3 +92,12 @@ export function groupObjectAuthority(accounts,contextFor,now,input) {
   return {object:input.object,set,predicate,snapshot,
     members:snapshot?membersOf(accounts,now,graph,input.object,set,predicate):[]};
 }
+
+/** Current set-owner signing context; independent of the media owner's key. */
+export function groupPolicyAuthority(accounts,contextFor,now,input) {
+  admittedGroupGraph(accounts,contextFor,now,input);
+  const owner=take(objectPrincipal(input.set)),account=accounts.get(owner);
+  const diagnostics=[],head=resolveStoreAccount(owner,account.rotations,contextFor(account,now),diagnostics);
+  if(diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length)throw Error('invalid-group-policy-owner');
+  return {owner,ownerPub:head.currentKey,setId:input.set,predicate:input.predicate};
+}

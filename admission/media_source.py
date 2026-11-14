@@ -19,7 +19,7 @@ from acl_service.infrastructure.authority_checkpoint import authority_digest
 from acl_service.domain.media_checkpoint import media_checkpoint_digest
 from acl_service.infrastructure.epoch_verifier import (
     PrivateGrantVerifier, EpochStatusVerifier, EpochManifestVerifier,
-    SettledEpochVerifier, EpochHistoryVerifier,
+    SettledEpochVerifier, EpochHistoryVerifier, GroupEpochConfigVerifier,
 )
 
 
@@ -157,6 +157,85 @@ class MediaSource:
             if candidate!=retained:
                 scopes[key]=candidate
                 self._save(db,object,held,doc)
+        return True
+
+    def _group_policy_context(self,db,object,doc,at,predicate,set_id):
+        key=self._group_key(predicate,set_id)
+        rows=doc.get('groupScopes',{}).get(key)
+        if not rows:raise AdmissionRejected('group scope not admitted')
+        accounts=self._accounts(db)
+        principal=next(iter(accounts));account=accounts[principal]
+        runner=HistoryAdmission(self.store,grant_for=lambda _:None,
+                                trust_at=lambda _:doc['policy'],clock=self.clock)
+        return json.loads(runner._run_verifier(principal,at,
+            genesis=_record(account.genesis),entries=[_record(row) for row in account.entries],
+            peers=_peer_inputs(principal,accounts),
+            groupPolicyGraph={'object':object,'predicate':predicate,'set':set_id,'rows':rows}))
+
+    @staticmethod
+    def _group_policy_digest(config):
+        # Same signed transcript as SociACL GroupEpochConfig::digest. Signatures
+        # do not affect the deterministic same-revision tie break.
+        fields=['s3rch-group-epoch-config-v1',config['owner'],config['setId'],config['predicate'],
+                str(config['settleWindowMs']),str(config['configRevision'])]
+        return hashlib.sha256(b''.join(len(raw).to_bytes(4,'little')+raw
+                                     for raw in (value.encode('utf-8') for value in fields))).hexdigest()
+
+    @staticmethod
+    def _group_policy_shape(config):
+        if type(config) is not dict or set(config)!={'owner','setId','predicate','settleWindowMs','configRevision','signature'}:
+            raise AdmissionRejected('invalid group policy')
+        if any(type(config[key]) is not str or not config[key] or len(config[key])>1024
+               for key in ('owner','setId','predicate','signature')):
+            raise AdmissionRejected('invalid group policy text')
+        if type(config['configRevision']) is not int or not 0<=config['configRevision']<=9007199254740991:
+            raise AdmissionRejected('invalid group policy revision')
+        if type(config['settleWindowMs']) is not int or not 3600000<=config['settleWindowMs']<=259200000:
+            raise AdmissionRejected('invalid group policy window')
+
+    def _selected_group_policy(self,doc,context):
+        verifier=GroupEpochConfigVerifier()
+        valid=[]
+        for config in doc.get('groupPolicies',[]):
+            if config['setId']!=context['setId'] or config['predicate']!=context['predicate']:continue
+            expected={**context,'settleWindowMs':config['settleWindowMs'],'configRevision':config['configRevision']}
+            if verifier.matches_config(encoded(config),encoded(expected)):valid.append(config)
+        if not valid:return None
+        return min(valid,key=lambda config:(-config['configRevision'],self._group_policy_digest(config)))
+
+    def group_policy_view(self,tenant,writer,object,at,predicate,set_id,cancel=lambda:None):
+        """Read signed policy under current set-owner history, without granting access."""
+        self._guard(at,cancel)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            held,doc=self._load(db,object,at)
+            if writer!=self.identities(db,object,doc,at)['owner']:raise AdmissionRejected('group owner required')
+            context=self._group_policy_context(db,object,doc,at,predicate,set_id)
+            return {'context':context,'config':self._selected_group_policy(doc,context),
+                    'fence':self._fence(db,object,held,at)}
+
+    def append_group_policy(self,tenant,writer,object,at,fence,predicate,set_id,config,cancel=lambda:None):
+        """Owner relays a set-owner-signed policy into the protected journal."""
+        self._guard(at,cancel)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        self._group_policy_shape(config)
+        config=json.loads(encoded(config))
+        with self.store._transaction(write=True,before_commit=lambda:self._guard(at,cancel)) as db:
+            held,doc=self._load(db,object,at)
+            if writer!=self.identities(db,object,doc,at)['owner']:raise AdmissionRejected('group owner required')
+            if type(fence) is not str or not hmac.compare_digest(fence,self._fence(db,object,held,at)):
+                raise HistoryConflict('group authority changed')
+            context=self._group_policy_context(db,object,doc,at,predicate,set_id)
+            expected={**context,'settleWindowMs':config['settleWindowMs'],'configRevision':config['configRevision']}
+            if not GroupEpochConfigVerifier().matches_config(encoded(config),encoded(expected)):
+                raise AdmissionRejected('group policy signature refused')
+            policies=doc.setdefault('groupPolicies',[])
+            if config in policies:return True
+            if len(policies)>=64:raise AdmissionRejected('group policy capacity')
+            if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
+            policies.append(config)
+            doc['objectVersion']+=1
+            self._save(db,object,held,doc)
         return True
 
     def _checkpoint(self, db, object, row, *, write=False):

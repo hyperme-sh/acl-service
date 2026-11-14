@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
 import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
-import {groupAuthority,groupObjectAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority,groupPolicyAuthority} from './group-authority.mjs';
 const now=1700000060;
 const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
@@ -116,4 +116,14 @@ test('full object authority refuses partial, duplicate and oversized scope input
  assert.throws(()=>groupObjectAuthority(accounts,contextFor,now,{object,scopes:[scope()],extra:true}));
  assert.throws(()=>groupObjectAuthority(accounts,contextFor,now,{object,scopes:[scope([{large:'x'.repeat(1024*1024)}])]}));
  const bad=competingScope();bad.rows[1].record.sig='bad';assert.throws(()=>all([scope(),bad]));
+});
+
+test('policy signing context belongs to the authenticated set owner, not media owner',()=>{
+ assert.deepEqual(groupPolicyAuthority(accounts,contextFor,now,input()),{owner,ownerPub:owner,setId:set,predicate:'same-group'});
+ const foreignSet='set_'+formatPrincipalKey(outsider)+'_'+'ef'.repeat(16);
+ const foreign={object,set:foreignSet,predicate:'named-circle',rows:[owned]};
+ assert.deepEqual(groupPolicyAuthority(accounts,contextFor,now,foreign),{owner:outsider,ownerPub:outsider,setId:foreignSet,predicate:'named-circle'});
+ const frozen=new Map(accounts);frozen.set(outsider,{...accounts.get(outsider),frozen:true});
+ assert.throws(()=>groupPolicyAuthority(frozen,contextFor,now,foreign));
+ assert.throws(()=>groupPolicyAuthority(accounts,contextFor,now,{...foreign,rows:[]}));
 });

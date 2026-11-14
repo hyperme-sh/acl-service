@@ -49,6 +49,74 @@ class MediaSourceContracts(TestCase):
         held.start();self.addCleanup(held.stop)
         return lambda:self.source.group_view(TENANT,'owner',OBJECT,self.now,'same-group','set_test')
 
+    def policy_fixture(self):
+        context={'owner':'reader','ownerPub':'reader-key','setId':'set_test','predicate':'same-group'}
+        held=patch.object(self.source,'_group_policy_context',return_value=context)
+        held.start();self.addCleanup(held.stop)
+        verifier=Mock()
+        verifier.matches_config.side_effect=lambda proof,expected: all(json.loads(proof)[k]==v for k,v in json.loads(expected).items() if k!='ownerPub') and json.loads(proof)['signature']==json.loads(expected)['ownerPub']
+        held=patch('media_source.GroupEpochConfigVerifier',return_value=verifier)
+        held.start();self.addCleanup(held.stop)
+        config={'owner':'reader','setId':'set_test','predicate':'same-group','settleWindowMs':3600000,'configRevision':1,'signature':'reader-key'}
+        def view():return self.source.group_policy_view(TENANT,'owner',OBJECT,100,'same-group','set_test')
+        def append(value,fence=None,**kwargs):return self.source.append_group_policy(TENANT,'owner',OBJECT,100,fence or view()['fence'],'same-group','set_test',value,**kwargs)
+        return context,config,view,append
+
+    def test_group_policy_current_owner_selection_and_detached_storage(self):
+        context,config,view,append=self.policy_fixture()
+        self.assertIsNone(view()['config'])
+        first=view()['fence'];append(config)
+        self.assertEqual(view()['config'],config)
+        with self.assertRaises(HistoryConflict):append(config,first)
+        held=view()['fence'];append(config);self.assertEqual(view()['fence'],held)
+        config['settleWindowMs']=7200000;append(config)
+        candidates=[{**config,'settleWindowMs':3600000},config]
+        self.assertEqual(view()['config'],min(candidates,key=self.source._group_policy_digest))
+        high={**config,'configRevision':2};append(high)
+        config['signature']='changed'
+        self.assertEqual(view()['config'],high)
+        context['ownerPub']='rotated'
+        self.assertIsNone(view()['config'])
+        with self.assertRaises(AdmissionRejected):append(high)
+        current={**high,'signature':'rotated'};append(current)
+        self.assertEqual(view()['config'],current)
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,100)
+            self.assertEqual(doc['objectVersion'],4)
+            self.assertEqual(doc['grants'],[])
+
+    def test_group_policy_bounds_authorization_and_atomic_cancellation(self):
+        context,config,view,append=self.policy_fixture()
+        for bad in [None,{}, {**config,'extra':1},{**config,'signature':''},{**config,'owner':2},
+                    {**config,'configRevision':True},{**config,'configRevision':-1},
+                    {**config,'configRevision':9007199254740992},{**config,'settleWindowMs':1},
+                    {**config,'settleWindowMs':True},{**config,'signature':'x'*1025},
+                    {**config,'owner':'owner'},{**config,'setId':'set_other'},{**config,'predicate':'named-circle'}]:
+            with self.assertRaises(AdmissionRejected):append(bad)
+        for tenant,writer in [('bad','owner'),(TENANT,'reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.group_policy_view(tenant,writer,OBJECT,100,'same-group','set_test')
+            with self.assertRaises(AdmissionRejected):self.source.append_group_policy(tenant,writer,OBJECT,100,view()['fence'],'same-group','set_test',config)
+        with self.assertRaises(HistoryConflict):append(config,'bad')
+        calls=0
+        def cancel():
+            nonlocal calls
+            calls+=1
+            if calls>1:raise AdmissionRejected('cancelled')
+        with self.assertRaises(AdmissionRejected):append(config,cancel=cancel)
+        self.assertIsNone(view()['config'])
+        for revision in range(64):append({**config,'configRevision':revision})
+        with self.assertRaises(AdmissionRejected):append({**config,'configRevision':64})
+        append(config)  # Exact replay remains possible at capacity.
+
+    def test_group_policy_context_uses_only_admitted_rows(self):
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,100)
+            with self.assertRaises(AdmissionRejected):self.source._group_policy_context(db,OBJECT,doc,100,'same-group','set_test')
+            doc['groupScopes']={'same-group:set_test':[{'signed':'row'}]}
+            with patch('media_source.HistoryAdmission._run_verifier',return_value=b'{"owner":"reader"}') as verify:
+                self.assertEqual(self.source._group_policy_context(db,OBJECT,doc,100,'same-group','set_test'),{'owner':'reader'})
+                self.assertEqual(verify.call_args.kwargs['groupPolicyGraph'],{'object':OBJECT,'predicate':'same-group','set':'set_test','rows':[{'signed':'row'}]})
+
     def test_group_journal_retains_cancellation_and_rejects_stale_writes(self):
         view=self.group_fixture()
         first=view();self.assertIsNone(first['projection'])

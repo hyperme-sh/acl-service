@@ -232,3 +232,22 @@ class NativeMediaContracts(TestCase):
             self.assertFalse(verifier.matches_config(raw,json.dumps({**expected,field:value}).encode()))
         duplicate=raw[:-1]+b',"configRevision":2}'
         self.assertFalse(verifier.matches_config(duplicate,json.dumps(expected).encode()))
+
+    def test_protected_group_policy_uses_current_native_owner_and_checkpoint(self):
+        policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
+        view=self.source.group_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+        rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']}]
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,view['fence'],predicate,set_id,rows)
+        view=self.source.group_policy_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+        self.assertEqual(view['context'],{'owner':self.owner,'ownerPub':self.owner,'setId':set_id,'predicate':predicate})
+        self.assertIsNone(view['config'])
+        backup=self.path.read_bytes()
+        self.source.append_group_policy(self.tenant,self.owner,self.object,self.now,view['fence'],predicate,set_id,policy)
+        current=self.source.group_policy_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+        self.assertEqual(current['config'],policy)
+        self.assertEqual(self.source._group_policy_digest(policy),self.f['groupPolicyDigest'])
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group_policy(self.tenant,self.owner,self.object,self.now,current['fence'],predicate,set_id,{**policy,'settleWindowMs':7200000})
+        self.path.write_bytes(backup)
+        with self.assertRaises(AdmissionRejected):
+            self.source.group_policy_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
