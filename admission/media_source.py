@@ -73,6 +73,65 @@ class MediaSource:
             genesis=_record(account.genesis), entries=[_record(row) for row in account.entries],
             peers=_peer_inputs(principal, accounts)))
 
+    def _group_projection(self, db, object, doc, at, predicate, set_id, rows):
+        accounts=self._accounts(db)
+        principal=next(iter(accounts)); account=accounts[principal]
+        runner=HistoryAdmission(self.store, grant_for=lambda _:None,
+                                trust_at=lambda _:doc['policy'], clock=self.clock)
+        return json.loads(runner._run_verifier(principal,at,
+            genesis=_record(account.genesis),entries=[_record(row) for row in account.entries],
+            peers=_peer_inputs(principal,accounts),
+            groupGraph={'object':object,'predicate':predicate,'set':set_id,'rows':rows}))
+
+    @staticmethod
+    def _group_key(predicate,set_id):
+        if predicate not in ('same-group','named-circle') or type(set_id) is not str or not set_id.startswith('set_') or len(set_id)>512:
+            raise AdmissionRejected('invalid group scope')
+        return predicate+':'+set_id
+
+    def group_view(self,tenant,writer,object,at,predicate,set_id,cancel=lambda:None):
+        """Owner-only retained signed rows; this does not grant media access."""
+        self._guard(at,cancel)
+        key=self._group_key(predicate,set_id)
+        if tenant!=self.tenant: raise AdmissionRejected('wrong group tenant')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer!=identities['owner']: raise AdmissionRejected('group owner required')
+            rows=doc.get('groupScopes',{}).get(key,[])
+            projection=self._group_projection(db,object,doc,at,predicate,set_id,rows) if rows else None
+            return {'rows':rows,'projection':projection,'fence':self._fence(db,object,row,at)}
+
+    def append_group(self,tenant,writer,object,at,fence,predicate,set_id,rows,cancel=lambda:None):
+        """Retain bounded signed group rows in the existing protected media journal.
+
+        Rows are append-only, including cancellations. Native admission checks all
+        retained rows against current enrolled histories before the atomic write.
+        No epoch, direct grant, wrap or delivery decision is created here.
+        """
+        self._guard(at,cancel)
+        key=self._group_key(predicate,set_id)
+        if tenant!=self.tenant or type(rows) is not list or not 1<=len(rows)<=64 or len(encoded(rows))>65536:
+            raise AdmissionRejected('invalid group append')
+        rows=json.loads(encoded(rows))
+        with self.store._transaction(write=True,before_commit=lambda:self._guard(at,cancel)) as db:
+            held,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if writer!=identities['owner']: raise AdmissionRejected('group owner required')
+            if type(fence) is not str or not hmac.compare_digest(fence,self._fence(db,object,held,at)):
+                raise HistoryConflict('group authority changed')
+            scopes=doc.setdefault('groupScopes',{})
+            if key not in scopes and len(scopes)>=8: raise AdmissionRejected('group scope capacity')
+            retained=scopes.get(key,[])
+            candidate=retained+[row for row in rows if row not in retained]
+            if len(candidate)>1024 or len(encoded(candidate))>4*1024*1024:
+                raise AdmissionRejected('group row capacity')
+            self._group_projection(db,object,doc,at,predicate,set_id,candidate)
+            if candidate!=retained:
+                scopes[key]=candidate
+                self._save(db,object,held,doc)
+        return True
+
     def _checkpoint(self, db, object, row, *, write=False):
         digest = media_checkpoint_digest(self.tenant,object,*row)
         if write:
