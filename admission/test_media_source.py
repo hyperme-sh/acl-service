@@ -67,6 +67,78 @@ class MediaSourceContracts(TestCase):
             'set':'set_test','member':'reader','setOwner':'owner','hamState':1,'stated':1,
             'issuedAt':100,'cancels':[],'sig':'signed'}}
 
+    def member_write_fixture(self):
+        view=self.group_fixture()
+        invitation=self.group_member_row();invitation['record']['role']='set'
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{'kind':'object'},invitation])
+        row=self.group_member_row();row['record']['hamState']=2
+        draft={key:value for key,value in row['record'].items() if key not in ('sig','stated')}
+        context={'memberPub':'reader-key','state':{},'draft':draft}
+        held=patch.object(self.source,'_group_member_context',return_value=context)
+        resolve=held.start();self.addCleanup(held.stop)
+        return row,context,resolve
+
+    def test_member_write_and_exact_recovery_preserve_fixed_identity_and_fences(self):
+        row,context,resolve=self.member_write_fixture()
+        check=lambda value=row:asyncio.run(self.source.member_group_append_state(TENANT,'reader',OBJECT,'same-group','set_test',value))
+        append=lambda value,fence:asyncio.run(self.source.member_append_group(TENANT,'reader',OBJECT,100,fence,'same-group','set_test',value))
+        first=check();self.assertEqual(first['state'],'absent')
+        self.assertTrue(append(row,first['fence']))
+        applied=check();self.assertEqual(applied['state'],'applied');self.assertNotEqual(applied['fence'],first['fence'])
+        self.assertTrue(append(row,applied['fence']));self.assertEqual(check()['fence'],applied['fence'])
+        with self.assertRaises(HistoryConflict):append(row,first['fence'])
+        withdrawal={**row,'record':{**row['record'],'stated':0}}
+        prepared=asyncio.run(self.source.member_group_withdrawal_view(TENANT,'reader',OBJECT,'same-group','set_test'))
+        self.assertEqual(prepared['at'],100);self.assertEqual(resolve.call_args.args[-1],True)
+        self.assertTrue(append(withdrawal,prepared['fence']))
+        self.assertEqual(resolve.call_args.args[-1],True)
+        self.assertEqual(check(withdrawal)['state'],'applied')
+        self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'],[])
+
+    def test_member_write_refuses_changed_context_before_committing(self):
+        row,context,resolve=self.member_write_fixture()
+        view=lambda:self.source.member_group_state(TENANT,'reader',OBJECT,100,'same-group','set_test',row)
+        append=lambda value=row:self.source.append_member_group(TENANT,'reader',OBJECT,100,view()['fence'],'same-group','set_test',value)
+        before=view()['fence']
+        context['memberPub']='obsolete'
+        with self.assertRaises(AdmissionRejected):append()
+        context['memberPub']='reader-key';context['draft']['hamState']=3
+        with self.assertRaises(AdmissionRejected):append()
+        context['draft']['hamState']=2
+        resolve.side_effect=AdmissionRejected('invitation withdrawn')
+        with self.assertRaises(AdmissionRejected):append()
+        resolve.side_effect=None
+        self.assertEqual(view()['fence'],before)
+        with self.store._transaction(write=True) as db:
+            held,doc=self.source._load(db,OBJECT,100)
+            # Exercise the existing terminal-version guard without changing a
+            # reservation-enabled journal's valid production state.
+            doc.pop('groupWithdrawalCapacity');doc['objectVersion']=9007199254740991
+            self.source._save(db,OBJECT,held,doc)
+        with self.assertRaises(AdmissionRejected):append()
+
+    def test_member_write_boundaries_and_commit_cancellation(self):
+        row,_,_=self.member_write_fixture()
+        for bad in [None,{}, {**row,'kind':'object-set'},{**row,'extra':1},
+            {**row,'record':{**row['record'],'role':'set'}},{**row,'record':{**row['record'],'member':'owner'}},
+            {**row,'record':{**row['record'],'stated':True}},{**row,'record':{**row['record'],'sig':'x'*129}},
+            {**row,'record':{**row['record'],'sig':''}},{**row,'record':{**row['record'],'extra':1}},
+            {**row,'soul':'x'*8192}]:
+            with self.assertRaises(AdmissionRejected):self.source._member_group_row(bad,'reader','same-group','set_test')
+        fence=self.source.member_group_state(TENANT,'reader',OBJECT,100,'same-group','set_test',row)['fence']
+        for tenant,member,set_id,value in [('other','reader','set_test',row),
+            (TENANT,'outsider','set_test',{**row,'record':{**row['record'],'member':'outsider'}}),
+            (TENANT,'reader','set_missing',{**row,'record':{**row['record'],'set':'set_missing'}})]:
+            with self.assertRaises(AdmissionRejected):self.source.member_group_state(tenant,member,OBJECT,100,'same-group',set_id,value)
+            with self.assertRaises(AdmissionRejected):self.source.append_member_group(tenant,member,OBJECT,100,fence,'same-group',set_id,value)
+        calls=0
+        def cancel():
+            nonlocal calls
+            calls+=1
+            if calls>1:raise AdmissionRejected('cancelled')
+        with self.assertRaises(AdmissionRejected):self.source.append_member_group(TENANT,'reader',OBJECT,100,fence,'same-group','set_test',row,cancel)
+        self.assertEqual(self.source.member_group_state(TENANT,'reader',OBJECT,100,'same-group','set_test',row)['state'],'absent')
+
     def group_fixture(self):
         def verify(principal,at,**inputs):
             graph=inputs['groupGraph']

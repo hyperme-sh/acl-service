@@ -185,6 +185,10 @@ class MediaSource:
             candidate=self._group_candidate(retained,[row])
             self._group_projection(db,object,doc,at,predicate,set_id,candidate)
             state='applied' if any(encoded(value)==encoded(row) for value in retained) else 'absent'
+            if state=='absent':
+                consent=self._group_member_context(db,object,doc,at,predicate,set_id,member,row['record']['stated']==0)
+                if consent['memberPub']!=identities['bindings'][member]['pub']:
+                    raise AdmissionRejected('group member key changed')
             return {'state':state,'fence':self._fence(db,object,held,at)}
 
     def append_member_group(self,tenant,member,object,at,fence,predicate,set_id,row,cancel=lambda:None):
