@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
-import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
+import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState,linkId} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
 import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority,groupCohortAuthority} from './group-authority.mjs';
 const now=1700000060;
@@ -175,4 +175,23 @@ test('group cohort refuses wrong scopes, histories and unverified signatures',()
   const changed=new Map(accounts);changed.set(owner,{...accounts.get(owner),...patch});assert.throws(()=>cohort(cohortInput(),changed));
  }
  const missing=new Map(accounts);missing.delete(member);assert.throws(()=>cohort(cohortInput(),missing));
+});
+
+
+test('group cohort bindings follow current signing and encryption keys after rotation',()=>{
+ const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))),rotations=[f['oidc-rotate']];
+ const context={jwks:f.jwks,policy:f.policy,pinnedIss:new Set(f.pinnedIss),links:new Map([[take(linkId(f.oidc)),f.oidc]]),
+  revocations:[],genesisEpubBindings:[f.binding],now:f.now,
+  history:(principal,from,until)=>principal===f.genesis?{ok:true,value:historyState(principal,rotations.filter(row=>row.issuedAt<=until),from,until)}:{ok:false,reason:'missing-history'}};
+ const account={principal:f.genesis,genesis:f.binding,rotations,links:context.links,ownRevokes:[],entries:[f.oidc,...rotations]};
+ const group='set_'+formatPrincipalKey(f.genesis)+'_'+'ef'.repeat(16);
+ const rows=['member','set'].map(role=>{
+  const record={role,predicate:'same-group',set:group,member:f.genesis,setOwner:f.genesis,stated:1,hamState:1,issuedAt:f.now,cancels:[]};
+  record.sig=take(signWithKeyring(scalar(2),membershipAssentBytes(record),rotations[0].nextKey));
+  return {kind:'membership',soul:membershipSoul(f.genesis,'same-group',group,f.genesis),record};
+ });
+ const result=groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows});
+ assert.deepEqual(result.bindings[f.genesis],{pub:rotations[0].nextKey,epub:rotations[0].nextEpub});
+ assert.notEqual(result.bindings[f.genesis].epub,f.binding.epub);
+ assert.equal(result.cohort.members[0].stated,1);
 });
