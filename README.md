@@ -1409,3 +1409,12 @@ refreshed under the authentic historical parent's settlement window. Publication
 and fresh status still precede direct delivery, and group delivery remains
 refused. The same negative snapshot is used by direct selection after admission;
 there is no fallback to a prior positive group snapshot or an earlier epoch.
+
+
+An uninstalled `owner_router` prepares `item-epoch-append`, `item-epoch-state`,
+`item-status-view`, `item-status-append`, `item-status-state` and `item-wrap-view`.
+The application does not mount these routes. CI explicitly mounts them to check
+fixed-subject owner binding, `acl:media:write` scope, strict bounded JSON, private
+responses, capacity limits and cancellation. Epoch bodies are capped at 270336
+bytes and signed status commands at 8192 bytes. Existing application routing
+returns 404 for these prepared commands until separately authorized installation.

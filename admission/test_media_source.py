@@ -104,6 +104,15 @@ class MediaSourceContracts(TestCase):
             self.assertEqual(source.commit_publication.call_args.args,(permit,))
             self.assertTrue(callable(source.commit_publication.call_args.kwargs['cancel']))
 
+    def test_group_item_epoch_write_bridge_uses_exact_payload(self):
+        with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource') as items:
+            source=items.return_value;source.epoch_state.return_value={'state':'applied'};source.append_epoch.return_value=True
+            self.assertEqual(asyncio.run(self.source.group_item_epoch_state(TENANT,'owner',OBJECT,'same-group','set_test',{})),{'state':'applied'})
+            self.assertEqual(source.epoch_state.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test',{}))
+            self.assertTrue(asyncio.run(self.source.append_group_item_epoch(TENANT,'owner',OBJECT,'same-group','set_test',100,'f',{})))
+            self.assertEqual(source.append_epoch.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test',100,'f',{}))
+            self.assertTrue(callable(source.append_epoch.call_args.kwargs['cancel']))
+
     def test_group_item_grant_bridge_keeps_fixed_arguments_and_bounded_worker(self):
         with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource'), patch('group_item_grants.GroupItemGrants') as grants:
             source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True;source.state.return_value={'state':'applied'}
