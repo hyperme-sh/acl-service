@@ -1172,3 +1172,20 @@ since publishing a recipient wrap does not create another epoch. Both the view
 and publication require the latest manifest snapshot to match the current cohort
 and enrolled identity keys. Changed membership or identity keys require a new
 valid epoch before publication can proceed.
+
+`SOCIACL_GROUP_WRAP_FILE` explicitly enables group wrap delivery. Its private JSON
+uses media-binding version 2 with `tenant`, `subject`, `reader`, `postgresFile`,
+`storageOrigin` and `storageKeyFile` per binding. The protected group journals must
+already exist. When group allocation is configured, wrap delivery shares its
+exact protected source and storage origin. The separate storage credential needs
+`storage:groups:wraps:read` and `storage:groups:wraps:write`; browsers never receive
+it. Missing configuration disables these routes; loading does not install schemas.
+
+Authenticated POST routes under `/api/v1/acl/sociacl/media/groups` are `wrap-view`,
+`wrap-publish` and `wrap-read`. All take `predicate` and canonical `set` identifiers.
+Publication also takes `at`, `fence`, recipient `metadata` and canonical base64
+`payload` (at most 64 KiB decoded). View and publication require `acl:media:write`;
+read requires `acl:media:read`. The reader/owner always comes from the configured
+subject. Read returns base64 ciphertext with the current epoch, revision,
+recipient encryption key and group key commitment. Responses are private and
+uncached. Authority changes return 409; callers must reconcile before retrying.

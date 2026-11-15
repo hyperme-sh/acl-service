@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import hashlib
 import re
 import time
+from acl_service.domain.history_store import HistoryConflict
 
 @dataclass(frozen=True)
 class GroupKeyReadPermit:
@@ -72,6 +73,8 @@ async def publish_group_wrap(authority,store,tenant,owner,predicate,set_id,at,fe
             if await authority.commit_group_wrap_write(permit) is not True:raise ValueError()
             if clock()>=permit.expires_at:raise ValueError()
             return digest
+    except HistoryConflict:
+        raise
     except Exception:
         raise GroupWrapRejected('group wrap publication refused') from None
 
@@ -99,5 +102,7 @@ async def deliver_group_wrap(authority,store,tenant,reader,predicate,set_id,*,cl
             cancel()
             if clock()>=key.expires_at:raise ValueError()
             return DeliveredGroupWrap(payload,predicate,set_id,key.epoch,key.revision_id,key.reader_epub,key.key_commitment,key.expires_at)
+    except HistoryConflict:
+        raise
     except Exception:
         raise GroupWrapRejected('group wrap delivery refused') from None
