@@ -1016,3 +1016,8 @@ own current assent removal even when the invitation was withdrawn. It uses a
 same-HAM stated-0 response with empty cancellations, within the reserved capacity.
 All three routes retain the fixed reader binding and bounded worker/transport
 limits. Member writes do not create direct grants, epochs, wraps, or delivery.
+
+A newly applied member signature may be at most four seconds old at the fresh
+source fence. Its original `issuedAt` is preserved across second boundaries;
+all other draft fields must still match current preparation. Exact applied-row
+reconciliation remains available after that signing window expires.

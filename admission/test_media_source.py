@@ -117,6 +117,19 @@ class MediaSourceContracts(TestCase):
             self.source._save(db,OBJECT,held,doc)
         with self.assertRaises(AdmissionRejected):append()
 
+    def test_member_signed_draft_can_cross_a_second_but_expires_without_application(self):
+        row,_,_=self.member_write_fixture()
+        self.now=101
+        held=self.source.member_group_state(TENANT,'reader',OBJECT,101,'same-group','set_test',row)
+        self.assertTrue(self.source.append_member_group(TENANT,'reader',OBJECT,101,held['fence'],'same-group','set_test',row))
+        self.now=106
+        withdrawal={**row,'record':{**row['record'],'stated':0}}
+        held=self.source.member_group_state(TENANT,'reader',OBJECT,106,'same-group','set_test',withdrawal)
+        with self.assertRaises(AdmissionRejected):self.source.append_member_group(TENANT,'reader',OBJECT,106,held['fence'],'same-group','set_test',withdrawal)
+        self.assertEqual(self.source.member_group_state(TENANT,'reader',OBJECT,106,'same-group','set_test',withdrawal)['state'],'absent')
+        # Exact historical application is still queryable after its signing window.
+        self.assertEqual(self.source.member_group_state(TENANT,'reader',OBJECT,106,'same-group','set_test',row)['state'],'applied')
+
     def test_member_write_boundaries_and_commit_cancellation(self):
         row,_,_=self.member_write_fixture()
         for bad in [None,{}, {**row,'kind':'object-set'},{**row,'extra':1},

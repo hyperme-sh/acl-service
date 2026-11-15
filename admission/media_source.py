@@ -211,7 +211,9 @@ class MediaSource:
             consent=self._group_member_context(db,object,doc,at,predicate,set_id,member,record['stated']==0)
             if consent['memberPub']!=identities['bindings'][member]['pub']:
                 raise AdmissionRejected('group member key changed')
-            expected={**consent['draft'],'stated':record['stated'],'sig':record['sig']}
+            if type(record['issuedAt']) is not int or not 0<=at-record['issuedAt']<=4:
+                raise AdmissionRejected('group consent expired')
+            expected={**consent['draft'],'issuedAt':record['issuedAt'],'stated':record['stated'],'sig':record['sig']}
             if encoded(expected)!=encoded(record):raise AdmissionRejected('group consent changed')
             if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
             doc['objectVersion']+=1

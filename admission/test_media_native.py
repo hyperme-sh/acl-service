@@ -297,6 +297,7 @@ class NativeMediaContracts(TestCase):
         rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupInvitations'][0]]
         self.source.append_group(self.tenant,self.owner,self.object,self.now,owner_view()['fence'],predicate,set_id,rows)
         join,withdraw=self.f['groupMemberRows']
+        self.now+=1  # Signing and fresh-fence reconciliation may cross a second.
         check=lambda row:asyncio.run(self.source.member_group_append_state(self.tenant,self.owner,self.object,predicate,set_id,row))
         append=lambda row,fence:asyncio.run(self.source.member_append_group(self.tenant,self.owner,self.object,self.now,fence,predicate,set_id,row))
         pending=check(join);self.assertEqual(pending['state'],'absent')
