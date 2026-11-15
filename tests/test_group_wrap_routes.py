@@ -18,7 +18,10 @@ PATH='/acl/sociacl/media/groups/'
 @pytest.fixture
 def setup(monkeypatch):
     tenant=uuid4();user=SimpleNamespace(sub='session',scopes=['acl:media:read','acl:media:write'])
-    authority=SimpleNamespace(group_item_authority_view=AsyncMock(return_value={'at':100,'projection':None,'fence':'c'*64}),
+    authority=SimpleNamespace(group_item_grant_state=AsyncMock(return_value={'at':100,'state':'applied','frozen':False}),
+                              group_item_grant_view=AsyncMock(return_value={'at':100}),
+                              append_group_item_grant=AsyncMock(return_value=True),
+                              group_item_authority_view=AsyncMock(return_value={'at':100,'projection':None,'fence':'c'*64}),
                               group_wrap_view=AsyncMock(return_value={'fence':'a'*64}),
                               group_item_view=AsyncMock(return_value={'fence':'b'*64,'expiresAt':102}))
     binding=SimpleNamespace(tenant=str(tenant),reader='fixed-reader',authority=authority,store=SimpleNamespace(tenant=str(tenant)))
@@ -133,6 +136,8 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
         assert (await client.post('/api/v1'+PATH+'wrap-view',json=RECORD)).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-view',json={**RECORD,'object':'media_owner_item'})).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-authority-view',json={'object':'media_owner_item'})).status_code==200
+        assert (await client.post('/api/v1'+PATH+'item-grant-view',json={**RECORD,'object':'media_owner_item','reader':'reader','withdraw':False})).status_code==200
+        assert (await client.post('/api/v1'+PATH+'item-grant-append',json={**RECORD,'object':'media_owner_item','at':100,'fence':'a'*64,'payload':{}})).status_code==200
     s.authority.group_item_authority_view.assert_awaited_once_with(str(s.tenant),'fixed-reader','media_owner_item')
     s.authority.group_wrap_view.assert_awaited_once()
     s.authority.group_item_view.assert_awaited_once()
@@ -159,3 +164,40 @@ async def test_item_authority_view_selects_scope_only_from_protected_source(setu
         s.authority.group_item_authority_view.side_effect=AdmissionRejected('private group members')
         result=await client.post(PATH+'item-authority-view',json=body)
         assert result.status_code==403 and 'private group members' not in result.text
+
+
+@pytest.mark.asyncio
+async def test_group_item_grants_bind_owner_validate_bodies_and_sanitize_refusals(setup):
+    s=setup;view={**RECORD,'object':'media_owner_item','reader':'recipient','withdraw':False}
+    append={**RECORD,'object':view['object'],'at':100,'fence':'a'*64,'payload':{'claims':{},'proof':{}}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        assert (await client.post(PATH+'item-grant-view',json=view)).json()=={'at':100}
+        s.authority.group_item_grant_view.assert_awaited_once_with(str(s.tenant),'fixed-reader',view['object'],RECORD['predicate'],RECORD['set'],'recipient',False)
+        assert (await client.post(PATH+'item-grant-append',json=append)).json()=={'accepted':True}
+        s.authority.append_group_item_grant.assert_awaited_once_with(str(s.tenant),'fixed-reader',view['object'],RECORD['predicate'],RECORD['set'],100,'a'*64,append['payload'])
+        for action,body,patches in [('item-grant-view',view,[{'reader':[]},{'reader':''},{'withdraw':1},{'owner':'other'}]),
+            ('item-grant-append',append,[{'at':True},{'fence':'bad'},{'payload':[]},{'owner':'other'}])]:
+            for patch in patches:assert (await client.post(PATH+action,json={**body,**patch})).status_code==400
+            s.user.scopes=['acl:media:read']
+            assert (await client.post(PATH+action,json=body)).status_code==403
+            s.user.scopes=['acl:media:write']
+        assert (await client.post(PATH+'item-grant-append',content=b'x'*8193,headers={'content-type':'application/json'})).status_code==413
+        s.authority.append_group_item_grant.return_value=False
+        assert (await client.post(PATH+'item-grant-append',json=append)).status_code==403
+        s.authority.append_group_item_grant.side_effect=HistoryConflict('private journal')
+        result=await client.post(PATH+'item-grant-append',json=append)
+        assert result.status_code==409 and 'private journal' not in result.text
+        s.publish.assert_not_awaited();s.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_item_grant_reconciliation_is_fixed_owner_and_read_only(setup):
+    s=setup;body={**RECORD,'object':'media_owner_item','payload':{'claims':{},'proof':{}}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        result=await client.post(PATH+'item-grant-state',json=body)
+        assert result.status_code==200 and result.json()=={'at':100,'state':'applied','frozen':False}
+        s.authority.group_item_grant_state.assert_awaited_once_with(str(s.tenant),'fixed-reader',body['object'],RECORD['predicate'],RECORD['set'],body['payload'])
+        assert (await client.post(PATH+'item-grant-state',json={**body,'payload':[]})).status_code==400
+        s.user.scopes=['acl:media:read']
+        assert (await client.post(PATH+'item-grant-state',json=body)).status_code==403
+        s.authority.append_group_item_grant.assert_not_awaited()

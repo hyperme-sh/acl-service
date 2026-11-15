@@ -62,6 +62,45 @@ class MediaSourceContracts(TestCase):
             with self.assertRaises(AdmissionRejected):asyncio.run(self.source.group_operation('unknown',TENANT,'owner',scope))
             with self.assertRaises(AdmissionRejected):asyncio.run(self.source.group_operation('create',TENANT,'owner',{'padding':'x'*18433}))
 
+    def test_group_item_grant_bridge_keeps_fixed_arguments_and_bounded_worker(self):
+        with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource'), patch('group_item_grants.GroupItemGrants') as grants:
+            source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True;source.state.return_value={'state':'applied'}
+            self.assertEqual(asyncio.run(self.source.group_item_grant_view(TENANT,'owner',OBJECT,'same-group','set_test','reader',False)),{'at':100})
+            self.assertTrue(asyncio.run(self.source.append_group_item_grant(TENANT,'owner',OBJECT,'same-group','set_test',100,'f',{})))
+            self.assertEqual(source.view.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader',False))
+            self.assertEqual(source.append.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test',100,'f',{}))
+            self.assertEqual(asyncio.run(self.source.group_item_grant_state(TENANT,'owner',OBJECT,'same-group','set_test',{})),{'state':'applied'})
+            self.assertEqual(source.state.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test',{}))
+            self.assertTrue(callable(source.append.call_args.kwargs['cancel']))
+
+    def test_group_grant_capacity_is_preserved_across_ordinary_writes_and_rollback(self):
+        from group_item_grants import reserve,version_reserve
+        grant={'predicate':'same-group','set':'set_test',**self.grant(),'ownerPub':'owner-key'}
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['groupItemGrants']={'rows':[grant],'frozen':[],'conflicts':[]}
+            self.source._save(db,OBJECT,row,doc)
+        before=self.source.read_view(OBJECT,100)['fence']
+        self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'],[])
+        for mutation in ['bytes','version']:
+            with self.assertRaises(AdmissionRejected):
+                with self.store._transaction(write=True) as db:
+                    row,doc=self.source._load(db,OBJECT,100)
+                    if mutation=='bytes':doc['padding']='x'*(6*1024*1024-len(encoded(doc))-10)
+                    else:doc['objectVersion']=9007199254740991-version_reserve(doc)+1
+                    self.source._save(db,OBJECT,row,doc)
+            self.assertEqual(self.source.read_view(OBJECT,100)['fence'],before)
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['objectVersion']=9007199254740991-version_reserve(doc)
+            self.source._save(db,OBJECT,row,doc)
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['groupItemGrants']['rows'].append({**grant,'claims':{**grant['claims'],'stated':0,'grantRevision':2}})
+            doc['objectVersion']+=1
+            self.source._save(db,OBJECT,row,doc)
+            self.assertEqual(version_reserve(doc),1)
+            self.assertGreater(reserve(doc),0)
+
     def test_consent_view_is_bound_to_member_history_and_one_source_fence(self):
         with self.store._transaction(write=True) as db:
             row,doc=self.source._load(db,OBJECT,100)

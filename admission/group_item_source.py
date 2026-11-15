@@ -18,42 +18,48 @@ class GroupItemSource:
         if tenant!=self.media.tenant:
             raise AdmissionRejected('wrong group item tenant')
         with self.store._transaction(write=False,before_commit=guard) as db:
-            row,document=self.media._load(db,object,at)
-            identities=self.media.identities(db,object,document,at)
-            if identities['owner']!=owner:
-                raise AdmissionRejected('media owner required')
-            scopes=document.get('groupScopes',{})
-            if type(scopes) is not dict or len(scopes)>8:
-                raise AdmissionRejected('group item scope capacity')
-            projected=json.loads(encoded(document))
-            projected['groupScopes']={}
-            group_fences=[]
-            for key,retained in sorted(scopes.items()):
-                # A media row may retain old membership rows for compatibility.
-                # They must never substitute for the independent current journal.
-                edges=[entry for entry in retained if entry['kind']!='membership' and not (
-                    entry['kind']=='cancel' and entry['record']['kind']=='membership')]
-                projected['groupScopes'][key]=edges
+            return self._authority(db,tenant,owner,object,at)[0]
+
+    def _authority(self,db,tenant,owner,object,at):
+        row,document=self.media._load(db,object,at)
+        identities=self.media.identities(db,object,document,at)
+        if identities['owner']!=owner:
+            raise AdmissionRejected('media owner required')
+        scopes=document.get('groupScopes',{})
+        if type(scopes) is not dict or len(scopes)>8:
+            raise AdmissionRejected('group item scope capacity')
+        projected=json.loads(encoded(document))
+        projected['groupScopes']={}
+        group_fences=[]
+        current=None
+        for key,retained in sorted(scopes.items()):
+            # A media row may retain old membership rows for compatibility.
+            # They must never substitute for the independent current journal.
+            edges=[entry for entry in retained if entry['kind']!='membership' and not (
+                entry['kind']=='cancel' and entry['record']['kind']=='membership')]
+            projected['groupScopes'][key]=edges
+        projection=self.media._group_object_projection(db,object,projected,at)
+        # Resolve only owner-signed item edges first. Owning an item is not
+        # authority to enumerate arbitrary groups named in its old edges.
+        if projection and projection['snapshot'] is not None and projection['snapshot']['objectSet']['stated']==1:
+            predicate,set_id=projection['predicate'],projection['set']
+            held,group,snapshot,config=self.keys._load_current(db,tenant,at,predicate,set_id)
+            members=[member for member in snapshot['members']
+                     if member['accessor']==owner and member['stated']==1]
+            if len(members)!=1:
+                raise AdmissionRejected('current explicit group membership required')
+            key=self.media._group_key(predicate,set_id)
+            projected['groupScopes'][key]+=group['rows']
             projection=self.media._group_object_projection(db,object,projected,at)
-            # Resolve only owner-signed item edges first. Owning an item is not
-            # authority to enumerate arbitrary groups named in its old edges.
-            if projection and projection['snapshot'] is not None and projection['snapshot']['objectSet']['stated']==1:
-                predicate,set_id=projection['predicate'],projection['set']
-                held,group,snapshot,_=self.keys._load_current(db,tenant,at,predicate,set_id)
-                members=[member for member in snapshot['members']
-                         if member['accessor']==owner and member['stated']==1]
-                if len(members)!=1:
-                    raise AdmissionRejected('current explicit group membership required')
-                key=self.media._group_key(predicate,set_id)
-                projected['groupScopes'][key]+=group['rows']
-                projection=self.media._group_object_projection(db,object,projected,at)
-                group_fences.append(self.keys._fence(db,held,at,predicate,set_id))
-            fields=['group-item-authority-v1',tenant,owner,object,at,
-                    self.media._fence(db,object,row,at),group_fences]
-            fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
-            return {'at':at,'fence':fence,'projection':projection,
-                    'objectVersion':document['objectVersion'],
-                    'ownerPub':identities['bindings'][owner]['pub']}
+            group_fences.append(self.keys._fence(db,held,at,predicate,set_id))
+            current=(group,snapshot,config)
+        fields=['group-item-authority-v1',tenant,owner,object,at,
+                self.media._fence(db,object,row,at),group_fences]
+        fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+        result={'at':at,'fence':fence,'projection':projection,
+                'objectVersion':document['objectVersion'],
+                'ownerPub':identities['bindings'][owner]['pub']}
+        return result,row,document,identities,current
 
     def view(self,tenant,owner,object,predicate,set_id,cancel=lambda:None):
         at=int(self.media.clock())

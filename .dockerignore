@@ -36,3 +36,4 @@
 !admission/statement-quota.mjs
 !admission/statement_source.py
 !admission/test_media_native.py
+!admission/group_item_grants.py
