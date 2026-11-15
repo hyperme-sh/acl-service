@@ -1,7 +1,7 @@
 import {resolveStoreAccount,objectPrincipal,parseObjectRecord} from 'sociacl-ids';
 import {putObject} from 'sociacl/gun';
 import {MemoryGroupGraph,parseMembershipAssent,parseObjectSet,parseGroupCancel,
-  admitMembership,admitObjectSet,admitGroupCancel,membershipSoul,objectSetSoul,checkGroupPresentation,groupSnapshot,groupMembershipState} from 'sociacl/group';
+  admitMembership,admitObjectSet,admitGroupCancel,membershipSoul,objectSetSoul,checkGroupPresentation,groupSnapshot,groupMembershipState,groupCohortSnapshot} from 'sociacl/group';
 const take=result=>{if(!result.ok)throw Error(result.reason);return result.value;};
 
 /** Pure projection from protected rows and authenticated histories. No grants or writes. */
@@ -131,4 +131,44 @@ export function groupWithdrawalAuthority(accounts,contextFor,now,input) {
   if(diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length)throw Error('invalid-group-member-history');
   return {memberPub:head.currentKey,state,draft:{role:'member',predicate:scope.predicate,set:scope.set,
     member,setOwner:state.setOwner,hamState:state.memberAssent.hamState,issuedAt:now,cancels:[]}};
+}
+
+
+/** Current group membership without importing any media object's binding. */
+export function groupCohortAuthority(accounts,contextFor,now,input) {
+  if(!Number.isSafeInteger(now)||now<0||!input||Object.keys(input).sort().join()!=='predicate,rows,set'||
+      !['same-group','named-circle'].includes(input.predicate)||typeof input.set!=='string'||!input.set.startsWith('set_')||
+      !Array.isArray(input.rows)||input.rows.length>1024||Buffer.byteLength(JSON.stringify(input))>512*1024||
+      !accounts.size||accounts.size>64)throw Error('invalid-group-cohort');
+  const owner=take(objectPrincipal(input.set));
+  if(!accounts.has(owner))throw Error('unknown-group-owner');
+  const bindings=new Map();
+  for(const account of accounts.values()) {
+    const diagnostics=[],head=resolveStoreAccount(account.principal,account.rotations,contextFor(account,now),diagnostics);
+    if(account.frozen||diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length||
+        account.entries.some(row=>row.issuedAt>now))throw Error('invalid-group-history');
+    bindings.set(account.principal,{pub:head.currentKey,epub:head.bindingEpub});
+  }
+  const graph=new MemoryGroupGraph();
+  for(const envelope of input.rows) {
+    if(!envelope||Object.keys(envelope).sort().join()!=='kind,record,soul')throw Error('invalid-group-envelope');
+    let row,signer,address,admit;
+    if(envelope.kind==='membership') {
+      row=take(parseMembershipAssent(envelope.record));
+      if(!accounts.has(row.member))throw Error('unknown-group-member');
+      signer=row.role==='member'?row.member:row.setOwner;
+      address=membershipSoul(row.setOwner,row.predicate,row.set,row.member);admit=admitMembership;
+    }else if(envelope.kind==='cancel') {
+      row=take(parseGroupCancel(envelope.record));
+      if(row.kind!=='membership')throw Error('media-edge-in-group-cohort');
+      signer=row.signer;address=row.rowSoul;admit=admitGroupCancel;
+    }else throw Error('media-edge-in-group-cohort');
+    if(row.set!==input.set||row.predicate!==input.predicate||row.issuedAt>now||envelope.soul!==address)throw Error('wrong-group-scope');
+    const account=accounts.get(signer);if(!account)throw Error('unknown-group-signer');
+    take(admit(graph,row,{ctx:contextFor(account,now),rotations:principal=>accounts.get(principal)?.rotations}));
+  }
+  const cohort=groupCohortSnapshot(graph,input.predicate,input.set);
+  if(!cohort)throw Error('group-cohort-unavailable');
+  const named=new Set([owner,...cohort.members.map(row=>row.accessor)]);
+  return {cohort,bindings:Object.fromEntries([...bindings].filter(([principal])=>named.has(principal)))};
 }
