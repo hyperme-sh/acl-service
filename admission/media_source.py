@@ -1428,6 +1428,15 @@ class MediaSource:
             return getattr(source,action)(*args,cancel=cancel)
         return await self._work(run)
 
+    async def group_item_view(self,tenant,owner,object,predicate,set_id):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_item_source import GroupItemSource
+        def run(cancel):
+            return GroupItemSource(GroupKeySource(GroupSource(self))).view(
+                tenant,owner,object,predicate,set_id,cancel)
+        return await self._work(run)
+
     async def group_wrap_view(self, tenant, owner, at, predicate, set_id):
         return await self._group_wrap_work('view',tenant,owner,at,predicate,set_id)
 

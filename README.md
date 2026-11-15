@@ -1189,3 +1189,10 @@ read requires `acl:media:read`. The reader/owner always comes from the configure
 subject. Read returns base64 ciphertext with the current epoch, revision,
 recipient encryption key and group key commitment. Responses are private and
 uncached. Authority changes return 409; callers must reconcile before retrying.
+
+The internal group item preparation reads the media owner's current authorized
+item context and that same owner's settled group key context in one protected
+source transaction. Its short-lived fence binds both selectors and their
+checkpoints. It returns no key or storage location and does not create a media
+grant, object-set binding, publication or delivery permission. Group item-key
+publication and read authorization remain separate consumers of this context.
