@@ -32,6 +32,53 @@ class NativeMediaContracts(TestCase):
         self.source.provision(self.object,policy,self.now+7200,exclusive_grant=lambda *a:True)
         self.mutate('grant',self.f['grant']);self.mutate('epoch',self.f['epoch']);self.mutate('wrap',self.f['wrap'])
 
+    def test_native_independent_group_key_history_and_settlement(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_membership import GroupMembership
+        source=object.__new__(GroupSource)
+        source.media=self.source;source.store=self.store;source.journal=Mock()
+        retained={'row':None}
+        source.journal.read.side_effect=lambda *args:retained['row']
+        def save(db,predicate,set_id,expected,document):
+            self.assertIs(expected,retained['row'])
+            retained['row']=SimpleNamespace(revision=1 if expected is None else expected.revision+1,
+                nonce=b'n'*32,document=json.dumps(document).encode())
+            return retained['row']
+        source.journal.write.side_effect=save
+        config=self.f['groupPolicy'];predicate=config['predicate'];group=config['setId']
+        create_args=(self.tenant,self.owner,self.object,self.now,predicate,group)
+        creation=source.creation_view(*create_args)
+        source.create(*create_args,creation['fence'],config)
+        keys=GroupKeySource(source)
+        args=(self.tenant,self.owner,self.now,predicate,group)
+        view=keys.view(*args);command=self.f['groupKeyEpoch']
+        self.assertEqual(view['snapshot'],command['document']['snapshot'])
+        malformed=json.loads(json.dumps(command));malformed['document']['manifest']['signature']='0'*128
+        with self.assertRaises(AdmissionRejected):keys.append(*args,view['fence'],malformed)
+        self.assertTrue(keys.append(*args,view['fence'],command))
+        state=keys.state(*args,command);self.assertEqual(state['state'],'applied')
+        self.assertTrue(keys.append(*args,state['fence'],command))
+        def selected():
+            with self.store._transaction(write=False) as db:
+                _,doc,snapshot,policy=keys._load(db,self.tenant,self.owner,self.now,predicate,group)
+                return keys.native.matches_settled(json.dumps(keys._history(doc,snapshot,policy,self.now)).encode())
+        self.assertFalse(selected())
+        self.now+=3600
+        self.assertTrue(selected())
+        # A current membership change invalidates the old group key snapshot.
+        self.now-=3600
+        members=GroupMembership(source)
+        member_args=(*args,self.owner)
+        invite=members.view(*member_args,'set',1)
+        members.append(*member_args,'set',invite['fence'],self.f['groupInvitations'][0])
+        join=members.view(*member_args,'member',1)
+        members.append(*member_args,'member',join['fence'],self.f['groupMemberRows'][0])
+        self.now+=3600
+        self.assertFalse(selected())
+
     def test_native_independent_group_creation_requires_current_owner_signature(self):
         from unittest.mock import Mock
         from group_source import GroupSource

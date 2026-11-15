@@ -147,7 +147,7 @@ function admittedCohort(accounts,contextFor,now,input,requireEncryption) {
     const diagnostics=[],head=resolveStoreAccount(account.principal,account.rotations,contextFor(account,now),diagnostics);
     if(account.frozen||diagnostics.length||!head.bindingEpub||(requireEncryption&&!head.currentEpub)||head.rotations.length!==account.rotations.length||
         account.entries.some(row=>row.issuedAt>now))throw Error('invalid-group-history');
-    bindings.set(account.principal,{pub:head.currentKey,epub:head.currentEpub});
+    bindings.set(account.principal,{pub:head.currentKey,epub:head.currentEpub,head:head.rotations.at(-1)?.seq??0});
   }
   const graph=new MemoryGroupGraph();
   for(const envelope of input.rows) {
