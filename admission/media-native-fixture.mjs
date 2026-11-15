@@ -51,9 +51,9 @@ const groupEdges=[1,0].map((stated,index)=>{
   if(!signed.ok)throw Error(signed.reason);
   return {kind:'object-set',soul:objectSetSoul(row.owner,object,row.predicate,row.set),record:{...row,sig:signed.value}};
 });
-const groupInvitations=[1,0].map((stated,index)=>{
+const groupInvitations=[1,0].map((stated)=>{
   const row={role:'set',predicate:groupPolicy.predicate,set:groupPolicy.setId,member:f.genesis,
-    setOwner:f.genesis,stated,hamState:index+1,issuedAt:f.now,cancels:[]};
+    setOwner:f.genesis,stated,hamState:1,issuedAt:f.now,cancels:[]};
   const signed=signWithKeyring(key,membershipAssentBytes(row),f.genesis);
   if(!signed.ok)throw Error(signed.reason);
   return {kind:'membership',soul:membershipSoul(row.setOwner,row.predicate,row.set,row.member),record:{...row,sig:signed.value}};
