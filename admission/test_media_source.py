@@ -64,11 +64,13 @@ class MediaSourceContracts(TestCase):
 
     def test_group_item_grant_bridge_keeps_fixed_arguments_and_bounded_worker(self):
         with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource'), patch('group_item_grants.GroupItemGrants') as grants:
-            source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True
+            source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True;source.state.return_value={'state':'applied'}
             self.assertEqual(asyncio.run(self.source.group_item_grant_view(TENANT,'owner',OBJECT,'same-group','set_test','reader',False)),{'at':100})
             self.assertTrue(asyncio.run(self.source.append_group_item_grant(TENANT,'owner',OBJECT,'same-group','set_test',100,'f',{})))
             self.assertEqual(source.view.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader',False))
             self.assertEqual(source.append.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test',100,'f',{}))
+            self.assertEqual(asyncio.run(self.source.group_item_grant_state(TENANT,'owner',OBJECT,'same-group','set_test',{})),{'state':'applied'})
+            self.assertEqual(source.state.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test',{}))
             self.assertTrue(callable(source.append.call_args.kwargs['cancel']))
 
     def test_group_grant_capacity_is_preserved_across_ordinary_writes_and_rollback(self):

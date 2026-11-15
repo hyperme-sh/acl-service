@@ -120,3 +120,21 @@ class GroupItemGrantTests(TestCase):
             with self.assertRaises(AdmissionRejected):reserve(bad)
         bad=deepcopy(self.doc);bad['groupItemGrants']['padding']='x'*(1024*1024)
         with self.assertRaises(AdmissionRejected):reserve(bad)
+
+
+    def test_exact_retention_can_be_reconciled_after_expiry_or_owner_rotation(self):
+        view=self.view_grant();payload={'claims':view['grant'],'proof':{'signature':'signed'}}
+        state=lambda:self.source.state('tenant','owner','media','same-group','set',payload)
+        self.assertEqual(state(),{'at':100,'state':'absent','frozen':False})
+        self.append(view);self.media.clock=lambda:200
+        self.ids['bindings']['owner']['pub']='rotated'
+        self.media.native[0].matches_grant.return_value=False
+        self.assertEqual(state(),{'at':200,'state':'applied','frozen':False})
+        self.doc['groupItemGrants']['frozen'].append(grant_key('same-group','set','reader'))
+        self.assertTrue(state()['frozen'])
+        payload['proof']={'signature':'altered'}
+        with self.assertRaises(AdmissionRejected):state()
+        self.media.native[0].matches_grant.return_value=True
+        self.assertEqual(state()['state'],'applied')
+        payload['claims']={**payload['claims'],'grantRevision':2}
+        self.assertEqual(state()['state'],'absent')

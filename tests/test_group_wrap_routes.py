@@ -18,7 +18,8 @@ PATH='/acl/sociacl/media/groups/'
 @pytest.fixture
 def setup(monkeypatch):
     tenant=uuid4();user=SimpleNamespace(sub='session',scopes=['acl:media:read','acl:media:write'])
-    authority=SimpleNamespace(group_item_grant_view=AsyncMock(return_value={'at':100}),
+    authority=SimpleNamespace(group_item_grant_state=AsyncMock(return_value={'at':100,'state':'applied','frozen':False}),
+                              group_item_grant_view=AsyncMock(return_value={'at':100}),
                               append_group_item_grant=AsyncMock(return_value=True),
                               group_item_authority_view=AsyncMock(return_value={'at':100,'projection':None,'fence':'c'*64}),
                               group_wrap_view=AsyncMock(return_value={'fence':'a'*64}),
@@ -187,3 +188,16 @@ async def test_group_item_grants_bind_owner_validate_bodies_and_sanitize_refusal
         result=await client.post(PATH+'item-grant-append',json=append)
         assert result.status_code==409 and 'private journal' not in result.text
         s.publish.assert_not_awaited();s.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_item_grant_reconciliation_is_fixed_owner_and_read_only(setup):
+    s=setup;body={**RECORD,'object':'media_owner_item','payload':{'claims':{},'proof':{}}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        result=await client.post(PATH+'item-grant-state',json=body)
+        assert result.status_code==200 and result.json()=={'at':100,'state':'applied','frozen':False}
+        s.authority.group_item_grant_state.assert_awaited_once_with(str(s.tenant),'fixed-reader',body['object'],RECORD['predicate'],RECORD['set'],body['payload'])
+        assert (await client.post(PATH+'item-grant-state',json={**body,'payload':[]})).status_code==400
+        s.user.scopes=['acl:media:read']
+        assert (await client.post(PATH+'item-grant-state',json=body)).status_code==403
+        s.authority.append_group_item_grant.assert_not_awaited()

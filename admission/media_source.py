@@ -1465,6 +1465,10 @@ class MediaSource:
     async def group_item_grant_view(self,tenant,owner,object,predicate,set_id,reader,withdraw):
         return await self._group_item_grant_work('view',tenant,owner,object,predicate,set_id,reader,withdraw)
 
+    async def group_item_grant_state(self,tenant,owner,object,predicate,set_id,payload):
+        payload=json.loads(encoded(payload))
+        return await self._group_item_grant_work('state',tenant,owner,object,predicate,set_id,payload)
+
     async def append_group_item_grant(self,tenant,owner,object,predicate,set_id,at,fence,payload):
         payload=json.loads(encoded(payload))
         return await self._group_item_grant_work('append',tenant,owner,object,predicate,set_id,at,fence,payload)

@@ -41,6 +41,19 @@ def version_reserve(document):
     return sum(1+(claims['stated']==1) for key,claims in current.items() if key not in held['frozen'])
 
 
+def parse_payload(payload,object,owner):
+    if type(payload) is not dict or set(payload)!={'claims','proof'} or len(encoded(payload))>4096:
+        raise AdmissionRejected('invalid group item grant')
+    payload=json.loads(encoded(payload));claims=payload['claims']
+    if (type(claims) is not dict or set(claims)!=CLAIMS or claims['object']!=object or claims['owner']!=owner or
+            type(claims['accessor']) is not str or not 1<=len(claims['accessor'])<=1024 or
+            any(type(claims[k]) is not int or not 0<=claims[k]<=MAX_SAFE for k in ('from','until','stated','epoch','grantRevision')) or
+            claims['stated'] not in (0,1) or claims['until']<=claims['from'] or claims['epoch']<1 or claims['grantRevision']<1 or
+            type(claims['itemCiphertextDigest']) is not str or re.fullmatch('[a-f0-9]{64}',claims['itemCiphertextDigest']) is None):
+        raise AdmissionRejected('invalid group item grant claims')
+    return payload
+
+
 class GroupItemGrants:
     def __init__(self,items):
         self.items,self.media,self.store=items,items.media,items.store
@@ -89,17 +102,23 @@ class GroupItemGrants:
         with self.store._transaction(write=False,before_commit=guard) as db:
             return self._draft(db,tenant,owner,object,at,predicate,set_id,reader,withdraw)[0]
 
+    def state(self,tenant,owner,object,predicate,set_id,payload,cancel=lambda:None):
+        payload=parse_payload(payload,object,owner);claims=payload['claims']
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            _,doc,ids=self._owner(db,tenant,owner,object,at,predicate,set_id)
+            held=journal(doc)
+            retained=next((r for r in held['rows'] if (r['predicate'],r['set'])==(predicate,set_id)
+                and encoded(r['claims'])==encoded(claims)),None)
+            exact=retained is not None and encoded(retained['proof'])==encoded(payload['proof'])
+            if not exact and not self.media.native[0].matches_grant(encoded(payload['proof']),encoded({**claims,'ownerPub':ids['bindings'][owner]['pub']})):
+                raise AdmissionRejected('group item grant signature refused')
+            return {'at':at,'state':'applied' if retained else 'absent',
+                    'frozen':grant_key(predicate,set_id,claims['accessor']) in held['frozen']}
+
     def append(self,tenant,owner,object,predicate,set_id,at,fence,payload,cancel=lambda:None):
         guard=lambda:self.media._guard(at,cancel);guard()
-        if type(payload) is not dict or set(payload)!={'claims','proof'} or len(encoded(payload))>4096:
-            raise AdmissionRejected('invalid group item grant')
-        payload=json.loads(encoded(payload));claims=payload['claims']
-        if (type(claims) is not dict or set(claims)!=CLAIMS or claims['object']!=object or claims['owner']!=owner or
-                type(claims['accessor']) is not str or not 1<=len(claims['accessor'])<=1024 or
-                any(type(claims[k]) is not int or not 0<=claims[k]<=MAX_SAFE for k in ('from','until','stated','epoch','grantRevision')) or
-                claims['stated'] not in (0,1) or claims['until']<=claims['from'] or claims['epoch']<1 or claims['grantRevision']<1 or
-                type(claims['itemCiphertextDigest']) is not str or re.fullmatch('[a-f0-9]{64}',claims['itemCiphertextDigest']) is None):
-            raise AdmissionRejected('invalid group item grant claims')
+        payload=parse_payload(payload,object,owner);claims=payload['claims']
         frozen=False
         with self.store._transaction(write=True,before_commit=guard) as db:
             row,doc,ids=self._owner(db,tenant,owner,object,at,predicate,set_id)

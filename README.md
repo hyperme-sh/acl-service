@@ -1258,3 +1258,11 @@ fork permanently freezes that scoped recipient and preserves the conflicting
 record. The journal reserves cancellation/fork space and object versions across
 ordinary media writes. These grants still require current group-aware epoch,
 status and wrap admission before delivery; neither endpoint publishes bytes.
+
+`item-grant-state` accepts `{object, predicate, set, payload}` and reports
+`{at, state, frozen}` for interruption recovery. Exact retained proofs remain
+queryable after the write window or owner key rotation; alternative proofs must
+verify against the current owner key. An applied result confirms retention only,
+including cancelled or frozen history. It neither refreshes a signature nor
+creates a delivery grant. Saved absent commands must retain their original
+write time and fence; an expired command is not silently re-signed.
