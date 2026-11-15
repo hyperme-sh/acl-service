@@ -984,3 +984,14 @@ The response contains separate admitted consent state and a member-only unsigned
 The caller must choose `stated` before signing. No member write, epoch, direct
 grant, wrap or delivery is performed by this route. Member append capacity and
 group-wide epoch delivery remain separate unfinished work.
+
+New group journal writes reserve one canonical `stated: 0` row for each party's
+active assent and each active object-set edge, within both the per-scope row
+limit and aggregate byte limit. Equal-HAM withdrawal wins under native ordering,
+including at the maximum safe HAM value. A withdrawal may use an empty cancel
+list because stated 0 removes assent independently of cancellation observation.
+The protected document also reserves the remaining bounded group envelope so
+ordinary direct-media writes cannot consume that space. Existing journals keep
+their prior direct-unshare budget until a group write can adopt this rule
+atomically. These are capacity guarantees, not membership or delivery authority;
+current histories and signatures still must pass admission.

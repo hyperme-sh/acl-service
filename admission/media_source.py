@@ -239,6 +239,7 @@ class MediaSource:
                 if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
                 doc['objectVersion']+=1
                 scopes[key]=candidate
+                doc['groupWithdrawalCapacity']=True
                 self._save(db,object,held,doc)
         return True
 
@@ -350,17 +351,54 @@ class MediaSource:
         if at >= doc['policyUntil']: raise AdmissionRejected('media policy expired')
         return row,doc
 
+    @staticmethod
+    def _group_withdrawal_capacity(scopes):
+        """Reserve canonical stated-0 rows for party assents and object-set edges.
+
+        Rows were natively admitted before storage. HAM ties prefer stated 0;
+        signature-byte tie breaks cannot change the reserved stated value.
+        A withdrawal need not acknowledge cancellation IDs to remove assent.
+        """
+        reserve=0
+        for rows in scopes.values():
+            winners={}
+            for envelope in rows:
+                kind=envelope.get('kind')
+                if kind not in ('membership','object-set'):continue
+                record=envelope['record']
+                key=(kind,record['predicate'],record['set'],record['member'],record['role']) if kind=='membership' else (kind,record['object'])
+                order=(record['hamState'],-record['stated'])
+                if key not in winners or order>winners[key][0]:winners[key]=(order,envelope)
+            count=0
+            for _,envelope in winners.values():
+                record=envelope['record']
+                if record['stated']!=1:continue
+                fields=('role','predicate','set','member','setOwner','hamState') if envelope['kind']=='membership' else ('owner','object','predicate','set','hamState')
+                withdrawal={key:record[key] for key in fields}
+                withdrawal.update(stated=0,issuedAt=9007199254740991,cancels=[],sig='0'*128)
+                reserve+=len(encoded({'kind':envelope['kind'],'soul':envelope['soul'],'record':withdrawal}))+1
+                count+=1
+            if len(rows)+count>1024:raise AdmissionRejected('group withdrawal row capacity')
+        if len(encoded(scopes))+reserve>512*1024:raise AdmissionRejected('group withdrawal byte capacity')
+
     def _save(self, db, object, row, doc):
         raw=encoded(doc)
         reserve=0
         if doc.get('groupScopes'):
             if len(encoded(doc['groupScopes']))>512*1024: raise AdmissionRejected('aggregate group capacity')
-            # A cancellation payload is at most 16 KiB, plus retained metadata.
+            # New group writes reserve the whole bounded group envelope so later
+            # ordinary media writes cannot consume withdrawal space. Existing
+            # journals retain their direct-removal budget until a group write
+            # can adopt the stronger capacity rule atomically.
+            # A direct cancellation payload is at most 16 KiB, plus metadata.
             # Keep all remaining cancellation slots and the deletion tombstone
             # writable even after later ordinary direct-media mutations.
             if 'deletion' not in doc:
+                if doc.get('groupWithdrawalCapacity') is True:
+                    self._group_withdrawal_capacity(doc['groupScopes'])
+                    reserve=512*1024-len(encoded(doc['groupScopes']))
                 cancellations=sum(row['claims']['stated']==0 for row in doc['grants'])
-                reserve=max(0,64-cancellations)*17*1024+4096
+                reserve+=max(0,64-cancellations)*17*1024+4096
         if len(raw)+reserve>6*1024*1024: raise AdmissionRejected('media capacity')
         updated=(row[0]+1,row[1],raw)
         db.execute('UPDATE media_sources SET revision=?,nonce=?,document=? WHERE object=?',(*updated,object))

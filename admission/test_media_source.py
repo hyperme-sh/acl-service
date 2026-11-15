@@ -61,6 +61,12 @@ class MediaSourceContracts(TestCase):
         def cancel():raise AdmissionRejected('cancelled')
         with self.assertRaises(AdmissionRejected):self.source.group_consent_view(TENANT,'reader',OBJECT,100,'same-group','set_test',cancel)
 
+    @staticmethod
+    def group_member_row():
+        return {'kind':'membership','soul':'membership-soul','record':{'role':'member','predicate':'same-group',
+            'set':'set_test','member':'reader','setOwner':'owner','hamState':1,'stated':1,
+            'issuedAt':100,'cancels':[],'sig':'signed'}}
+
     def group_fixture(self):
         def verify(principal,at,**inputs):
             graph=inputs['groupGraph']
@@ -214,7 +220,7 @@ class MediaSourceContracts(TestCase):
 
     def test_group_append_reconciliation_is_exact_current_and_read_only(self):
         view=self.group_fixture()
-        rows=[{'kind':'object'},{'kind':'membership'}]
+        rows=[{'kind':'object'},self.group_member_row()]
         check=lambda values=rows:self.source.group_append_state(TENANT,'owner',OBJECT,100,'same-group','set_test',values)
         first=view();self.assertEqual(check()['state'],'absent');self.assertEqual(view()['fence'],first['fence'])
         self.source.append_group(TENANT,'owner',OBJECT,100,first['fence'],'same-group','set_test',rows[:1])
@@ -222,7 +228,7 @@ class MediaSourceContracts(TestCase):
         held=check();self.source.append_group(TENANT,'owner',OBJECT,100,held['fence'],'same-group','set_test',rows)
         applied=check();self.assertEqual(applied['state'],'applied')
         self.assertEqual(check(rows+rows)['state'],'applied')
-        self.assertEqual(check([{'kind':'membership','changed':True}])['state'],'absent')
+        self.assertEqual(check([{**self.group_member_row(),'changed':True}])['state'],'absent')
         self.assertEqual(view()['fence'],applied['fence'])
         current=asyncio.run(self.source.owner_group_append_state(TENANT,'owner',OBJECT,'same-group','set_test',rows))
         self.assertEqual(current,{'at':100,**applied})
@@ -268,7 +274,7 @@ class MediaSourceContracts(TestCase):
     def test_group_journal_retains_cancellation_and_rejects_stale_writes(self):
         view=self.group_fixture()
         first=view();self.assertIsNone(first['projection'])
-        rows=[{'kind':'object'},{'kind':'membership'},{'kind':'cancel'}]
+        rows=[{'kind':'object'},self.group_member_row(),{'kind':'cancel'}]
         self.source.append_group(TENANT,'owner',OBJECT,100,first['fence'],'same-group','set_test',rows)
         current=view();self.assertEqual(current['rows'],rows)
         self.assertEqual(current['projection']['members'],[])
@@ -317,7 +323,7 @@ class MediaSourceContracts(TestCase):
         self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
         with self.store._transaction(write=True) as db:
             row,doc=self.source._load(db,OBJECT,100)
-            doc['padding']='x'*(6*1024*1024-64*17*1024-4096-len(encoded(doc))-100)
+            doc['padding']='x'*(6*1024*1024-512*1024-64*17*1024-4096-len(encoded(doc))-100)
             self.source._save(db,OBJECT,row,doc)
         self.mutate('grant',self.grant(stated=0,grantRevision=2))
         self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'][0]['stated'],0)
@@ -328,6 +334,69 @@ class MediaSourceContracts(TestCase):
             doc['padding']=doc['padding'][:-18000]
             doc['deletion']={'command':'deleted'}
             self.source._save(db,OBJECT,row,doc)
+
+    def test_legacy_group_capacity_does_not_block_direct_withdrawal(self):
+        view=self.group_fixture()
+        self.mutate('grant',self.grant())
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[{}])
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc.pop('groupWithdrawalCapacity')
+            doc['padding']='x'*(6*1024*1024-64*17*1024-4096-len(encoded(doc))-100)
+            self.source._save(db,OBJECT,row,doc)
+        self.mutate('grant',self.grant(stated=0,grantRevision=2))
+        self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'][0]['stated'],0)
+        # A new group write cannot silently adopt a reservation that does not fit.
+        before=view()['fence']
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(TENANT,'owner',OBJECT,100,before,'same-group','set_test',[{'new':'row'}])
+        self.assertEqual(view()['fence'],before)
+
+    def test_group_capacity_reserves_both_parties_and_withdrawals_release_their_slots(self):
+        def assent(role,stated=1,ham=1):
+            return {'kind':'membership','soul':'membership-soul','record':{'role':role,'predicate':'same-group',
+                'set':'set_test','member':'reader','setOwner':'owner','hamState':ham,'stated':stated,
+                'issuedAt':100,'cancels':[],'sig':'signed'}}
+        # One-sided invitations also retain a set-owner withdrawal slot.
+        rows=[assent('set')]+[{}]*1022
+        self.source._group_withdrawal_capacity({'scope':rows})
+        with self.assertRaises(AdmissionRejected):self.source._group_withdrawal_capacity({'scope':rows+[{}]})
+        self.source._group_withdrawal_capacity({'scope':rows+[assent('set',0)]})
+        # Both parties need independent slots; neither can consume the other's.
+        rows=[assent('set'),assent('member')]+[{}]*1020
+        self.source._group_withdrawal_capacity({'scope':rows})
+        with self.assertRaises(AdmissionRejected):self.source._group_withdrawal_capacity({'scope':rows+[{}]})
+        self.source._group_withdrawal_capacity({'scope':rows+[assent('member',0),assent('set',0)]})
+        # Older withdrawals do not erase a newer active assent's reservation.
+        rows=[assent('member',0),assent('member',1,2)]+[{}]*1022
+        with self.assertRaises(AdmissionRejected):self.source._group_withdrawal_capacity({'scope':rows})
+        # Equal-HAM withdrawal wins in either input order, including MAX_SAFE_INTEGER.
+        for pair in ([assent('set',1,9007199254740991),assent('set',0,9007199254740991)],
+                     [assent('set',0,9007199254740991),assent('set',1,9007199254740991)]):
+            self.source._group_withdrawal_capacity({'scope':pair+[{}]*1022})
+
+    def test_group_capacity_also_reserves_object_set_withdrawal(self):
+        record={'owner':'owner','object':OBJECT,'predicate':'same-group','set':'set_test',
+            'hamState':1,'stated':1,'issuedAt':100,'cancels':[],'sig':'signed'}
+        edge={'kind':'object-set','soul':'edge-soul','record':record}
+        rows=[edge]+[{}]*1022
+        self.source._group_withdrawal_capacity({'scope':rows})
+        with self.assertRaises(AdmissionRejected):self.source._group_withdrawal_capacity({'scope':rows+[{}]})
+        self.source._group_withdrawal_capacity({'scope':rows+[{**edge,'record':{**record,'stated':0}}]})
+
+    def test_group_capacity_reserves_bytes_across_scopes_before_atomic_save(self):
+        view=self.group_fixture()
+        record={'role':'member','predicate':'same-group','set':'set_test','member':'reader','setOwner':'owner',
+                'hamState':1,'stated':1,'issuedAt':100,'cancels':[],'sig':'signed'}
+        envelope={'kind':'membership','soul':'membership-soul','record':record}
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[envelope])
+        before=view()['fence']
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            scopes=doc['groupScopes'];scopes['other']=[{'padding':''}]
+            scopes['other'][0]['padding']='x'*(512*1024-len(encoded(scopes))-10)
+            with self.assertRaises(AdmissionRejected):self.source._save(db,OBJECT,row,doc)
+        self.assertEqual(view()['fence'],before)
 
     def test_group_journal_aggregate_byte_limit_rolls_back(self):
         view=self.group_fixture()
