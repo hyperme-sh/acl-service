@@ -80,6 +80,15 @@ class MediaSourceContracts(TestCase):
             self.assertEqual(items.return_value.commit_read.call_args.args,(permit,))
             self.assertTrue(callable(items.return_value.commit_read.call_args.kwargs['cancel']))
 
+    def test_group_item_status_bridge_keeps_owner_scope(self):
+        with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource') as items:
+            source=items.return_value;source.status_view.return_value={'at':100};source.append_status.return_value=True
+            self.assertEqual(asyncio.run(self.source.group_item_status_view(TENANT,'owner',OBJECT,'same-group','set_test','reader')),{'at':100})
+            self.assertEqual(source.status_view.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader'))
+            self.assertTrue(asyncio.run(self.source.append_group_item_status(TENANT,'owner',OBJECT,'same-group','set_test','reader',100,'f',{})))
+            self.assertEqual(source.append_status.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader',100,'f',{}))
+            self.assertTrue(callable(source.append_status.call_args.kwargs['cancel']))
+
     def test_group_item_grant_bridge_keeps_fixed_arguments_and_bounded_worker(self):
         with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource'), patch('group_item_grants.GroupItemGrants') as grants:
             source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True;source.state.return_value={'state':'applied'}

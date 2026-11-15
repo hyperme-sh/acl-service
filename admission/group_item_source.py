@@ -270,11 +270,8 @@ class GroupItemSource:
         if len(entries)>64:raise AdmissionRejected('group item snapshot capacity')
         return {'entries':[entries[who] for who in sorted(entries)],'objectSet':projection['snapshot']['objectSet']}
 
-    def _read_permit(self,db,tenant,reader,object,predicate,set_id,at,expires=None,key_expires=None):
+    def _read_context(self,db,tenant,reader,object,predicate,set_id,at,key_expires=None):
         from group_item_grants import journal,latest,grant_key
-        from acl_service.domain.group_item_delivery import GroupItemReadPermit
-        from acl_service.infrastructure.authority_checkpoint import authority_digest
-        import re
         if tenant!=self.media.tenant:raise AdmissionRejected('wrong group item tenant')
         _,doc=self.media._load(db,object,at);ids=self.media.identities(db,object,doc,at)
         view,row,doc,ids,current=self._authority(db,tenant,ids['owner'],object,at)
@@ -307,6 +304,15 @@ class GroupItemSource:
                 break
         if selected is None or claims['epoch']!=selected['epoch']:
             raise AdmissionRejected('current settled group item epoch required')
+        return key,selected,claims,ids,row,doc,group,view
+
+    def _read_permit(self,db,tenant,reader,object,predicate,set_id,at,expires=None,key_expires=None):
+        from group_item_grants import grant_key
+        from acl_service.domain.group_item_delivery import GroupItemReadPermit
+        from acl_service.infrastructure.authority_checkpoint import authority_digest
+        import re
+        key,selected,claims,ids,row,doc,group,_=self._read_context(db,tenant,reader,object,predicate,set_id,at,key_expires)
+        owner_pub=ids['bindings'][ids['owner']]['pub']
         status=doc.get('groupItemStatuses',{}).get(grant_key(predicate,set_id,reader))
         expected={'ownerPub':owner_pub,'object':object,'epoch':selected['epoch'],'revisionId':selected['revisionId'],
             'accessor':reader,'grantRevision':claims['grantRevision'],'stated':1,
@@ -353,4 +359,51 @@ class GroupItemSource:
             for who,binding in ids['bindings'].items():self.store._observe_floor(db,who,binding['head'])
             if permit.item_epoch>doc['floor']:
                 doc['floor']=permit.item_epoch;self.media._save(db,permit.object,row,doc)
+        return True
+
+
+    def _status_context(self,db,tenant,owner,object,predicate,set_id,reader,at):
+        from acl_service.domain.history_store import HistoryConflict
+        _,doc=self.media._load(db,object,at)
+        ids=self.media.identities(db,object,doc,at)
+        if tenant!=self.media.tenant or ids['owner']!=owner:
+            raise AdmissionRejected('group item status owner required')
+        key,selected,claims,ids,row,doc,group,view=self._read_context(db,tenant,reader,object,predicate,set_id,at)
+        status={'object':object,'epoch':selected['epoch'],'revisionId':selected['revisionId'],
+            'accessor':reader,'grantRevision':claims['grantRevision'],'stated':1,
+            'signedAt':at*1000,'maxAgeMs':min(60000,(doc['policyUntil']-at)*1000,
+                (group['policyUntil']-at)*1000,claims['until']-at*1000),
+            'zookie':{'object':object,'objectVersion':doc['objectVersion'],'snapshotHash':selected['aclSnapshot']}}
+        if status['maxAgeMs']<=0:raise HistoryConflict('group item status expired')
+        fields=['group-item-status-v1',tenant,owner,object,predicate,set_id,reader,at,
+            view['fence'],status]
+        fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+        return {'at':at,'fence':fence,'ownerPub':ids['bindings'][owner]['pub'],'status':status},row,doc
+
+    def status_view(self,tenant,owner,object,predicate,set_id,reader,cancel=lambda:None):
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            return self._status_context(db,tenant,owner,object,predicate,set_id,reader,at)[0]
+
+    def append_status(self,tenant,owner,object,predicate,set_id,reader,at,fence,payload,cancel=lambda:None):
+        from group_item_grants import grant_key
+        from acl_service.domain.history_store import HistoryConflict
+        if type(payload) is not dict or len(encoded(payload))>4096:
+            raise AdmissionRejected('invalid group item status')
+        payload=json.loads(encoded(payload));guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            plan,row,doc=self._status_context(db,tenant,owner,object,predicate,set_id,reader,at)
+            if type(fence) is not str or not hmac.compare_digest(fence,plan['fence']):
+                raise HistoryConflict('group item status authority changed')
+            status=plan['status']
+            expected={key:status[key] for key in ('object','epoch','revisionId','accessor','grantRevision','stated','zookie')}
+            expected['ownerPub']=plan['ownerPub']
+            if (payload.get('signedAt')!=status['signedAt'] or payload.get('maxAgeMs')!=status['maxAgeMs'] or
+                    not self.media.native[1].matches_status(encoded(payload),encoded(expected),
+                        now_ms=at*1000,skew_ms=0,policy_max_age_ms=60000)):
+                raise AdmissionRejected('current group item status refused')
+            statuses=doc.setdefault('groupItemStatuses',{});key=grant_key(predicate,set_id,reader)
+            if key not in statuses and len(statuses)>=64:raise AdmissionRejected('group item status capacity')
+            if statuses.get(key)!=payload:
+                statuses[key]=payload;self.media._save(db,object,row,doc)
         return True

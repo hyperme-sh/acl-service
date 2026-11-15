@@ -1470,6 +1470,13 @@ class MediaSource:
             return getattr(source,action)(*args,cancel=cancel)
         return await self._work(run)
 
+    async def group_item_status_view(self,tenant,owner,object,predicate,set_id,reader):
+        return await self._group_item_read_work('status_view',tenant,owner,object,predicate,set_id,reader)
+
+    async def append_group_item_status(self,tenant,owner,object,predicate,set_id,reader,at,fence,payload):
+        payload=json.loads(encoded(payload))
+        return await self._group_item_read_work('append_status',tenant,owner,object,predicate,set_id,reader,at,fence,payload)
+
     async def authorize_group_item_read(self,tenant,reader,object,predicate,set_id):
         return await self._group_item_read_work('authorize_read',tenant,reader,object,predicate,set_id)
 
