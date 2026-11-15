@@ -385,6 +385,25 @@ class GroupItemSource:
         with self.store._transaction(write=False,before_commit=guard) as db:
             return self._status_context(db,tenant,owner,object,predicate,set_id,reader,at)[0]
 
+    def _retained_status(self,db,tenant,owner,object,predicate,set_id,reader,payload,at):
+        from group_item_grants import grant_key
+        if type(payload) is not dict or len(encoded(payload))>4096:
+            raise AdmissionRejected('invalid group item status')
+        self.media._group_key(predicate,set_id)
+        _,doc=self.media._load(db,object,at);ids=self.media.identities(db,object,doc,at)
+        if tenant!=self.media.tenant or owner!=ids['owner']:
+            raise AdmissionRejected('group item status owner required')
+        held=doc.get('groupItemStatuses',{}).get(grant_key(predicate,set_id,reader))
+        # Confirmation of retained bytes is not a current access decision.
+        return held is not None and held==payload
+
+    def status_state(self,tenant,owner,object,predicate,set_id,reader,payload,cancel=lambda:None):
+        payload=json.loads(encoded(payload));at=int(self.media.clock())
+        guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            retained=self._retained_status(db,tenant,owner,object,predicate,set_id,reader,payload,at)
+            return {'at':at,'state':'applied' if retained else 'absent'}
+
     def append_status(self,tenant,owner,object,predicate,set_id,reader,at,fence,payload,cancel=lambda:None):
         from group_item_grants import grant_key
         from acl_service.domain.history_store import HistoryConflict
@@ -392,6 +411,7 @@ class GroupItemSource:
             raise AdmissionRejected('invalid group item status')
         payload=json.loads(encoded(payload));guard=lambda:self.media._guard(at,cancel);guard()
         with self.store._transaction(write=True,before_commit=guard) as db:
+            if self._retained_status(db,tenant,owner,object,predicate,set_id,reader,payload,at):return True
             plan,row,doc=self._status_context(db,tenant,owner,object,predicate,set_id,reader,at)
             if type(fence) is not str or not hmac.compare_digest(fence,plan['fence']):
                 raise HistoryConflict('group item status authority changed')

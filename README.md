@@ -1355,3 +1355,8 @@ its current joint fence, exact signing time and lifetime, owner signature and
 object-version snapshot; it keeps at most 64 statuses without advancing the
 object version. It does not require a previously published wrap, avoiding a
 status/publication dependency cycle. Status HTTP routes remain uninstalled.
+
+Exact status retries confirm checkpointed identical bytes before comparing the
+old preparation fence. `group_item_status_state` reconciles retained bytes after
+the signing window or current access has changed; an applied result never means
+that the status is still fresh or grants current access.

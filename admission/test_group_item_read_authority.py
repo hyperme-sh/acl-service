@@ -138,6 +138,25 @@ class GroupItemReadAuthorityTests(TestCase):
         self.assertEqual(self.doc['groupItemStatuses'][grant_key('same-group','set','reader')],payload)
         self.media._save.reset_mock();self.assertTrue(self.source.append_status(*args));self.media._save.assert_not_called()
 
+    def test_lost_status_reply_reconciles_changed_fence_and_expired_authority(self):
+        plan=self.source.status_view('tenant','owner','media','same-group','set','reader')
+        payload={**plan['status'],'signature':'signed'}
+        scope=('tenant','owner','media','same-group','set','reader')
+        self.assertEqual(self.source.status_state(*scope,payload)['state'],'absent')
+        def save(*args):
+            self.row=(2,b'n'*32,b'new protected bytes')
+            self.source._authority.side_effect=AssertionError('old authority must not be re-prepared')
+        self.media._save.side_effect=save
+        self.assertTrue(self.source.append_status(*scope,100,plan['fence'],payload))
+        self.assertTrue(self.source.append_status(*scope,100,plan['fence'],payload))
+        self.media._save.assert_called_once()
+        self.now=1000;self.claims['stated']=0;self.ids['bindings']['owner']['pub']='rotated'
+        self.assertEqual(self.source.status_state(*scope,payload),{'at':1000,'state':'applied'})
+        self.assertEqual(self.source.status_state(*scope,{**payload,'signature':'different'})['state'],'absent')
+        for tenant,owner in [('other','owner'),('tenant','reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.status_state(tenant,owner,*scope[2:],payload)
+        with self.assertRaises(AdmissionRejected):self.source.status_state(*scope,[])
+
     def test_status_owner_signature_fence_and_capacity_refuse(self):
         for case in ['owner','tenant','fence','signature','signedAt','maxAge','capacity','expired-policy']:
             with self.subTest(case=case):
