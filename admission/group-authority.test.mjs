@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
 import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
-import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority} from './group-authority.mjs';
 const now=1700000060;
 const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
@@ -138,4 +138,15 @@ test('consent preparation is member-specific and requires a current invitation',
    {...input([...rows(),assent('set',0,2)]),member},{...input([...rows(),cancel()]),member},
    {...input([owned,assent('set',1,Number.MAX_SAFE_INTEGER)]),member}])assert.throws(()=>prepare(value));
  const frozen=new Map(accounts);frozen.set(member,{...accounts.get(member),frozen:true});assert.throws(()=>prepare(undefined,frozen));
+});
+
+test('withdrawal preparation needs only the member assent, including maximum HAM',()=>{
+ const prepare=(value)=>groupWithdrawalAuthority(accounts,contextFor,now,{...value,member});
+ const held=prepare(input([owned,assent('member',1,Number.MAX_SAFE_INTEGER),assent('set',0,2)]));
+ assert.equal(held.memberPub,member);assert.equal(held.draft.hamState,Number.MAX_SAFE_INTEGER);
+ assert.deepEqual(held.draft.cancels,[]);assert.equal(held.draft.role,'member');
+ assert.equal(prepare(input([owned,assent('member'),cancel()])).draft.hamState,1);
+ for(const value of [input([owned]),input([owned,assent('set')]),input([owned,assent('member',0,2)])])assert.throws(()=>prepare(value));
+ assert.throws(()=>groupWithdrawalAuthority(accounts,contextFor,now,null));
+ assert.throws(()=>groupWithdrawalAuthority(accounts,contextFor,now,{...input(),member:pub(4)}));
 });

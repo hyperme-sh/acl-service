@@ -254,3 +254,48 @@ async def test_group_consent_view_uses_fixed_reader_and_cannot_deliver_or_write(
         assert (await client.post(url,json=body)).status_code==403
     s.authority.authorize_read.assert_not_awaited()
     s.store.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_member_consent_write_requires_write_scope_and_fixed_reader(setup):
+    s=setup
+    s.authority.member_append_group=AsyncMock(return_value=True)
+    body={'object':'media-object','predicate':'same-group','set':'set_test','at':100,'fence':'a'*64,'row':{'signed':True}}
+    url='/acl/sociacl/media/group-consent-append'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        assert (await client.post(url,json=body)).status_code==403
+        s.authority.member_append_group.assert_not_awaited()
+        s.actor.scopes.append('acl:media:write')
+        response=await client.post(url,json=body)
+        assert response.status_code==200 and response.json()=={'applied':True}
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.member_append_group.assert_awaited_once_with(str(s.tenant),'enrolled-reader','media-object',100,'a'*64,'same-group','set_test',{'signed':True})
+        for patch in ({'member':'other'},{'at':True},{'at':-1},{'fence':'bad'},{'row':[]}):
+            assert (await client.post(url,json={**body,**patch})).status_code==400
+        assert (await client.post(url,json={**body,'row':{'large':'x'*12289}})).status_code==413
+        s.authority.member_append_group.return_value=False
+        assert (await client.post(url,json=body)).status_code==403
+        s.authority.member_append_group=None
+        assert (await client.post(url,json=body)).status_code==503
+    s.authority.authorize_read.assert_not_awaited();s.store.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_member_consent_recovery_and_withdrawal_view_are_read_only(setup):
+    s=setup
+    s.authority.member_group_append_state=AsyncMock(return_value={'at':100,'state':'applied','fence':'a'*64})
+    s.authority.member_group_withdrawal_view=AsyncMock(return_value={'at':100,'consent':{},'fence':'a'*64})
+    body={'object':'media-object','predicate':'same-group','set':'set_test'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        check='/acl/sociacl/media/group-consent-check';withdraw='/acl/sociacl/media/group-withdrawal-view'
+        response=await client.post(check,json={**body,'row':{'signed':True}})
+        assert response.status_code==200 and response.json()['state']=='applied'
+        s.authority.member_group_append_state.assert_awaited_once_with(str(s.tenant),'enrolled-reader','media-object','same-group','set_test',{'signed':True})
+        assert (await client.post(withdraw,json=body)).status_code==200
+        s.authority.member_group_withdrawal_view.assert_awaited_once_with(str(s.tenant),'enrolled-reader','media-object','same-group','set_test')
+        assert (await client.post(check,json={**body,'row':None})).status_code==400
+        assert (await client.post(withdraw,json={**body,'row':{}})).status_code==400
+        s.authority.member_group_append_state=None;s.authority.member_group_withdrawal_view=None
+        assert (await client.post(check,json={**body,'row':{}})).status_code==503
+        assert (await client.post(withdraw,json=body)).status_code==503
+    s.authority.authorize_read.assert_not_awaited();s.store.read.assert_not_awaited()

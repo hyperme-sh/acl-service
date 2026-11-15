@@ -118,3 +118,17 @@ export function groupConsentAuthority(accounts,contextFor,now,input) {
   return {memberPub:head.currentKey,state,draft:{role:'member',predicate:scope.predicate,set:scope.set,
     member,setOwner:state.setOwner,hamState,issuedAt:now,cancels:state.cancels}};
 }
+
+/** A member can withdraw its own active assent without a surviving invitation. */
+export function groupWithdrawalAuthority(accounts,contextFor,now,input) {
+  if(!input||Object.keys(input).sort().join()!=='member,object,predicate,rows,set'||!accounts.has(input.member))throw Error('invalid-group-member');
+  const {member,...scope}=input;
+  const graph=admittedGroupGraph(accounts,contextFor,now,scope);
+  const state=groupMembershipState(graph,scope.predicate,scope.set,member);
+  if(!state?.memberAssent||state.memberAssent.stated!==1)throw Error('group-assent-unavailable');
+  const account=accounts.get(member),diagnostics=[];
+  const head=resolveStoreAccount(member,account.rotations,contextFor(account,now),diagnostics);
+  if(diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length)throw Error('invalid-group-member-history');
+  return {memberPub:head.currentKey,state,draft:{role:'member',predicate:scope.predicate,set:scope.set,
+    member,setOwner:state.setOwner,hamState:state.memberAssent.hamState,issuedAt:now,cancels:[]}};
+}

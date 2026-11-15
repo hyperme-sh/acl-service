@@ -999,3 +999,30 @@ current histories and signatures still must pass admission.
 Reservation-enabled journals also preserve maximum-width `objectVersion` bytes
 and remaining version increments for active group and direct removals. Ordinary
 writes cannot use the last increment needed for those withdrawals.
+
+A fixed reader binding with both `acl:media:read` and `acl:media:write` may submit
+its own signed member row to `/api/v1/acl/sociacl/media/group-consent-append` with
+`{object,predicate,set,row,at,fence}`. The source admits the exact signed row,
+requires its member/role to match the authenticated binding, and compares a new
+row with the current protected preparation draft before appending atomically.
+An owner/set-role row cannot be submitted through this endpoint.
+
+`group-consent-check` takes `{object,predicate,set,row}` and reports exact
+`applied` or `absent` state without writing. Reconcile after a lost response;
+do not create a replacement signature blindly. An already retained row stays
+applied even after subsequent withdrawal, without restoring membership.
+`group-withdrawal-view` takes `{object,predicate,set}` and prepares the member's
+own current assent removal even when the invitation was withdrawn. It uses a
+same-HAM stated-0 response with empty cancellations, within the reserved capacity.
+All three routes retain the fixed reader binding and bounded worker/transport
+limits. Member writes do not create direct grants, epochs, wraps, or delivery.
+
+A newly applied member signature may be at most four seconds old at the fresh
+source fence. Its original `issuedAt` is preserved across second boundaries;
+all other draft fields must still match current preparation. Exact applied-row
+reconciliation remains available after that signing window expires.
+
+Member consent writes retain at most eight positive member assents per object
+across all group scopes for each enrolled member. Exact retries consume no
+capacity. Withdrawal remains available through its reserved capacity after the
+limit; changing scope or signing again does not reset the retained history.
