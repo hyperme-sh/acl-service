@@ -1428,6 +1428,9 @@ class MediaSource:
             return getattr(source,action)(*args,cancel=cancel)
         return await self._work(run)
 
+    async def group_wrap_view(self, tenant, owner, at, predicate, set_id):
+        return await self._group_wrap_work('view',tenant,owner,at,predicate,set_id)
+
     async def prepare_group_wrap_write(self, tenant, owner, predicate, set_id, at, fence, metadata, length):
         metadata=json.loads(encoded(metadata))
         return await self._group_wrap_work('prepare',tenant,owner,predicate,set_id,at,fence,metadata,length)
