@@ -55,13 +55,18 @@ def install_group_media_journal(url, *, history_schema, checkpoint_schema, tenan
 
 
 class GroupMediaJournal:
-    def __init__(self, store):
+    def __init__(self, store, *, transaction=None):
         if not isinstance(store, PostgresHistoryStore):
             raise ValueError('PostgreSQL group source required')
         self.store = store
-        with store._transaction(write=False) as db:
+        def check(db):
+            self._db(db)
             for table in ('group_media_sources', 'freshness.group_media_checkpoints'):
                 db.execute(f'SELECT 1 FROM {table} LIMIT 1')
+        if transaction is not None:
+            check(transaction)
+        else:
+            with store._transaction(write=False) as db:check(db)
 
     def _db(self, db):
         if getattr(db, 'origin', None) is not self.store or db.history != self.store.history_schema or db.checkpoint != self.store.checkpoint_schema:
