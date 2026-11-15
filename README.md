@@ -1326,3 +1326,13 @@ independent. Expired direct recipients receive cancellation drafts, and unsigned
 membership alone never adds a private recipient. Missing authority, changed keys,
 insufficient validity or capacity refuse. This route is read-only; epoch admission,
 status and item-wrap delivery must still complete before group access is usable.
+
+
+The internal `GroupItemSource.append_epoch` atomically checks the exact prepared
+recipient drafts, owner-signed private grants, native manifest and finalization,
+unchanged item-key commitment and ancestry before retaining the next item epoch.
+It records the command digest in the same checkpointed media write. Exact retry
+and `epoch_state` confirm retained bytes without re-signing or implying current
+access. The HTTP append/state routes remain uninstalled until current combined
+snapshot selection, status and item-wrap authorization are connected. Native and
+transaction contracts for this internal admission run only in CI.

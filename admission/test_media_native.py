@@ -94,6 +94,30 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(grants.state(*args,self.f['itemGroupCancel'])['state'],'applied')
         self.assertEqual(self.source.read_view(self.object,self.now)['snapshot'],before)
 
+    def test_native_group_item_epoch_admission_is_atomic_and_exactly_recoverable(self):
+        grants,_,predicate,set_id=self.item_group_setup()
+        args=(self.tenant,self.owner,self.object,predicate,set_id)
+        view=grants.view(*args,self.owner)
+        grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant'])
+        self.mutate('status',self.f['itemEpochOwnerStatus'])
+        items=grants.items;plan=items.epoch_view(*args);command=self.f['itemEpochCommand']
+        self.assertEqual(plan['snapshot'],command['document']['snapshot'])
+        self.assertEqual(plan['grants'],[row['claims'] for row in command['grants']])
+        before=self.source.read_view(self.object,self.now)
+        forged=json.loads(json.dumps(command));forged['finalization']['signature']='0'*128
+        with self.assertRaises(AdmissionRejected):items.append_epoch(*args,self.now,plan['fence'],forged)
+        self.assertEqual(self.source.read_view(self.object,self.now),before)
+        self.assertEqual(items.epoch_state(*args,command)['state'],'absent')
+        self.assertTrue(items.append_epoch(*args,self.now,plan['fence'],command))
+        self.assertEqual(items.epoch_state(*args,command)['state'],'applied')
+        after=self.source.read_view(self.object,self.now)
+        self.assertEqual(after['objectVersion'],before['objectVersion']+1)
+        self.now+=5
+        self.assertTrue(items.append_epoch(*args,self.now,'unused',command))
+        self.assertEqual(self.source.read_view(self.object,self.now)['objectVersion'],after['objectVersion'])
+        # Admission alone must never release an item key or bypass settlement.
+        with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+
     def test_native_group_item_signed_fork_freezes_only_group_journal(self):
         grants,_,predicate,set_id=self.item_group_setup()
         args=(self.tenant,self.owner,self.object,predicate,set_id)
