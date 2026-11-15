@@ -39,3 +39,20 @@ def test_invalid_scope_refuses(predicate,group):
 def test_runtime_refuses_non_postgres_store():
     with pytest.raises(ValueError, match='PostgreSQL'):
         GroupMediaJournal(object())
+
+
+def test_matching_schema_names_do_not_authorize_a_foreign_transaction():
+    from types import SimpleNamespace
+    from acl_service.infrastructure.postgres_history_store import _Connection
+    store = SimpleNamespace(history_schema='history', checkpoint_schema='checkpoint')
+    journal = object.__new__(GroupMediaJournal)
+    journal.store = store
+    class NeverExecute:
+        def execute(self, *args):
+            raise AssertionError('foreign transaction reached SQL')
+    for origin in (None, SimpleNamespace(history_schema='history', checkpoint_schema='checkpoint')):
+        db = _Connection(NeverExecute(), 'history', 'checkpoint', origin=origin)
+        with pytest.raises(ValueError, match='scope changed'):
+            journal.read(db, 'same-group', 'set_a')
+        with pytest.raises(ValueError, match='scope changed'):
+            journal.write(db, 'same-group', 'set_a', None, {})

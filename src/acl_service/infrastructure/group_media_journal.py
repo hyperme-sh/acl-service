@@ -64,7 +64,7 @@ class GroupMediaJournal:
                 db.execute(f'SELECT 1 FROM {table} LIMIT 1')
 
     def _db(self, db):
-        if db.history != self.store.history_schema or db.checkpoint != self.store.checkpoint_schema:
+        if getattr(db, 'origin', None) is not self.store or db.history != self.store.history_schema or db.checkpoint != self.store.checkpoint_schema:
             raise ValueError('group journal transaction scope changed')
 
     def read(self, db, predicate, set_id):

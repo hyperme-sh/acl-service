@@ -20,8 +20,9 @@ def scope_name(value):
 
 class _Connection:
     """Adapt only the fixed internal positional statements; never request SQL."""
-    def __init__(self, connection, history, checkpoint):
+    def __init__(self, connection, history, checkpoint, *, origin=None):
         self.connection, self.history, self.checkpoint = connection, history, checkpoint
+        self.origin = origin
 
     def execute(self, statement, parameters=()):
         from sqlalchemy import text
@@ -102,7 +103,7 @@ class PostgresHistoryStore(RelationalHistoryStore):
                 connection.exec_driver_sql("SET LOCAL lock_timeout = '1000ms'")
                 connection.exec_driver_sql("SET LOCAL statement_timeout = '3000ms'")
                 connection.exec_driver_sql(f'SET LOCAL search_path = "{self.history_schema}", pg_catalog')
-                db = _Connection(connection, self.history_schema, self.checkpoint_schema)
+                db = _Connection(connection, self.history_schema, self.checkpoint_schema, origin=self)
                 expected = (self.tenant, self.source, 2 if self.active_media_index else 1)
                 marker = db.execute('SELECT tenant,source,version FROM source_marker WHERE id=1 FOR UPDATE').fetchone()
                 checkpoint = db.execute('SELECT tenant,source,version FROM freshness.source_marker WHERE id=1 FOR UPDATE').fetchone()
