@@ -179,7 +179,7 @@ test('group cohort refuses wrong scopes, histories and unverified signatures',()
 
 
 test('group cohort bindings follow current signing and encryption keys after rotation',()=>{
- const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))),rotations=[f['oidc-rotate']];
+ const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))),rotations=[f['probe-v3-oidc']];
  const context={jwks:f.jwks,policy:f.policy,pinnedIss:new Set(f.pinnedIss),links:new Map([[take(linkId(f.oidc)),f.oidc]]),
   revocations:[],genesisEpubBindings:[f.binding],now:f.now,
   history:(principal,from,until)=>principal===f.genesis?{ok:true,value:historyState(principal,rotations.filter(row=>row.issuedAt<=until),from,until)}:{ok:false,reason:'missing-history'}};
@@ -194,4 +194,6 @@ test('group cohort bindings follow current signing and encryption keys after rot
  assert.deepEqual(result.bindings[f.genesis],{pub:rotations[0].nextKey,epub:rotations[0].nextEpub});
  assert.notEqual(result.bindings[f.genesis].epub,f.binding.epub);
  assert.equal(result.cohort.members[0].stated,1);
+ rotations[0]=f['oidc-rotate'];
+ assert.throws(()=>groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows}),/invalid-group-history/);
 });
