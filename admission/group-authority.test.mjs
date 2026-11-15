@@ -3,9 +3,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
-import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
+import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState,linkId} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
-import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority,groupCohortAuthority} from './group-authority.mjs';
 const now=1700000060;
 const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
@@ -149,4 +149,56 @@ test('withdrawal preparation needs only the member assent, including maximum HAM
  for(const value of [input([owned]),input([owned,assent('set')]),input([owned,assent('member',0,2)])])assert.throws(()=>prepare(value));
  assert.throws(()=>groupWithdrawalAuthority(accounts,contextFor,now,null));
  assert.throws(()=>groupWithdrawalAuthority(accounts,contextFor,now,{...input(),member:pub(4)}));
+});
+
+
+const cohortInput=(values=[assent('member'),assent('set')])=>({predicate:'same-group',set,rows:values});
+const cohort=(value=cohortInput(),identities=accounts)=>groupCohortAuthority(identities,contextFor,now,value);
+test('group cohort is independent of media and excludes implicit owner membership',()=>{
+ const result=cohort();assert.deepEqual(result.cohort.members,[{accessor:member,stated:1,hamState:1}]);
+ assert.deepEqual(Object.keys(result.bindings).sort(),[owner,member].sort());assert.ok(!result.bindings[outsider]);
+ assert.equal(result.bindings[member].pub,member);assert.equal(result.bindings[member].epub,pub(12));
+ assert.deepEqual(cohort(cohortInput([])).cohort.members,[]);
+ for(const values of [[assent('member')],[assent('set')],[assent('member'),assent('set'),cancel()],
+  [assent('member',0,2),assent('set')]])assert.equal(cohort(cohortInput(values)).cohort.members[0].stated,0);
+ for(const row of [owned,edge,cancel('object-set'),null,{}, {...assent('member'),extra:1}])assert.throws(()=>cohort(cohortInput([row])));
+});
+test('group cohort refuses wrong scopes, histories and unverified signatures',()=>{
+ for(const patch of [{set:'bad'},{predicate:'other'},{extra:1},{rows:Array(1025).fill(assent('member'))}])assert.throws(()=>cohort({...cohortInput(),...patch}));
+ for(const patch of [{sig:'bad'},{issuedAt:now+1},{set:set.slice(0,-2)+'ee'},{predicate:'named-circle'},{member:pub(4)}]){
+  const row=assent('member');Object.assign(row.record,patch);assert.throws(()=>cohort(cohortInput([row])));
+ }
+ assert.throws(()=>cohort(cohortInput([{...assent('member'),soul:'wrong'}])));
+ assert.throws(()=>cohort(cohortInput(),new Map()));
+ assert.throws(()=>cohort(cohortInput(),new Map([[member,accounts.get(member)]])));
+ for(const patch of [{frozen:true},{genesis:{}},{entries:[{issuedAt:now+1}]}]){
+  const changed=new Map(accounts);changed.set(owner,{...accounts.get(owner),...patch});assert.throws(()=>cohort(cohortInput(),changed));
+ }
+ const missing=new Map(accounts);missing.delete(member);assert.throws(()=>cohort(cohortInput(),missing));
+});
+
+
+test('group cohort bindings follow current signing and encryption keys after rotation',()=>{
+ const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))),rotations=[f['probe-v3-oidc']];
+ const context={jwks:f.jwks,policy:f.policy,pinnedIss:new Set(f.pinnedIss),links:new Map([[take(linkId(f.oidc)),f.oidc]]),
+  revocations:[],genesisEpubBindings:[f.binding],now:f.now,
+  history:(principal,from,until)=>principal===f.genesis?{ok:true,value:historyState(principal,rotations.filter(row=>row.issuedAt<=until),from,until)}:{ok:false,reason:'missing-history'}};
+ const account={principal:f.genesis,genesis:f.binding,rotations,links:context.links,ownRevokes:[],entries:[f.oidc,...rotations]};
+ const group='set_'+formatPrincipalKey(f.genesis)+'_'+'ef'.repeat(16);
+ const rows=['member','set'].map(role=>{
+  const record={role,predicate:'same-group',set:group,member:f.genesis,setOwner:f.genesis,stated:1,hamState:1,issuedAt:f.now,cancels:[]};
+  record.sig=take(signWithKeyring(scalar(2),membershipAssentBytes(record),rotations[0].nextKey));
+  return {kind:'membership',soul:membershipSoul(f.genesis,'same-group',group,f.genesis),record};
+ });
+ const result=groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows});
+ assert.deepEqual(result.bindings[f.genesis],{pub:rotations[0].nextKey,epub:rotations[0].nextEpub});
+ assert.notEqual(result.bindings[f.genesis].epub,f.binding.epub);
+ assert.equal(result.cohort.members[0].stated,1);
+ rotations[0]=f['oidc-rotate'];
+ const object=group.replace('set_','media_'),record={object,owner:f.genesis,issuedAt:f.now};
+ record.sig=take(signWithKeyring(scalar(2),objectRecordBytes(record),rotations[0].nextKey));
+ const withdrawal=groupWithdrawalAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{object,predicate:'same-group',set:group,member:f.genesis,rows:[{kind:'object',soul:object,record},...rows]});
+ assert.equal(withdrawal.memberPub,rotations[0].nextKey);
+ assert.equal(withdrawal.draft.hamState,1);
+ assert.throws(()=>groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows}),/invalid-group-history/);
 });

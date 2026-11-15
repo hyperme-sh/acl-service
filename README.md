@@ -1026,3 +1026,10 @@ Member consent writes retain at most eight positive member assents per object
 across all group scopes for each enrolled member. Exact retries consume no
 capacity. Withdrawal remains available through its reserved capacity after the
 limit; changing scope or signing again does not reset the retained history.
+
+The native `groupCohortGraph` preparation mode accepts only membership and
+membership-cancellation rows for one predicate and set. It rechecks current
+identity histories, returns separate current public bindings for the set owner
+and named members, and projects membership ordering without any media edge.
+It does not create a group store, grant access, select an epoch, or deliver a
+key. Media-object and object-set rows are refused in this group-wide mode.
