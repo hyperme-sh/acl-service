@@ -510,6 +510,18 @@ class MediaSource:
             self._checkpoint(db,object,row,write=True)
             self._activate(db,object)
 
+    def prepare_group_allocation_request(self, tenant, writer, predicate, set_id, *, sign_request, cancel=lambda: None):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        return GroupKeySource(GroupSource(self)).prepare_allocation_request(
+            tenant, writer, predicate, set_id, sign_request=sign_request, cancel=cancel)
+
+    def consume_group_allocation(self, tenant, writer, predicate, set_id, *, verify_grant, cancel=lambda: None):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        return GroupKeySource(GroupSource(self)).consume_allocation(
+            tenant, writer, predicate, set_id, verify_grant=verify_grant, cancel=cancel)
+
     def prepare_allocation_request(self, tenant, writer, record, policy, policy_until, *,
                                    sign_request, cancel=lambda:None):
         """Authorize a configured source request signer against current history.
