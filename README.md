@@ -1156,3 +1156,12 @@ current owner, member encryption binding and native group history. Reads select
 only the latest settled epoch's published wrap and revalidate the complete permit
 before returning bytes. Source document/revision capacity preserves room for
 withdrawals. This source module activates no public transport or credentials.
+
+
+The group wrap coordinator connects protected source reservations and final
+commits to a group-bound Spanopticon client. The client uses only canonical set
+identifiers and exact digests, verifies returned bytes, and never redirects or
+retries writes automatically. Delivery returns the selected key commitment and
+recipient context after the protected source commits, omitting internal fences.
+All source operations run through the existing bounded worker boundary. Runtime
+configuration and browser/public routes remain separate activation work.

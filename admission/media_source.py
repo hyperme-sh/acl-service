@@ -1419,6 +1419,28 @@ class MediaSource:
     async def commit_wrap_write(self, permit):
         return await self._work(self.commit_write,permit)
 
+    async def _group_wrap_work(self, action, *args):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_wrap_source import GroupWrapSource
+        def run(cancel):
+            source=GroupWrapSource(GroupKeySource(GroupSource(self)))
+            return getattr(source,action)(*args,cancel=cancel)
+        return await self._work(run)
+
+    async def prepare_group_wrap_write(self, tenant, owner, predicate, set_id, at, fence, metadata, length):
+        metadata=json.loads(encoded(metadata))
+        return await self._group_wrap_work('prepare',tenant,owner,predicate,set_id,at,fence,metadata,length)
+
+    async def commit_group_wrap_write(self, permit):
+        return await self._group_wrap_work('commit',permit)
+
+    async def authorize_group_wrap_read(self, tenant, reader, predicate, set_id):
+        return await self._group_wrap_work('authorize_read',tenant,reader,predicate,set_id)
+
+    async def commit_group_wrap_read(self, permit):
+        return await self._group_wrap_work('commit_read',permit)
+
     async def group_operation(self, action, tenant, writer, body):
         from group_source import GroupSource
         from group_membership import GroupMembership

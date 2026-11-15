@@ -155,7 +155,7 @@ def _provisioned(binding, *, allow_empty=False):
 
 
 def _source(binding):
-    for name in ('history_admission', 'statement_source', 'media_source', 'group_source', 'group_membership','group_key_source'):
+    for name in ('history_admission', 'statement_source', 'media_source', 'group_source', 'group_membership','group_key_source','group_wrap_source'):
         path = Path('/opt/acl-admission') / (name + '.py')
         if name in sys.modules:
             if Path(sys.modules[name].__file__) != path:

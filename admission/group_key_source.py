@@ -1,5 +1,4 @@
 """Protected independent group key history; no plaintext keys or media grants."""
-from dataclasses import dataclass
 import hashlib
 import hmac
 import json
@@ -13,18 +12,7 @@ from acl_service.infrastructure.group_epoch_verifier import GroupEpochVerifier
 MAX_SAFE = 9007199254740991
 
 
-@dataclass(frozen=True)
-class GroupKeyReadPermit:
-    tenant: str
-    reader: str
-    predicate: str
-    set_id: str
-    epoch: int
-    revision_id: str
-    reader_epub: str
-    key_commitment: str
-    fence: str
-    expires_at: int
+from acl_service.domain.group_wrap import GroupKeyReadPermit
 
 
 class GroupKeySource:

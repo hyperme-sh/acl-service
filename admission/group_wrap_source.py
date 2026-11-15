@@ -1,5 +1,4 @@
 """Protected group wrap metadata and durable publication reservations."""
-from dataclasses import dataclass
 import hashlib
 import hmac
 import json
@@ -10,23 +9,7 @@ from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.infrastructure.authority_checkpoint import authority_digest
 
 
-@dataclass(frozen=True)
-class GroupWrapWritePermit:
-    tenant: str
-    owner: str
-    predicate: str
-    set_id: str
-    digest: str
-    length: int
-    fence: str
-    expires_at: int
-
-
-@dataclass(frozen=True)
-class GroupWrapReadPermit:
-    key: GroupKeyReadPermit
-    digest: str
-    length: int
+from acl_service.domain.group_wrap import GroupWrapWritePermit, GroupWrapReadPermit
 
 
 class GroupWrapSource:
