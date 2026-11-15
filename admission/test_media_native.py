@@ -116,7 +116,9 @@ class NativeMediaContracts(TestCase):
         self.assertTrue(items.append_epoch(*args,self.now,'unused',command))
         self.assertEqual(self.source.read_view(self.object,self.now)['objectVersion'],after['objectVersion'])
         # Admission alone must never release an item key or bypass settlement.
-        with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+        from unittest.mock import patch
+        with patch('group_source.GroupSource',return_value=items.keys.source):
+            with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
 
     def test_native_direct_reader_uses_combined_epoch_and_current_group_checkpoint(self):
         from unittest.mock import patch
