@@ -1121,3 +1121,21 @@ append/state body is capped at 72 KiB and the signed command at 64 KiB. Other
 group actions retain their existing 18 KiB transport bound. Existing worker,
 rate, cancellation and tenant capacity controls apply. No route accepts a caller
 chosen writer or supplies a group key, reader wrap or media authorization.
+
+## Independent group allocation
+
+`SOCIACL_GROUP_ALLOCATION_FILE` separately enables
+`POST /api/v1/acl/sociacl/media/groups/allocate` for configured tenant/subject
+bindings with `acl:media:write`. The body contains only `predicate` and `set`.
+Current native owner checks, configured source signing and issuer verification
+precede atomic group allocation consumption. The browser cannot choose owner,
+policy, issuer, keys or storage authority.
+
+The private binding file uses only the PostgreSQL version-2 allocation format,
+with `postgresFile`, fixed subject/reader, Storage origin/key file, issuer/source,
+policy file/expiry, source key file and issuer public keys. Both group history
+and group allocation journals must already be installed. Loading checks their
+presence but never creates tables or grants. The group Storage credential must
+have `storage:group-allocations:issue`; media allocation scope alone does not
+work. Missing configuration disables the route. No deployment is activated by
+adding these modules.
