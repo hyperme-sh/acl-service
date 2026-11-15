@@ -44,10 +44,10 @@ def contact_digest(tenant, source, principal, kind, row):
     return hashlib.sha256(len(context).to_bytes(8, 'big') + context + row.nonce + row.payload).digest()
 
 
-def install_contact_journal(url, *, history_schema, checkpoint_schema, tenant, source):
+def install_contact_journal(url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False):
     """Explicit absence-only installation; never invoked by a runtime loader."""
     store = PostgresHistoryStore(url, history_schema=history_schema,
-        checkpoint_schema=checkpoint_schema, tenant=tenant, source=source)
+        checkpoint_schema=checkpoint_schema, tenant=tenant, source=source, active_media_index=active_media_index)
     try:
         with store._transaction(write=True) as db:
             db.execute('CREATE TABLE contact_documents (principal TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN (\'descriptor\',\'vault\')), revision BIGINT NOT NULL CHECK(revision>0), nonce BYTEA NOT NULL, payload BYTEA NOT NULL, PRIMARY KEY(principal,kind))')

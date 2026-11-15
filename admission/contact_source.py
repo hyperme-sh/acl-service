@@ -32,6 +32,17 @@ class ContactSource:
             contactDocumentInput=dict(owner=owner, tenant=self.tenant, source=self.store.source, **operation)))
         return result
 
+    def configuration(self, tenant, reader, at, cancel=lambda: None):
+        self._guard(at, cancel)
+        if tenant != self.tenant:
+            raise AdmissionRejected('contact configuration refused')
+        with self.store._transaction(write=False, before_commit=lambda: self._guard(at, cancel)) as db:
+            head = self._verify(db, reader, at, action='read')
+            result = {'at': at, 'tenant': self.tenant, 'source': self.store.source,
+                      'principal': reader, 'currentKey': head['currentKey'], 'trust': self.trust_at(at)}
+        self._guard(at, cancel)
+        return result
+
     def read(self, tenant, reader, owner, kind, at, cancel=lambda: None):
         self._guard(at, cancel)
         if tenant != self.tenant or kind not in LIMITS or (kind == 'vault' and reader != owner):

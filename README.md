@@ -1274,3 +1274,11 @@ Admission verifies complete enrolled identity history and the source checkpoint
 while holding the same transaction lock as the document update. Separate
 checkpoints reject missing or restored document rows. These contracts do not yet
 provide contact-secret recovery, grant delivery or message admission.
+
+`/contacts/config` accepts only `evaluatedAt` and returns the authenticated
+binding's principal, current key, tenant/source identifiers and configured public
+trust policy. Document reads also return the source's complete public identity
+history for browser verification; they do not install a new witness policy.
+Clients bind that history to the independently fetched configured trust and never
+substitute a returned key head for history verification. The explicit installer
+accepts `active_media_index=True` for already-upgraded version-2 source markers.

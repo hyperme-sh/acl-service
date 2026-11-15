@@ -112,3 +112,15 @@ def test_successful_cas_updates_both_scopes_once():
 
 def test_non_postgres_runtime_refuses():
     with pytest.raises(ValueError,match='PostgreSQL'): ContactJournal(object())
+
+
+def test_installer_preserves_existing_source_version():
+    from contextlib import nullcontext
+    from unittest.mock import patch
+    from acl_service.infrastructure.contact_journal import install_contact_journal
+    store=Mock()
+    store._transaction.return_value=nullcontext(Mock())
+    with patch('acl_service.infrastructure.contact_journal.PostgresHistoryStore',return_value=store) as constructor:
+        install_contact_journal('private',history_schema='history',checkpoint_schema='checkpoint',tenant='tenant',source='source',active_media_index=True)
+        assert constructor.call_args.kwargs['active_media_index'] is True
+    store.close.assert_called_once()

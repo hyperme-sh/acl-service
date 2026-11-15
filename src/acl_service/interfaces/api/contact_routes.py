@@ -24,10 +24,25 @@ class ContactBinding:
     source: object
 
 
+async def connected_result(request, work, stopped):
+    async def disconnected():
+        while not await request.is_disconnected():
+            await asyncio.sleep(0.05)
+        stopped.set()
+    monitor=asyncio.create_task(disconnected())
+    try:
+        done,_=await asyncio.wait((work,monitor),return_when=asyncio.FIRST_COMPLETED)
+        if monitor in done:raise TimeoutError('Contact requester disconnected')
+        return await asyncio.shield(work)
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor,return_exceptions=True)
+
+
 @router.post('/{operation}')
 async def contact_operation(operation: str, request: Request,
     tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
-    if operation not in ('read','write'):
+    if operation not in ('read','write','config'):
         raise HTTPException(404,'Unknown contact operation')
     bindings = request.app.state.contact_bindings
     if bindings is None:
@@ -55,9 +70,11 @@ async def contact_operation(operation: str, request: Request,
                 data.extend(chunk)
             try:
                 body = json.loads(data.decode('utf-8'),object_pairs_hook=_unique_fields,parse_constant=_invalid_constant)
-                fields = {'owner','kind','evaluatedAt'} | ({'revision','payload','signature'} if operation=='write' else set())
+                fields = {'evaluatedAt'} if operation=='config' else {'owner','kind','evaluatedAt'} | ({'revision','payload','signature'} if operation=='write' else set())
                 if (type(body) is not dict or set(body)!=fields or type(body['evaluatedAt']) is not int
-                        or body['evaluatedAt']<0 or type(body['owner']) is not str
+                        or body['evaluatedAt']<0):
+                    raise ValueError()
+                if operation!='config' and (type(body['owner']) is not str
                         or PRINCIPAL.fullmatch(body['owner']) is None or type(body['kind']) is not str or body['kind'] not in LIMITS):
                     raise ValueError()
                 if operation=='write':
@@ -69,12 +86,14 @@ async def contact_operation(operation: str, request: Request,
                     if base64.b64encode(payload).decode()!=body['payload'] or not low<=len(payload)<=high:raise ValueError()
             except (ValueError,TypeError,RecursionError) as exc:
                 raise HTTPException(400,'Invalid contact request') from exc
-            args=(str(tenant),binding.principal,body['owner'],body['kind'],body['evaluatedAt'])
-            if operation=='read':
+            args=(str(tenant),binding.principal,body.get('owner'),body.get('kind'),body['evaluatedAt'])
+            if operation=='config':
+                work=asyncio.create_task(asyncio.to_thread(binding.source.configuration,str(tenant),binding.principal,body['evaluatedAt'],guard))
+            elif operation=='read':
                 work=asyncio.create_task(asyncio.to_thread(binding.source.read,*args,guard))
             else:
                 work=asyncio.create_task(asyncio.to_thread(binding.source.write,*args,body['revision'],payload,body['signature'],guard))
-            result=await asyncio.shield(work)
+            result=await connected_result(request,work,stopped)
             return JSONResponse(result,headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
     except AdmissionRejected as exc:raise HTTPException(403,'Contact source refused') from exc
     except HistoryConflict as exc:raise HTTPException(409,'Contact state changed') from exc

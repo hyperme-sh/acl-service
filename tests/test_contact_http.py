@@ -66,3 +66,31 @@ async def test_absent_bindings_foreign_subject_and_changed_state_refuse():
         assert (await client.post('/acl/sociacl/contacts/read',json=body())).status_code==403
         app.state.contact_bindings=None
         assert (await client.post('/acl/sociacl/contacts/read',json=body())).status_code==503
+
+
+@pytest.mark.asyncio
+async def test_disconnection_signals_commit_guard_without_cancelling_worker():
+    import threading
+    from acl_service.interfaces.api.contact_routes import connected_result
+    stopped=threading.Event()
+    finished=asyncio.Event()
+    async def pending():await finished.wait()
+    async def disconnected():return True
+    work=asyncio.create_task(pending())
+    try:
+        with pytest.raises(TimeoutError):await connected_result(SimpleNamespace(is_disconnected=disconnected),work,stopped)
+        assert stopped.is_set() and not work.done()
+    finally:
+        finished.set()
+        await work
+
+
+@pytest.mark.asyncio
+async def test_configuration_uses_only_authenticated_binding():
+    app,source=setup()
+    source.configuration.return_value={'principal':OWNER,'currentKey':OWNER,'at':100}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://unit') as client:
+        response=await client.post('/acl/sociacl/contacts/config',json={'evaluatedAt':100})
+        assert response.status_code==200
+        assert source.configuration.call_args.args[:3]==(str(TENANT),OWNER,100)
+        assert (await client.post('/acl/sociacl/contacts/config',json={'evaluatedAt':100,'principal':'other'})).status_code==400

@@ -10,7 +10,12 @@ export function contactDocument(accounts, contextFor, now, input) {
   const diagnostics = [], context = contextFor(account, now);
   const head = resolveStoreAccount(owner, account.rotations, context, diagnostics);
   if (diagnostics.length || !head.bindingEpub || !head.currentEpub || head.rotations.length !== account.rotations.length) throw Error('contact-authority-unavailable');
-  if (input.action === 'read') return {currentKey: head.currentKey, currentEpub: head.currentEpub, sequence: head.rotations.at(-1)?.seq ?? 0};
+  if (input.action === 'read') return {
+    currentKey: head.currentKey, currentEpub: head.currentEpub, sequence: head.rotations.at(-1)?.seq ?? 0,
+    history: {completeThrough: now, links: [...accounts.values()].flatMap(a => [...a.links.values()]),
+      accounts: [...accounts.values()].map(a => ({principal:a.principal, rotations:a.rotations,
+        revocations:a.ownRevokes, genesisEpubBindings:[a.genesis]}))},
+  };
   if (input.action !== 'write' || !['descriptor','vault'].includes(kind) || !Number.isSafeInteger(revision) || revision < 0 ||
       typeof payload !== 'string' || payload.length > 1398104 || typeof signature !== 'string') throw Error('invalid-contact-write');
   const bytes = Buffer.from(payload, 'base64');

@@ -72,3 +72,13 @@ class ContactSourceTests(unittest.TestCase):
             return ContactDocument(1,b'n'*32,b'x'*28)
         s.journal.write.side_effect=changed
         with self.assertRaises(HistoryConflict): s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig')
+
+    def test_configuration_authenticates_reader_and_pins_source_scope(self):
+        s, _ = source()
+        s.store.source='source'
+        s.trust_at=lambda at: {'jwks':{'keys':[]},'policy':{},'pinnedIss':[]}
+        result=s.configuration('tenant','owner',100)
+        self.assertEqual(result['principal'],'owner')
+        self.assertEqual(result['currentKey'],'owner-key')
+        self.assertEqual(result['source'],'source')
+        with self.assertRaises(AdmissionRejected):s.configuration('wrong','owner',100)
