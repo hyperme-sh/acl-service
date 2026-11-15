@@ -1234,8 +1234,8 @@ media object's allocation, verifies length and digest, and requires a second
 protected commit before returning. Item and group epochs remain separate in the
 returned context. The authority contract requires current item grant/status,
 settled epoch, group membership and both protected checkpoints; group-key access
-alone never qualifies. No default authority or HTTP route installs this
-coordinator. Source admission and publication remain separate consumers.
+alone never qualifies. The protected media source supplies the joint authority methods. No HTTP route
+installs this coordinator. Status and wrap publication remain separate consumers.
 
 
 Group item grants use their own bounded `groupItemGrants` journal; they never
@@ -1336,3 +1336,13 @@ and `epoch_state` confirm retained bytes without re-signing or implying current
 access. The HTTP append/state routes remain uninstalled until current combined
 snapshot selection, status and item-wrap authorization are connected. Native and
 transaction contracts for this internal admission run only in CI.
+
+
+The internal group-item read authority joins a current owner-signed item grant,
+independent current membership and group-key permit, native settled item history,
+current owner-signed status and exact item/group wrap metadata. It rechecks the
+same authority after the coordinator fetches bytes, before observing floors or
+releasing data. A live direct grant retains precedence over a group grant for the
+same reader. Missing status or publication metadata refuses by default. This
+adds no public read route or epoch-write route; combined direct delivery and the
+owner status/publication path must be completed before installing those routes.
