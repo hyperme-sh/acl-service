@@ -18,7 +18,7 @@ PATH='/acl/sociacl/media/groups/'
 @pytest.fixture
 def setup(monkeypatch):
     tenant=uuid4();user=SimpleNamespace(sub='session',scopes=['acl:media:read','acl:media:write'])
-    authority=SimpleNamespace(group_item_grant_state=AsyncMock(return_value={'at':100,'state':'applied','frozen':False}),
+    authority=SimpleNamespace(group_item_epoch_view=AsyncMock(return_value={'at':100,'snapshot':{}}),group_item_grant_state=AsyncMock(return_value={'at':100,'state':'applied','frozen':False}),
                               group_item_grant_view=AsyncMock(return_value={'at':100}),
                               append_group_item_grant=AsyncMock(return_value=True),
                               group_item_authority_view=AsyncMock(return_value={'at':100,'projection':None,'fence':'c'*64}),
@@ -135,6 +135,7 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://acl') as client:
         assert (await client.post('/api/v1'+PATH+'wrap-view',json=RECORD)).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-view',json={**RECORD,'object':'media_owner_item'})).status_code==200
+        assert (await client.post('/api/v1'+PATH+'item-epoch-view',json={**RECORD,'object':'media_owner_item'})).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-authority-view',json={'object':'media_owner_item'})).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-grant-view',json={**RECORD,'object':'media_owner_item','reader':'reader','withdraw':False})).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-grant-append',json={**RECORD,'object':'media_owner_item','at':100,'fence':'a'*64,'payload':{}})).status_code==200
@@ -201,3 +202,21 @@ async def test_group_item_grant_reconciliation_is_fixed_owner_and_read_only(setu
         s.user.scopes=['acl:media:read']
         assert (await client.post(PATH+'item-grant-state',json=body)).status_code==403
         s.authority.append_group_item_grant.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_item_epoch_plan_is_subject_bound_and_read_only(setup):
+    s=setup;body={**RECORD,'object':'media_owner_item'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        result=await client.post(PATH+'item-epoch-view',json=body)
+        assert result.status_code==200 and result.headers['cache-control']=='private, no-store'
+        s.authority.group_item_epoch_view.assert_awaited_once_with(str(s.tenant),'fixed-reader',body['object'],body['predicate'],body['set'])
+        s.publish.assert_not_awaited();s.read.assert_not_awaited()
+        for patch in [{'object':[]},{'owner':'other'},{'at':100},{'predicate':'direct'},{'set':'bad'}]:
+            assert (await client.post(PATH+'item-epoch-view',json={**body,**patch})).status_code==400
+        s.user.scopes=['acl:media:read']
+        assert (await client.post(PATH+'item-epoch-view',json=body)).status_code==403
+        s.user.scopes=['acl:media:write']
+        s.authority.group_item_epoch_view.side_effect=AdmissionRejected('private details')
+        result=await client.post(PATH+'item-epoch-view',json=body)
+        assert result.status_code==403 and 'private details' not in result.text

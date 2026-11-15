@@ -1314,3 +1314,15 @@ history for browser verification; they do not install a new witness policy.
 Clients bind that history to the independently fetched configured trust and never
 substitute a returned key head for history verification. The explicit installer
 accepts `active_media_index=True` for already-upgraded version-2 source markers.
+
+`POST /api/v1/acl/sociacl/media/groups/item-epoch-view` prepares the next complete
+item snapshot for the authenticated owner and selected live group binding. It
+returns owner-signing context, the current direct recipients' next-epoch grant
+drafts, the native object-set/membership projection joined with separately signed
+group item grants, the current group settlement window and a joint fence. A live
+direct grant takes precedence when the same accessor has both scopes; otherwise
+a live group grant can supply that accessor's row. The two source journals remain
+independent. Expired direct recipients receive cancellation drafts, and unsigned
+membership alone never adds a private recipient. Missing authority, changed keys,
+insufficient validity or capacity refuse. This route is read-only; epoch admission,
+status and item-wrap delivery must still complete before group access is usable.
