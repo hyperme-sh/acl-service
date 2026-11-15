@@ -92,6 +92,18 @@ class MediaSourceContracts(TestCase):
             self.assertEqual(asyncio.run(self.source.group_item_status_state(TENANT,'owner',OBJECT,'same-group','set_test','reader',{})),{'state':'applied'})
             self.assertEqual(source.status_state.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader',{}))
 
+    def test_group_item_publication_bridge_preserves_scope_and_permit(self):
+        with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource') as items:
+            source=items.return_value;source.publication_view.return_value={'at':100};permit=object()
+            source.prepare_publication.return_value=permit;source.commit_publication.return_value=True
+            self.assertEqual(asyncio.run(self.source.group_item_publication_view(TENANT,'owner',OBJECT,'same-group','set_test','reader')),{'at':100})
+            self.assertEqual(source.publication_view.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader'))
+            self.assertIs(asyncio.run(self.source.prepare_group_item_write(TENANT,'owner',OBJECT,'same-group','set_test','reader',100,'f',{},24)),permit)
+            self.assertEqual(source.prepare_publication.call_args.args,(TENANT,'owner',OBJECT,'same-group','set_test','reader',100,'f',{},24))
+            self.assertTrue(asyncio.run(self.source.commit_group_item_write(permit)))
+            self.assertEqual(source.commit_publication.call_args.args,(permit,))
+            self.assertTrue(callable(source.commit_publication.call_args.kwargs['cancel']))
+
     def test_group_item_grant_bridge_keeps_fixed_arguments_and_bounded_worker(self):
         with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource'), patch('group_item_grants.GroupItemGrants') as grants:
             source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True;source.state.return_value={'state':'applied'}

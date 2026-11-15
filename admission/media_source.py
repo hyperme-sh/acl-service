@@ -1470,6 +1470,16 @@ class MediaSource:
             return getattr(source,action)(*args,cancel=cancel)
         return await self._work(run)
 
+    async def group_item_publication_view(self,tenant,owner,object,predicate,set_id,reader):
+        return await self._group_item_read_work('publication_view',tenant,owner,object,predicate,set_id,reader)
+
+    async def prepare_group_item_write(self,tenant,owner,object,predicate,set_id,reader,at,fence,metadata,length):
+        metadata=json.loads(encoded(metadata))
+        return await self._group_item_read_work('prepare_publication',tenant,owner,object,predicate,set_id,reader,at,fence,metadata,length)
+
+    async def commit_group_item_write(self,permit):
+        return await self._group_item_read_work('commit_publication',permit)
+
     async def group_item_status_view(self,tenant,owner,object,predicate,set_id,reader):
         return await self._group_item_read_work('status_view',tenant,owner,object,predicate,set_id,reader)
 

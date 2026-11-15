@@ -427,3 +427,84 @@ class GroupItemSource:
             if statuses.get(key)!=payload:
                 statuses[key]=payload;self.media._save(db,object,row,doc)
         return True
+
+    def _publication_context(self,db,tenant,owner,object,predicate,set_id,reader,at,expires=None):
+        _,doc=self.media._load(db,object,at);ids=self.media.identities(db,object,doc,at)
+        if tenant!=self.media.tenant or ids['owner']!=owner:
+            raise AdmissionRejected('group item publication owner required')
+        key,selected,claims,ids,row,doc,group,view=self._read_context(db,tenant,reader,object,predicate,set_id,at,expires)
+        expected={'itemEpoch':selected['epoch'],'itemRevisionId':selected['revisionId'],
+            'itemDigest':claims['itemCiphertextDigest'],'groupEpoch':key.epoch,
+            'groupRevisionId':key.revision_id,'groupKeyCommitment':key.key_commitment}
+        limit=min(key.expires_at,doc['policyUntil'],group['policyUntil'],claims['until']//1000)
+        if not at<limit:raise AdmissionRejected('group item publication expired')
+        return expected,key,ids,row,doc,view,limit
+
+    def publication_view(self,tenant,owner,object,predicate,set_id,reader,cancel=lambda:None):
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            expected,_,ids,_,_,view,_=self._publication_context(db,tenant,owner,object,predicate,set_id,reader,at)
+            return {'at':at,'fence':view['fence'],'ownerPub':ids['bindings'][owner]['pub'],'metadata':expected}
+
+    def _write_permit(self,db,tenant,owner,object,predicate,set_id,reader,digest,at,expires=None):
+        from acl_service.domain.group_item_delivery import GroupItemWritePermit
+        from acl_service.infrastructure.authority_checkpoint import authority_digest
+        expected,key,ids,row,doc,_,limit=self._publication_context(db,tenant,owner,object,predicate,set_id,reader,at,expires)
+        if expires is None and key.expires_at!=limit:
+            expected,key,ids,row,doc,_,limit=self._publication_context(db,tenant,owner,object,predicate,set_id,reader,at,limit)
+        held=doc.get('groupItemUploads',{}).get(digest)
+        if (held is None or (held['predicate'],held['set'],held['reader'])!=(predicate,set_id,reader) or
+                any(held['metadata'].get(field)!=value for field,value in expected.items())):
+            raise AdmissionRejected('current group item reservation required')
+        expires=limit if expires is None else expires
+        if type(expires) is not int or not at<expires<=limit:raise AdmissionRejected('group item publication expired')
+        fields=['group-item-write-v1',tenant,owner,object,predicate,set_id,reader,held,expires,key.fence,
+            row[0],hashlib.sha256(row[2]).hexdigest(),authority_digest(db).hex()]
+        fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+        return GroupItemWritePermit(tenant,owner,object,predicate,set_id,reader,digest,held['length'],fence,expires),ids,row,doc,held
+
+    def prepare_publication(self,tenant,owner,object,predicate,set_id,reader,at,fence,metadata,length,cancel=lambda:None):
+        import re
+        from acl_service.domain.history_store import HistoryConflict
+        if type(metadata) is not dict or len(encoded(metadata))>2048 or type(length) is not int or not 1<=length<=65536:
+            raise AdmissionRejected('invalid group item publication')
+        metadata=json.loads(encoded(metadata));guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            expected,_,_,row,doc,view,_=self._publication_context(db,tenant,owner,object,predicate,set_id,reader,at)
+            if type(fence) is not str or not hmac.compare_digest(fence,view['fence']):
+                raise HistoryConflict('group item publication authority changed')
+            digest=metadata.get('digest')
+            if (set(metadata)!=set(expected)|{'digest'} or type(digest) is not str or re.fullmatch('[a-f0-9]{64}',digest) is None or
+                    encoded({key:metadata[key] for key in expected})!=encoded(expected)):
+                raise AdmissionRejected('group item publication metadata changed')
+            uploads=doc.setdefault('groupItemUploads',{})
+            reservation={'predicate':predicate,'set':set_id,'reader':reader,'metadata':metadata,'length':length}
+            if digest in uploads:
+                if encoded(uploads[digest])!=encoded(reservation):raise HistoryConflict('group item reservation changed')
+            else:
+                if len(uploads)>=64:raise AdmissionRejected('group item publication capacity')
+                identity=(predicate,set_id,metadata['itemEpoch'],metadata['itemRevisionId'],metadata['groupEpoch'],metadata['groupRevisionId'])
+                if any((old['predicate'],old['set'],old['metadata']['itemEpoch'],old['metadata']['itemRevisionId'],
+                        old['metadata']['groupEpoch'],old['metadata']['groupRevisionId'])==identity for old in uploads.values()):
+                    raise HistoryConflict('group item wrap already reserved')
+                uploads[digest]=reservation;self.media._save(db,object,row,doc)
+            return self._write_permit(db,tenant,owner,object,predicate,set_id,reader,digest,at)[0]
+
+    def commit_publication(self,permit,cancel=lambda:None):
+        from acl_service.domain.group_item_delivery import GroupItemWritePermit
+        from acl_service.domain.history_store import HistoryConflict
+        if type(permit) is not GroupItemWritePermit:raise AdmissionRejected('invalid group item publication permit')
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            current,ids,row,doc,held=self._write_permit(db,permit.tenant,permit.owner,permit.object,permit.predicate,
+                permit.set_id,permit.reader,permit.digest,at,permit.expires_at)
+            if current!=permit:raise HistoryConflict('group item publication authority changed')
+            wraps=doc.setdefault('groupItemWraps',{});key=encoded([permit.predicate,permit.set_id]).decode('ascii')
+            metadata={**held['metadata'],'length':held['length']}
+            if wraps.get(key)!=metadata:
+                if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('group item object version exhausted')
+                wraps[key]=metadata;doc['objectVersion']+=1
+                for who,binding in ids['bindings'].items():self.store._observe_floor(db,who,binding['head'])
+                doc['floor']=max(doc['floor'],metadata['itemEpoch'])
+                self.media._save(db,permit.object,row,doc)
+        return True
