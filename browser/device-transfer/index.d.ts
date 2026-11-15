@@ -1,5 +1,19 @@
 import type {Binding, Identity, IdentityAdapter, Scope, Checkpoint} from 'sea-device-link';
+import type {ResolutionContext} from 'sociacl-ids';
 import type {KeyringState} from 'sociacl-ids/keyring';
+export type AuthorityResponse = {
+  identity: Identity;
+  scope: Scope;
+  binding: Binding | null;
+  at: number;
+  checkpoint: Checkpoint;
+  trust: Pick<ResolutionContext, 'jwks' | 'policy'> & {pinnedIss: string[]};
+  history: {
+    completeThrough: number;
+    links: unknown[];
+    accounts: {principal: string; rotations: unknown[]; revocations: unknown[]; genesisEpubBindings: unknown[]}[];
+  };
+};
 export type StateRequest = {scope: Scope; identity: Identity};
 export type CurrentRequest = {binding: Binding; expectedRevision?: string};
 /** Must authenticate ACL over HTTPS, bound response bytes and refuse non-2xx.

@@ -38,13 +38,13 @@ const bytes=new Uint8Array(Buffer.from(v.encodedHex,'hex'));
 const receiver=await Receiver.create(scope,{now:()=>now});
 const sender=await Sender.create({request:receiver.request,expectedScope:scope,identity,keyring:bytes,authority},{now:()=>now});
 await receiver.bind(sender.offer);sender.confirm(receiver.comparison);receiver.confirm(sender.comparison);
-let packet,done,imported;
+let packet,done,imported,saved;
 const transport={async send(_,p){packet=p;},async receive(){return packet;},async complete(_,c){done=c;},async completed(){return done;}};
-const storage={async lookup(){return null;},async commit(input){
- await input.beforeCommit();const state=await authority.keyringState(identity);
+const storage={async lookup(){return saved??null;},async commit(input){
+ const state=await authority.keyringState(identity);
  // Real adapters perform wrapping before their FINAL callback and atomic store.
  await input.beforeCommit();assert(!input.signal.aborted);
- imported=importKeyring(input.keyring,identity,state);
+ imported=importKeyring(input.keyring,identity,state);saved=structuredClone(input.completion);
 }};
 await sender.send(transport);await receiver.receive(transport,authority,storage);await sender.finish(transport);
 assert.deepEqual(exportKeyring(imported,await authority.keyringState(identity)),bytes);closeKeyring(imported);
