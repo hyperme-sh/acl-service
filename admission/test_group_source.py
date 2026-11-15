@@ -86,3 +86,21 @@ class GroupCreationContracts(TestCase):
             self.assertEqual(runner.return_value._run_verifier.call_args.kwargs['groupCohortGraph'], {'predicate':'same-group','set':'set_a','rows':[]})
             self.assertEqual(runner.call_args.kwargs['trust_at']('ignored'), {'trusted': True})
             self.assertIsNone(runner.call_args.kwargs['grant_for']('ignored'))
+
+    def test_creation_reconciliation_is_exact_and_independent_of_anchor_after_commit(self):
+        absent = self.source.creation_state(*self.args, self.config)
+        self.assertEqual(absent['state'], 'absent')
+        saved = {'policy': {'trusted': True}, 'policyUntil': 1000, 'rows': [], 'configs': [self.config]}
+        self.source.journal.read.return_value = SimpleNamespace(document=json.dumps(saved))
+        self.media._load.side_effect = AdmissionRejected('anchor deleted')
+        self.assertEqual(self.source.creation_state(*self.args, self.config), {'at': 100, 'state': 'applied'})
+        self.source.journal.write.assert_not_called()
+        with self.assertRaises(HistoryConflict):
+            self.source.creation_state(*self.args, {**self.config, 'signature': 'different'})
+        with self.assertRaises(AdmissionRejected):
+            self.source.creation_state('wrong', *self.args[1:], self.config)
+        with self.assertRaises(AdmissionRejected):
+            self.source.creation_state('tenant', 'wrong', *self.args[2:], self.config)
+        saved['policyUntil'] = 100
+        self.source.journal.read.return_value = SimpleNamespace(document=json.dumps(saved))
+        with self.assertRaises(AdmissionRejected): self.source.creation_state(*self.args, self.config)

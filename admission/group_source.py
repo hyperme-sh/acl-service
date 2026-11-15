@@ -70,3 +70,28 @@ class GroupSource:
                 'configs': [config], 'rows': [], 'epochs': [], 'wraps': [],
             })
         return True
+
+    def creation_state(self, tenant, writer, anchor, at, predicate, set_id, config, cancel=lambda: None):
+        """Reconcile the exact signed creation without replacing retained state."""
+        self.media._guard(at, cancel)
+        self.media._group_key(predicate, set_id)
+        self.media._group_policy_shape(config)
+        config = json.loads(encoded(config))
+        if tenant != self.media.tenant:
+            raise AdmissionRejected('wrong group tenant')
+        with self.store._transaction(write=False, before_commit=lambda: self.media._guard(at, cancel)) as db:
+            held = self.journal.read(db, predicate, set_id)
+            if held is None:
+                _, _, fence = self._creation(db, tenant, writer, anchor, at, predicate, set_id)
+                return {'at': at, 'state': 'absent', 'fence': fence}
+            document = json.loads(held.document)
+            if at >= document['policyUntil']:
+                raise AdmissionRejected('group policy expired')
+            current = self._cohort(db, document['policy'], at, predicate, set_id, document['rows'])
+            if writer != current['cohort']['setOwner']:
+                raise AdmissionRejected('group set owner required')
+            # A later owner rotation does not erase an already admitted command.
+            # This only confirms retention, never membership or key delivery.
+            if config not in document['configs']:
+                raise HistoryConflict('different group creation retained')
+            return {'at': at, 'state': 'applied'}
