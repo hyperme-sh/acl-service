@@ -32,6 +32,81 @@ class NativeMediaContracts(TestCase):
         self.source.provision(self.object,policy,self.now+7200,exclusive_grant=lambda *a:True)
         self.mutate('grant',self.f['grant']);self.mutate('epoch',self.f['epoch']);self.mutate('wrap',self.f['wrap'])
 
+    def item_group_setup(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_membership import GroupMembership
+        from group_item_source import GroupItemSource
+        from group_item_grants import GroupItemGrants
+        # This fixture journal isolates PostgreSQL IO; identities, group checks,
+        # signatures, media transactions and checkpoints use their real adapters.
+        source=object.__new__(GroupSource)
+        source.media=self.source;source.store=self.store;source.journal=Mock()
+        retained={'row':None}
+        source.journal.read.side_effect=lambda *args:retained['row']
+        def save(db,predicate,set_id,expected,document):
+            self.assertIs(expected,retained['row'])
+            retained['row']=SimpleNamespace(revision=1 if expected is None else expected.revision+1,
+                nonce=b'n'*32,document=json.dumps(document).encode())
+            return retained['row']
+        source.journal.write.side_effect=save
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,self.object,self.now)
+            doc['policyUntil']=self.now+10800
+            self.source._save(db,self.object,row,doc)
+        policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
+        args=(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+        view=source.creation_view(*args);source.create(*args,view['fence'],policy)
+        members=GroupMembership(source)
+        margs=(self.tenant,self.owner,self.now,predicate,set_id,self.owner)
+        for role,record in [('set',self.f['groupInvitations'][0]),('member',self.f['groupMemberRows'][0])]:
+            view=members.view(*margs,role,1);members.append(*margs,role,view['fence'],record)
+        current=self.source.group_authority_view(self.tenant,self.owner,self.object,self.now)
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,current['fence'],predicate,set_id,
+            [{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupEdges'][0]])
+        self.now+=3600
+        self.mutate('status',self.f['groupOwnerStatus'])
+        return GroupItemGrants(GroupItemSource(GroupKeySource(source))),members,predicate,set_id
+
+    def test_native_group_item_grant_is_independent_and_cancel_survives_membership_loss(self):
+        grants,members,predicate,set_id=self.item_group_setup()
+        args=(self.tenant,self.owner,self.object,predicate,set_id)
+        before=self.source.read_view(self.object,self.now)['snapshot']
+        view=grants.view(*args,self.owner)
+        self.assertEqual(view['grant'],self.f['itemGroupGrant']['claims'])
+        malformed=json.loads(json.dumps(self.f['itemGroupGrant']))
+        malformed['proof']['signature']='0'*128
+        with self.assertRaises(AdmissionRejected):grants.append(*args,self.now,view['fence'],malformed)
+        self.assertEqual(grants.state(*args,self.f['itemGroupGrant'])['state'],'absent')
+        self.assertTrue(grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant']))
+        self.assertEqual(self.source.read_view(self.object,self.now)['snapshot'],before)
+        margs=(self.tenant,self.owner,self.now,predicate,set_id,self.owner)
+        withdrawal=members.view(*margs,'member',0)
+        members.append(*margs,'member',withdrawal['fence'],self.f['itemMemberWithdraw'])
+        with self.assertRaises(AdmissionRejected):grants.view(*args,self.owner)
+        cancel=grants.view(*args,self.owner,True)
+        self.assertEqual(cancel['grant'],self.f['itemGroupCancel']['claims'])
+        self.assertTrue(grants.append(*args,self.now,cancel['fence'],self.f['itemGroupCancel']))
+        self.now+=5
+        self.assertEqual(grants.state(*args,self.f['itemGroupGrant'])['state'],'applied')
+        self.assertEqual(grants.state(*args,self.f['itemGroupCancel'])['state'],'applied')
+        self.assertEqual(self.source.read_view(self.object,self.now)['snapshot'],before)
+
+    def test_native_group_item_signed_fork_freezes_only_group_journal(self):
+        grants,_,predicate,set_id=self.item_group_setup()
+        args=(self.tenant,self.owner,self.object,predicate,set_id)
+        view=grants.view(*args,self.owner)
+        grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant'])
+        with self.assertRaises(AdmissionRejected):grants.append(*args,self.now,view['fence'],self.f['itemGroupFork'])
+        self.assertTrue(grants.state(*args,self.f['itemGroupGrant'])['frozen'])
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,self.object,self.now)
+            self.assertEqual(doc['frozen'],[])
+            self.assertEqual(doc['grants'],[self.f['grant']|{'ownerPub':self.owner}])
+            self.assertEqual(len(doc['groupItemGrants']['conflicts']),1)
+
     def test_native_independent_group_key_history_and_settlement(self):
         from types import SimpleNamespace
         from unittest.mock import Mock
