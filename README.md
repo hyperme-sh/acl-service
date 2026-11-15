@@ -1351,3 +1351,17 @@ releasing data. A live direct grant retains precedence over a group grant for th
 same reader. Missing status or publication metadata refuses by default. This
 adds no public read route or epoch-write route; combined direct delivery and the
 owner status/publication path must be completed before installing those routes.
+
+
+The internal group-item status preparation uses the same current grant,
+independent group membership/key and native settled item selection as delivery.
+Only the authenticated media owner receives the signing draft. Admission binds
+its current joint fence, exact signing time and lifetime, owner signature and
+object-version snapshot; it keeps at most 64 statuses without advancing the
+object version. It does not require a previously published wrap, avoiding a
+status/publication dependency cycle. Status HTTP routes remain uninstalled.
+
+Exact status retries confirm checkpointed identical bytes before comparing the
+old preparation fence. `group_item_status_state` reconciles retained bytes after
+the signing window or current access has changed; an applied result never means
+that the status is still fresh or grants current access.

@@ -42,7 +42,7 @@ class GroupItemReadAuthorityTests(TestCase):
         self.key=GroupKeyReadPermit('tenant','reader','same-group','set',3,'e'*64,'epub','f'*64,'1'*64,102)
         self.keys=SimpleNamespace(media=self.media,store=self.store,_read_permit=Mock(side_effect=lambda *a:self.key))
         self.source=GroupItemSource(self.keys)
-        self.source._authority=Mock(side_effect=lambda *a:({'projection':self.projection},self.row,self.doc,self.ids,self.current))
+        self.source._authority=Mock(side_effect=lambda *a:({'projection':self.projection,'fence':'joint-authority'},self.row,self.doc,self.ids,self.current))
         patcher=patch('acl_service.infrastructure.authority_checkpoint.authority_digest',return_value=b'digest')
         self.digest=patcher.start();self.addCleanup(patcher.stop)
 
@@ -124,3 +124,56 @@ class GroupItemReadAuthorityTests(TestCase):
         self.media.native[0].matches_grant.return_value=True
         self.media._snapshot.return_value={'entries':[{'accessor':str(i)} for i in range(64)]}
         with self.assertRaises(AdmissionRejected):self.source._read_snapshot(self.doc,self.ids,self.projection,100)
+
+
+    def test_owner_status_draft_and_signed_append_preserve_object_version(self):
+        self.doc['groupItemStatuses']={};self.doc['groupItemWraps']={}
+        plan=self.source.status_view('tenant','owner','media','same-group','set','reader')
+        self.assertEqual(plan['status']['zookie']['objectVersion'],4)
+        self.assertEqual(plan['status']['maxAgeMs'],60000)
+        payload={**plan['status'],'signature':'signed'}
+        args=('tenant','owner','media','same-group','set','reader',100,plan['fence'],payload)
+        self.assertTrue(self.source.append_status(*args))
+        self.assertEqual(self.doc['objectVersion'],4);self.media._save.assert_called_once()
+        self.assertEqual(self.doc['groupItemStatuses'][grant_key('same-group','set','reader')],payload)
+        self.media._save.reset_mock();self.assertTrue(self.source.append_status(*args));self.media._save.assert_not_called()
+
+    def test_lost_status_reply_reconciles_changed_fence_and_expired_authority(self):
+        plan=self.source.status_view('tenant','owner','media','same-group','set','reader')
+        payload={**plan['status'],'signature':'signed'}
+        scope=('tenant','owner','media','same-group','set','reader')
+        self.assertEqual(self.source.status_state(*scope,payload)['state'],'absent')
+        def save(*args):
+            self.row=(2,b'n'*32,b'new protected bytes')
+            self.source._authority.side_effect=AssertionError('old authority must not be re-prepared')
+        self.media._save.side_effect=save
+        self.assertTrue(self.source.append_status(*scope,100,plan['fence'],payload))
+        self.assertTrue(self.source.append_status(*scope,100,plan['fence'],payload))
+        self.media._save.assert_called_once()
+        self.now=1000;self.claims['stated']=0;self.ids['bindings']['owner']['pub']='rotated'
+        self.assertEqual(self.source.status_state(*scope,payload),{'at':1000,'state':'applied'})
+        self.assertEqual(self.source.status_state(*scope,{**payload,'signature':'different'})['state'],'absent')
+        self.assertEqual(self.source.status_state(*scope,{**payload,'stated':True})['state'],'absent')
+        for tenant,owner in [('other','owner'),('tenant','reader')]:
+            with self.assertRaises(AdmissionRejected):self.source.status_state(tenant,owner,*scope[2:],payload)
+        with self.assertRaises(AdmissionRejected):self.source.status_state(*scope,[])
+
+    def test_status_owner_signature_fence_and_capacity_refuse(self):
+        for case in ['owner','tenant','fence','signature','signedAt','maxAge','capacity','expired-policy']:
+            with self.subTest(case=case):
+                self.setUp()
+                plan=self.source.status_view('tenant','owner','media','same-group','set','reader')
+                args=dict(tenant='tenant',owner='owner',object='media',predicate='same-group',set_id='set',reader='reader',
+                    at=100,fence=plan['fence'],payload={**plan['status'],'signature':'signed'})
+                if case=='owner':args['owner']='reader'
+                if case=='tenant':args['tenant']='other'
+                if case=='fence':args['fence']='changed'
+                if case=='signature':self.media.native[1].matches_status.return_value=False
+                if case=='signedAt':args['payload']['signedAt']+=1
+                if case=='maxAge':args['payload']['maxAgeMs']+=1
+                if case=='capacity':self.doc['groupItemStatuses']={str(i):{} for i in range(64)}
+                if case=='expired-policy':self.doc['policyUntil']=100
+                with self.assertRaises((AdmissionRejected,HistoryConflict)):self.source.append_status(**args)
+                self.media._save.assert_not_called()
+        for payload in [None,[],{'padding':'x'*4097}]:
+            with self.assertRaises(AdmissionRejected):self.source.append_status('tenant','owner','media','same-group','set','reader',100,'f',payload)
