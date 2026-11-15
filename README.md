@@ -1065,3 +1065,13 @@ current signing keys of both parties without requiring a media-object edge or
 an encryption key. It is preparation for membership changes, including removal
 after a signing-only rotation. It cannot authorize encryption-key delivery;
 `groupCohortGraph` retains that stricter current-encryption-key prerequisite.
+
+The internal `GroupMembership` commands prepare and append a set owner's
+invitation or a member's own response in the independent group journal. Current
+signing histories authorize each party separately; joining requires a current
+invitation and acknowledges retained cancellations. Either party can remove its
+own assent at the same HAM value without an invitation or encryption key.
+Exact retained rows reconcile after lost responses. New rows must match the
+protected draft, source fence and four-second signing window. Positive history
+is bounded per party/member, with reserved row, byte and revision capacity for
+withdrawals. Membership writes do not create media grants, epochs or key wraps.
