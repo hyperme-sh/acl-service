@@ -99,7 +99,9 @@ class NativeMediaContracts(TestCase):
         args=(self.tenant,self.owner,self.object,predicate,set_id)
         view=grants.view(*args,self.owner)
         grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant'])
-        self.mutate('status',self.f['itemEpochOwnerStatus'])
+        # The old read status is stale after the grant write; owner maintenance
+        # still prepares signed metadata without returning a read permit.
+        with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
         items=grants.items;plan=items.epoch_view(*args);command=self.f['itemEpochCommand']
         self.assertEqual(plan['snapshot'],command['document']['snapshot'])
         self.assertEqual(plan['grants'],[row['claims'] for row in command['grants']])

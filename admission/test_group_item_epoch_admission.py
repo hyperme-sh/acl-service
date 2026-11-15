@@ -16,7 +16,7 @@ class GroupItemEpochAdmissionTests(TestCase):
             'stated':1,'epoch':2,'grantRevision':2,'itemCiphertextDigest':'d'*64}
         self.snapshot={'objectSet':{'predicate':'same-group','setId':'set','stated':1,'hamState':1},'entries':[]}
         self.plan={'at':100,'fence':'f'*64,'grants':[self.claims],'snapshot':self.snapshot,
-            'previousEpoch':1,'previousFinalizationId':'p'*64,'settleWindowMs':3600000}
+            'previousEpoch':1,'previousFinalizationId':'p'*64,'settleWindowMs':3600000,'keyCommitment':'k'*64}
         self.document={'manifest':{'object':'media','epoch':2,'previousEpoch':1,'revisionId':'r'*64,
             'keyCommitment':'k'*64,'settleWindowMs':3600000},'snapshot':self.snapshot}
         self.finalization={'object':'media','epoch':2,'previousEpoch':1,'previousFinalizationId':'p'*64,
