@@ -29,15 +29,25 @@ class GroupItemSource:
             projected['groupScopes']={}
             group_fences=[]
             for key,retained in sorted(scopes.items()):
-                predicate,_,set_id=key.partition(':')
-                held,group,_,_=self.keys._load_current(db,tenant,at,predicate,set_id)
                 # A media row may retain old membership rows for compatibility.
                 # They must never substitute for the independent current journal.
                 edges=[entry for entry in retained if entry['kind']!='membership' and not (
                     entry['kind']=='cancel' and entry['record']['kind']=='membership')]
-                projected['groupScopes'][key]=edges+group['rows']
-                group_fences.append(self.keys._fence(db,held,at,predicate,set_id))
+                projected['groupScopes'][key]=edges
             projection=self.media._group_object_projection(db,object,projected,at)
+            # Resolve only owner-signed item edges first. Owning an item is not
+            # authority to enumerate arbitrary groups named in its old edges.
+            if projection and projection['snapshot'] is not None and projection['snapshot']['objectSet']['stated']==1:
+                predicate,set_id=projection['predicate'],projection['set']
+                held,group,snapshot,_=self.keys._load_current(db,tenant,at,predicate,set_id)
+                members=[member for member in snapshot['members']
+                         if member['accessor']==owner and member['stated']==1]
+                if len(members)!=1:
+                    raise AdmissionRejected('current explicit group membership required')
+                key=self.media._group_key(predicate,set_id)
+                projected['groupScopes'][key]+=group['rows']
+                projection=self.media._group_object_projection(db,object,projected,at)
+                group_fences.append(self.keys._fence(db,held,at,predicate,set_id))
             fields=['group-item-authority-v1',tenant,owner,object,at,
                     self.media._fence(db,object,row,at),group_fences]
             fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()

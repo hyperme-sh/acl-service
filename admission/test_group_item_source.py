@@ -75,8 +75,12 @@ class GroupItemSourceTests(TestCase):
         self.media._load.return_value=(self.row,self.document)
         self.media.identities.return_value=self.ids
         self.media._fence.return_value='media-fence'
-        self.media._group_object_projection.return_value={'members':[]}
-        self.keys._load_current=Mock(return_value=('group-held',self.group_doc,{},{}))
+        self.media._group_key=lambda predicate,set_id:predicate+':'+set_id
+        self.projection={'object':'media','predicate':'same-group','set':'set','members':[],
+                         'snapshot':{'objectSet':{'stated':1}}}
+        self.media._group_object_projection.return_value=self.projection
+        self.group_snapshot={'members':[{'accessor':'owner','stated':1}]}
+        self.keys._load_current=Mock(return_value=('group-held',self.group_doc,self.group_snapshot,{}))
         self.keys._fence=Mock(return_value='group-fence')
 
     def authority(self,**changes):
@@ -92,7 +96,7 @@ class GroupItemSourceTests(TestCase):
         self.assertEqual(args[2]['groupScopes']['same-group:set'],[
             self.object_row,self.edge,self.edge_cancel,self.current_member])
         self.assertEqual(self.document,original)
-        self.assertEqual(result['projection'],{'members':[]})
+        self.assertEqual(result['projection'],self.projection)
         self.assertEqual(result['ownerPub'],'owner-key')
         self.assertEqual(result['objectVersion'],3)
         self.keys._fence.return_value='withdrawal-fence'
@@ -107,8 +111,30 @@ class GroupItemSourceTests(TestCase):
         self.keys._load_current.assert_not_called()
         self.keys._load_current.side_effect=AdmissionRejected('missing independent group')
         with self.assertRaises(AdmissionRejected):self.authority()
-        self.media._group_object_projection.assert_not_called()
+        self.assertEqual(self.media._group_object_projection.call_count,1)
         self.media._save.assert_not_called()
+
+    def test_item_ownership_does_not_disclose_an_unrelated_groups_members(self):
+        self.authority_setup()
+        for members in [[],[{'accessor':'other','stated':1}],[{'accessor':'owner','stated':0}],
+                        [{'accessor':'owner','stated':1}]*2]:
+            self.group_snapshot['members']=members
+            self.media._group_object_projection.reset_mock()
+            with self.assertRaises(AdmissionRejected):self.authority()
+            self.assertEqual(self.media._group_object_projection.call_count,1)
+            self.assertNotIn(self.current_member,self.media._group_object_projection.call_args.args[2]['groupScopes']['same-group:set'])
+        self.keys._fence.assert_not_called()
+
+    def test_detached_or_superseded_groups_do_not_require_membership_lookup(self):
+        self.authority_setup()
+        self.document['groupScopes']['named-circle:old-set']=[self.object_row,self.edge]
+        self.authority()
+        self.keys._load_current.assert_called_once_with(self.db,'tenant',100,'same-group','set')
+        self.keys._load_current.reset_mock()
+        for snapshot in [None,{'objectSet':{'stated':0}}]:
+            self.projection['snapshot']=snapshot
+            self.authority()
+        self.keys._load_current.assert_not_called()
 
     def test_authority_empty_and_oversized_scope_sets(self):
         self.authority_setup();self.document['groupScopes']={}
