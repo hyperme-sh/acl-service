@@ -129,8 +129,8 @@ if(!combinedWithdrawSigned.ok)throw Error(combinedWithdrawSigned.reason);
 const combinedMemberWithdraw={...itemMemberWithdraw,record:{...combinedWithdrawRecord,sig:combinedWithdrawSigned.value}};
 const detachedOwnerGrant=signItemGrant({...itemEpochOwnerGrant.claims,epoch:3,grantRevision:3});
 const detachedSnapshot={entries:[{...snapshot.entries[0],grantRevision:3}],
-  objectSet:{predicate:groupPolicy.predicate,setId:groupPolicy.setId,stated:0,hamState:1}};
-const detachedSnapshotId=hash(['s3rch-acl-snapshot-v1','1',groupPolicy.predicate,groupPolicy.setId,'0','1',
+  objectSet:{predicate:groupPolicy.predicate,setId:groupPolicy.setId,stated:0,hamState:0}};
+const detachedSnapshotId=hash(['s3rch-acl-snapshot-v1','1',groupPolicy.predicate,groupPolicy.setId,'0','0',
   f.genesis,'3','1','0',String(until),'direct','','0']);
 const detachedManifest={object,previousEpoch:2,epoch:3,deviceId:'detached-fixture',keyCommitment:manifest.keyCommitment,
   settleWindowMs:3600000,aclSnapshot:detachedSnapshotId};
