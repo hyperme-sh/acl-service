@@ -11,6 +11,15 @@ storage. It shares the group routes' bounded input, capacity, timeout,
 disconnect cancellation and private, no-store responses. Missing configuration
 keeps it disabled; clients cannot supply an owner or evaluation time.
 
+The internal `group_item_authority_view` prepares retained item edges against
+current independent group membership in one protected read transaction. It
+ignores membership rows and membership cancellations copied into an older
+media document, replacing them with each group's protected journal rows before
+native object-set projection. Missing groups or invalid current group policy
+refuse; there is no fallback to those copied members. Its fence covers the
+media source and every participating group. It does not change retained rows,
+admit a binding, or grant delivery, and has no HTTP route yet.
+
 `SOCIACL_MEDIA_BINDINGS_FILE` enables private wrap delivery only for explicit
 authenticated tenant/subject pairs. Its private JSON file has `version: 1` and
 at most 64 `bindings`, each containing `tenant`, `subject`, `reader` (the enrolled

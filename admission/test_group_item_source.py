@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock
+from copy import deepcopy
 from group_item_source import GroupItemSource
 from acl_service.domain.history_store import AdmissionRejected
 
@@ -60,3 +61,60 @@ class GroupItemSourceTests(TestCase):
         self.keys._read_permit.assert_not_called()
         self.media._permit.side_effect=None;self.keys._read_permit.side_effect=AdmissionRejected('group changed')
         with self.assertRaises(AdmissionRejected):self.view()
+
+    def authority_setup(self):
+        self.edge={'kind':'object-set','record':{'stated':1}}
+        self.object_row={'kind':'object','record':{'object':'media'}}
+        self.old_member={'kind':'membership','record':{'stated':1,'member':'old'}}
+        self.old_cancel={'kind':'cancel','record':{'kind':'membership'}}
+        self.edge_cancel={'kind':'cancel','record':{'kind':'object-set'}}
+        self.document.update(objectVersion=3,groupScopes={'same-group:set':[
+            self.object_row,self.edge,self.old_member,self.old_cancel,self.edge_cancel]})
+        self.current_member={'kind':'membership','record':{'stated':0,'member':'old'}}
+        self.group_doc={'rows':[self.current_member]}
+        self.media._load.return_value=(self.row,self.document)
+        self.media.identities.return_value=self.ids
+        self.media._fence.return_value='media-fence'
+        self.media._group_object_projection.return_value={'members':[]}
+        self.keys._load_current=Mock(return_value=('group-held',self.group_doc,{},{}))
+        self.keys._fence=Mock(return_value='group-fence')
+
+    def authority(self,**changes):
+        args=dict(tenant='tenant',owner='owner',object='media');args.update(changes)
+        return self.source.authority_view(**args)
+
+    def test_authority_joins_current_rows_and_fences_without_mutating_retained_history(self):
+        self.authority_setup();original=deepcopy(self.document)
+        result=self.authority()
+        self.keys._load_current.assert_called_once_with(self.db,'tenant',100,'same-group','set')
+        args=self.media._group_object_projection.call_args.args
+        self.assertEqual(args[:2],(self.db,'media'))
+        self.assertEqual(args[2]['groupScopes']['same-group:set'],[
+            self.object_row,self.edge,self.edge_cancel,self.current_member])
+        self.assertEqual(self.document,original)
+        self.assertEqual(result['projection'],{'members':[]})
+        self.assertEqual(result['ownerPub'],'owner-key')
+        self.assertEqual(result['objectVersion'],3)
+        self.keys._fence.return_value='withdrawal-fence'
+        self.assertNotEqual(result['fence'],self.authority()['fence'])
+        self.media._save.assert_not_called()
+
+    def test_authority_never_falls_back_to_copied_members_or_another_owner(self):
+        self.authority_setup()
+        with self.assertRaises(AdmissionRejected):self.authority(tenant='other')
+        self.media._load.assert_not_called()
+        with self.assertRaises(AdmissionRejected):self.authority(owner='other')
+        self.keys._load_current.assert_not_called()
+        self.keys._load_current.side_effect=AdmissionRejected('missing independent group')
+        with self.assertRaises(AdmissionRejected):self.authority()
+        self.media._group_object_projection.assert_not_called()
+        self.media._save.assert_not_called()
+
+    def test_authority_empty_and_oversized_scope_sets(self):
+        self.authority_setup();self.document['groupScopes']={}
+        self.media._group_object_projection.return_value=None
+        self.assertIsNone(self.authority()['projection'])
+        self.keys._load_current.assert_not_called()
+        for invalid in [[],{str(i):[] for i in range(9)}]:
+            self.document['groupScopes']=invalid
+            with self.assertRaises(AdmissionRejected):self.authority()
