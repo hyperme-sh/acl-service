@@ -1033,3 +1033,19 @@ identity histories, returns separate current public bindings for the set owner
 and named members, and projects membership ordering without any media edge.
 It does not create a group store, grant access, select an epoch, or deliver a
 key. Media-object and object-set rows are refused in this group-wide mode.
+
+Protected group storage is prepared separately from per-object media documents.
+`install_group_media_journal` explicitly adds an empty group document table and
+an independent checkpoint table to an already-provisioned PostgreSQL source.
+It refuses partial or repeated installation; runtime construction performs no
+DDL or repair. Existing media processes and source-marker versions remain
+compatible. No endpoint or environment switch enables group delivery here.
+
+`GroupMediaJournal` reads and writes within the caller's source transaction.
+The caller must admit current histories, group signatures and authorization in
+that same transaction. Exact-document compare-and-swap, independent scoped
+checkpoints, random nonces, bounded revisions and a 64-group/4-MiB-document
+limit protect retained state. This storage primitive neither accepts keys nor
+decides membership, epochs or access. Restored or missing state with a surviving
+checkpoint is refused; it cannot protect against a coordinated rollback of both
+independent stores. Group key wrapping and delivery remain separate work.
