@@ -108,3 +108,16 @@ class GroupItemEpochPlanTests(TestCase):
             if change=='floor':self.item.epoch=9007199254740991;self.media._selected_finalization.return_value={'epoch':self.item.epoch,'finalizationId':'parent'}
             if change=='owner-cancel':self.owner['claims']['stated']=0
             with self.assertRaises(AdmissionRejected,msg=change):self.plan()
+
+    def test_policy_expiry_rejects_and_direct_window_only_attenuates(self):
+        self.doc['policyUntil']=7000
+        self.reader['claims']['until']=7000000
+        plan=self.plan()
+        self.assertEqual(plan['grants'][0]['until'],7000000)
+        self.assertEqual(self.owner['claims']['until'],8000000)
+        for where in [self.doc,self.group]:
+            where['policyUntil']=200
+            with self.assertRaises(AdmissionRejected):self.plan()
+            where['policyUntil']=9000
+        self.doc['grants'].append({'claims':{**self.claims,'accessor':'old','until':50000,'grantRevision':9007199254740991},'proof':{}})
+        with self.assertRaises(AdmissionRejected):self.plan()

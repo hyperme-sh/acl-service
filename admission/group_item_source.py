@@ -103,6 +103,8 @@ class GroupItemSource:
         if parent['epoch']!=item.epoch or not 1<=item.epoch<MAX_SAFE:
             raise AdmissionRejected('current item epoch required')
         epoch=item.epoch+1;window=config['settleWindowMs'];owner_pub=ids['bindings'][owner]['pub']
+        if min(doc['policyUntil'],group['policyUntil'])*1000<=at*1000+window:
+            raise AdmissionRejected('group item policy cannot cover settlement')
         item_digest=doc['wraps'][owner]['itemDigest']
         direct=self.media._latest(doc);drafts=[];entries={};bindings={}
         # Refresh independently authorized direct recipients into the new item
@@ -118,9 +120,10 @@ class GroupItemSource:
                         claims['itemCiphertextDigest']!=item_digest or claims['owner']!=owner or
                         not self.media.native[0].matches_grant(encoded(held['proof']),encoded({**claims,'ownerPub':owner_pub}))):
                     raise AdmissionRejected('current direct recipient required')
-                if claims['grantRevision']>=MAX_SAFE or claims['until']<=at*1000+window:
+                until=min(claims['until'],doc['policyUntil']*1000)
+                if claims['grantRevision']>=MAX_SAFE or until<=at*1000+window:
                     raise AdmissionRejected('direct grant cannot cover next group epoch')
-                candidate={**claims,'epoch':epoch,'grantRevision':claims['grantRevision']+1}
+                candidate={**claims,'epoch':epoch,'grantRevision':claims['grantRevision']+1,'until':until}
                 drafts.append(candidate);bindings[who]=ids['bindings'][who]
             entries[who]={'accessor':who,'grantRevision':candidate['grantRevision'],
                 'stated':candidate['stated'],'from':candidate['from'],'until':candidate['until'],
