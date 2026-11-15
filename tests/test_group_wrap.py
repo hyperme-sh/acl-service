@@ -95,3 +95,11 @@ class GroupWrapTests(IsolatedAsyncioTestCase):
         self.bound.create_or_reconcile.side_effect=asyncio.CancelledError
         with self.assertRaises(asyncio.CancelledError):await self.publish()
         self.authority.commit_group_wrap_write.assert_not_awaited()
+
+    async def test_authority_conflicts_remain_reconcilable(self):
+        from acl_service.domain.history_store import HistoryConflict
+        self.authority.prepare_group_wrap_write.side_effect=HistoryConflict('changed')
+        with self.assertRaises(HistoryConflict):await self.publish()
+        self.bound.create_or_reconcile.assert_not_awaited()
+        self.authority.commit_group_wrap_read.side_effect=HistoryConflict('changed')
+        with self.assertRaises(HistoryConflict):await self.deliver()
