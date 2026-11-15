@@ -16,21 +16,36 @@ class GroupWrapSource:
     def __init__(self, keys):
         self.keys, self.media, self.store, self.journal = keys, keys.media, keys.store, keys.journal
 
+    def _current(self, document, snapshot, config, at):
+        if not document.get('allocation') or not document['epochs']:
+            raise AdmissionRejected('allocated group key required')
+        latest = document['epochs'][-1]['document']
+        if latest['snapshot'] != snapshot:
+            raise AdmissionRejected('group key snapshot changed')
+        if not self.keys.native.verifies_history(encoded(self.keys._history(document,snapshot,config,at))):
+            raise AdmissionRejected('current group key history required')
+        return latest['manifest']
+
+    def view(self, tenant, owner, at, predicate, set_id, cancel=lambda:None):
+        guard = lambda:self.media._guard(at,cancel)
+        guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            held,document,snapshot,config = self.keys._load(db,tenant,owner,at,predicate,set_id)
+            manifest = self._current(document,snapshot,config,at)
+            return {'at':at,'fence':self.keys._fence(db,held,at,predicate,set_id),
+                    'snapshot':snapshot,'manifest':manifest}
+
     def _metadata(self, document, snapshot, config, metadata, at):
         fields = {'reader','readerEpub','epoch','revisionId','digest'}
         if type(metadata) is not dict or set(metadata) != fields or len(encoded(metadata)) > 4096:
             raise AdmissionRejected('invalid group wrap metadata')
-        if not document.get('allocation') or not document['epochs']:
-            raise AdmissionRejected('allocated group key required')
-        latest = document['epochs'][-1]['document']['manifest']
+        latest = self._current(document,snapshot,config,at)
         members = [m for m in snapshot['members'] if m['accessor'] == metadata['reader'] and m['stated'] == 1]
         if (len(members) != 1 or metadata['readerEpub'] != members[0]['encryptionPub'] or
                 type(metadata['epoch']) is not int or metadata['epoch'] != latest['epoch'] or
                 metadata['revisionId'] != latest['revisionId'] or type(metadata['digest']) is not str or
                 re.fullmatch('[0-9a-f]{64}',metadata['digest']) is None):
             raise AdmissionRejected('group wrap is not current')
-        if not self.keys.native.verifies_history(encoded(self.keys._history(document,snapshot,config,at))):
-            raise AdmissionRejected('current group key history required')
         return metadata
 
     def _save(self, db, predicate, set_id, held, document):

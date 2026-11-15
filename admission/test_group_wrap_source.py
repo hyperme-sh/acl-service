@@ -100,3 +100,20 @@ class GroupWrapSourceTests(TestCase):
             self.fx.document['uploads']=uploads;self.fx.retain()
             fence=self.source._fence(self.fx.db,self.fx.held,permit)
             with self.assertRaises(AdmissionRejected):self.source.commit(replace(permit,fence=fence))
+
+    def test_wrap_view_accepts_full_history_and_rejects_changed_snapshot(self):
+        self.fx.document['epochs'] *= 64
+        self.fx.retain()
+        view=self.source.view(*self.fx.args)
+        self.assertEqual(view['manifest']['epoch'],1)
+        self.assertEqual(view['snapshot'],self.fx.view['snapshot'])
+        self.fx.journal.write.assert_not_called()
+        with self.assertRaises(AdmissionRejected):
+            self.source.view('tenant','member',100,'same-group','set_a')
+        self.fx.origin._cohort.return_value['bindings']['member']['head']=5
+        with self.assertRaises(AdmissionRejected):self.source.view(*self.fx.args)
+
+    def test_publication_rejects_stale_manifest_snapshot(self):
+        self.fx.origin._cohort.return_value['bindings']['member']['head']=5
+        with self.assertRaises(AdmissionRejected):self.prepare()
+        self.fx.journal.write.assert_not_called()

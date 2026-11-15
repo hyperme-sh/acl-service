@@ -1165,3 +1165,10 @@ retries writes automatically. Delivery returns the selected key commitment and
 recipient context after the protected source commits, omitting internal fences.
 All source operations run through the existing bounded worker boundary. Runtime
 configuration and browser/public routes remain separate activation work.
+
+The protected group wrap view returns the current owner-only manifest and cohort
+with a fresh write fence. It remains available at the 64-epoch history limit,
+since publishing a recipient wrap does not create another epoch. Both the view
+and publication require the latest manifest snapshot to match the current cohort
+and enrolled identity keys. Changed membership or identity keys require a new
+valid epoch before publication can proceed.
