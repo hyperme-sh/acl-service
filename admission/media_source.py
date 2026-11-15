@@ -132,6 +132,29 @@ class MediaSource:
                     'bindings':{who:identities['bindings'][who] for who in sorted(named)},
                     'objectVersion':doc['objectVersion'],'fence':self._fence(db,object,row,at)}
 
+    def group_consent_view(self,tenant,member,object,at,predicate,set_id,cancel=lambda:None):
+        """Prepare this member's response under the current protected source fence."""
+        self._guard(at,cancel)
+        key=self._group_key(predicate,set_id)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            row,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if member not in identities['bindings']:raise AdmissionRejected('group member unavailable')
+            rows=doc.get('groupScopes',{}).get(key)
+            if not rows:raise AdmissionRejected('group invitation unavailable')
+            accounts=self._accounts(db)
+            principal=next(iter(accounts));account=accounts[principal]
+            runner=HistoryAdmission(self.store,grant_for=lambda _:None,
+                                    trust_at=lambda _:doc['policy'],clock=self.clock)
+            consent=json.loads(runner._run_verifier(principal,at,
+                genesis=_record(account.genesis),entries=[_record(entry) for entry in account.entries],
+                peers=_peer_inputs(principal,accounts),groupConsentGraph={
+                    'member':member,'object':object,'predicate':predicate,'set':set_id,'rows':rows}))
+            if consent['memberPub']!=identities['bindings'][member]['pub']:
+                raise AdmissionRejected('group member key changed')
+            return {'consent':consent,'fence':self._fence(db,object,row,at)}
+
     @staticmethod
     def _group_key(predicate,set_id):
         if predicate not in ('same-group','named-circle') or type(set_id) is not str or not set_id.startswith('set_') or len(set_id)>512:
@@ -1194,6 +1217,13 @@ class MediaSource:
     def _owner_group_view(self,tenant,writer,object,cancel):
         at=int(self.clock())
         return {'at':at,**self.group_object_view(tenant,writer,object,at,cancel)}
+
+    def _member_group_consent_view(self,tenant,member,object,predicate,set_id,cancel):
+        at=int(self.clock())
+        return {'at':at,**self.group_consent_view(tenant,member,object,at,predicate,set_id,cancel)}
+
+    async def member_group_consent_view(self,tenant,member,object,predicate,set_id):
+        return await self._work(self._member_group_consent_view,tenant,member,object,predicate,set_id)
 
     def _owner_group_authority_view(self,tenant,writer,object,cancel):
         at=int(self.clock())

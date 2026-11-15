@@ -56,6 +56,12 @@ async def reader_catalog(request: Request, tenant: UUID = Depends(require_matche
     return await _private_operation('catalog',request,tenant,user)
 
 
+@router.post('/group-consent-view')
+async def group_consent_view(request: Request, tenant: UUID = Depends(require_matched_tenant),
+                             user: AuthMeResponse = Depends(get_current_user)):
+    return await _private_operation('group-consent-view',request,tenant,user)
+
+
 async def _private_operation(action,request,tenant,user):
     # The authenticated subject is mapped by the owner, never by request JSON.
     bindings = request.app.state.private_wrap_bindings
@@ -88,6 +94,12 @@ async def _private_operation(action,request,tenant,user):
                 if action=='catalog':
                     if type(body) is not dict or set(body)!={'page'} or type(body['page']) is not int or not 0<=body['page']<16:
                         raise ValueError()
+                elif action=='group-consent-view':
+                    if (type(body) is not dict or set(body)!={'object','predicate','set'}
+                            or type(body['object']) is not str or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None
+                            or body['predicate'] not in ('same-group','named-circle')
+                            or type(body['set']) is not str or re.fullmatch(r'set_[\x21-\x7e]{1,508}',body['set']) is None):
+                        raise ValueError()
                 elif (type(body) is not dict or set(body) != {'object'}
                         or type(body['object']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['object']) is None):
@@ -97,6 +109,11 @@ async def _private_operation(action,request,tenant,user):
             # One tenant cannot occupy both global delivery slots.
             async with capacity(request.app.state.private_wrap_tenant_slots[tenant]):
                 async with capacity(request.app.state.private_wrap_slots):
+                    if action=='group-consent-view':
+                        prepare=getattr(binding.authority,'member_group_consent_view',None)
+                        if not callable(prepare):raise refused(503,'Group consent source unavailable')
+                        result=await prepare(str(tenant),binding.reader,body['object'],body['predicate'],body['set'])
+                        return JSONResponse(result,headers=PRIVATE)
                     if action=='catalog':
                         catalog=getattr(binding.authority,'reader_catalog',None)
                         if not callable(catalog):raise refused(503,'Private catalog unavailable')

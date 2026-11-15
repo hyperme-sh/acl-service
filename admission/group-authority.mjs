@@ -1,7 +1,7 @@
 import {resolveStoreAccount,objectPrincipal,parseObjectRecord} from 'sociacl-ids';
 import {putObject} from 'sociacl/gun';
 import {MemoryGroupGraph,parseMembershipAssent,parseObjectSet,parseGroupCancel,
-  admitMembership,admitObjectSet,admitGroupCancel,membershipSoul,objectSetSoul,checkGroupPresentation,groupSnapshot} from 'sociacl/group';
+  admitMembership,admitObjectSet,admitGroupCancel,membershipSoul,objectSetSoul,checkGroupPresentation,groupSnapshot,groupMembershipState} from 'sociacl/group';
 const take=result=>{if(!result.ok)throw Error(result.reason);return result.value;};
 
 /** Pure projection from protected rows and authenticated histories. No grants or writes. */
@@ -100,4 +100,21 @@ export function groupPolicyAuthority(accounts,contextFor,now,input) {
   const diagnostics=[],head=resolveStoreAccount(owner,account.rotations,contextFor(account,now),diagnostics);
   if(diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length)throw Error('invalid-group-policy-owner');
   return {owner,ownerPub:head.currentKey,setId:input.set,predicate:input.predicate};
+}
+
+/** Prepare only the named member's response to a currently admitted invitation. */
+export function groupConsentAuthority(accounts,contextFor,now,input) {
+  if(!input||Object.keys(input).sort().join()!=='member,object,predicate,rows,set'||!accounts.has(input.member))throw Error('invalid-group-member');
+  const {member,...scope}=input;
+  const graph=admittedGroupGraph(accounts,contextFor,now,scope);
+  const state=groupMembershipState(graph,scope.predicate,scope.set,member);
+  if(!state?.setAssent||state.setAssent.stated!==1||state.cancels.length>64||
+      state.cancels.some(id=>!state.setAssent.cancels.includes(id)))throw Error('group-invitation-unavailable');
+  const hamState=Math.max(state.memberAssent?.hamState??0,state.setAssent.hamState)+1;
+  if(!Number.isSafeInteger(hamState))throw Error('group-order-exhausted');
+  const account=accounts.get(member),diagnostics=[];
+  const head=resolveStoreAccount(member,account.rotations,contextFor(account,now),diagnostics);
+  if(diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length)throw Error('invalid-group-member-history');
+  return {memberPub:head.currentKey,state,draft:{role:'member',predicate:scope.predicate,set:scope.set,
+    member,setOwner:state.setOwner,hamState,issuedAt:now,cancels:state.cancels}};
 }

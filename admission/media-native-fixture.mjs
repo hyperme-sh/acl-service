@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {p256} from '@noble/curves/nist.js';
 import {lengthPrefixed,formatPrincipalKey,objectRecordBytes,signWithKeyring} from 'sociacl-ids';
-import {objectSetBytes,objectSetSoul} from 'sociacl/group';
+import {objectSetBytes,objectSetSoul,membershipAssentBytes,membershipSoul} from 'sociacl/group';
 const f=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url)));
 const key=new Uint8Array(32);key[31]=1;
 const point=p256.getPublicKey(key,false);
@@ -51,6 +51,13 @@ const groupEdges=[1,0].map((stated,index)=>{
   if(!signed.ok)throw Error(signed.reason);
   return {kind:'object-set',soul:objectSetSoul(row.owner,object,row.predicate,row.set),record:{...row,sig:signed.value}};
 });
-const output={groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const groupInvitations=[1,0].map((stated,index)=>{
+  const row={role:'set',predicate:groupPolicy.predicate,set:groupPolicy.setId,member:f.genesis,
+    setOwner:f.genesis,stated,hamState:index+1,issuedAt:f.now,cancels:[]};
+  const signed=signWithKeyring(key,membershipAssentBytes(row),f.genesis);
+  if(!signed.ok)throw Error(signed.reason);
+  return {kind:'membership',soul:membershipSoul(row.setOwner,row.predicate,row.set,row.member),record:{...row,sig:signed.value}};
+});
+const output={groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

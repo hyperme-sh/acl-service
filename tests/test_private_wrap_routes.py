@@ -233,3 +233,24 @@ async def test_reader_catalog_refuses_old_source_conflicts_and_unavailable_autho
             s.authority.reader_catalog=AsyncMock(side_effect=error)
             assert (await client.post('/acl/sociacl/media/catalog',json={'page':0})).status_code==status
         s.store.read.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_group_consent_view_uses_fixed_reader_and_cannot_deliver_or_write(setup):
+    s=setup
+    s.authority.member_group_consent_view=AsyncMock(return_value={'at':100,'consent':{},'fence':'a'*64})
+    body={'object':'media-object','predicate':'same-group','set':'set_test'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        url='/acl/sociacl/media/group-consent-view'
+        response=await client.post(url,json=body)
+        assert response.status_code==200
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.member_group_consent_view.assert_awaited_once_with(str(s.tenant),'enrolled-reader','media-object','same-group','set_test')
+        for patch in ({'member':'other'},{'at':100},{'predicate':'other'},{'object':[]},{'set':'bad'}):
+            assert (await client.post(url,json={**body,**patch})).status_code==400
+        s.authority.member_group_consent_view=None
+        assert (await client.post(url,json=body)).status_code==503
+        s.actor.scopes=[]
+        assert (await client.post(url,json=body)).status_code==403
+    s.authority.authorize_read.assert_not_awaited()
+    s.store.read.assert_not_awaited()

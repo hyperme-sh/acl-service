@@ -39,6 +39,28 @@ class MediaSourceContracts(TestCase):
         self.source=MediaSource(self.store,TENANT,clock=lambda:self.now,identities=self.identities,native=self.native)
         self.source.provision(OBJECT,{},10000,exclusive_grant=lambda *args:True)
 
+    def test_consent_view_is_bound_to_member_history_and_one_source_fence(self):
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['groupScopes']={'same-group:set_test':[{'signed':'invitation'}]}
+            self.source._save(db,OBJECT,row,doc)
+        consent={'memberPub':'reader-key','draft':{'member':'reader','role':'member'}}
+        with patch('media_source.HistoryAdmission._run_verifier',return_value=encoded(consent)) as verify:
+            held=asyncio.run(self.source.member_group_consent_view(TENANT,'reader',OBJECT,'same-group','set_test'))
+            self.assertEqual(held['at'],100);self.assertEqual(held['consent'],consent)
+            self.assertEqual(verify.call_args.kwargs['groupConsentGraph'],{'member':'reader','object':OBJECT,
+                'predicate':'same-group','set':'set_test','rows':[{'signed':'invitation'}]})
+            again=self.source.group_consent_view(TENANT,'reader',OBJECT,100,'same-group','set_test')
+            self.assertEqual(held['fence'],again['fence'])
+            verify.return_value=encoded({**consent,'memberPub':'obsolete'})
+            with self.assertRaises(AdmissionRejected):self.source.group_consent_view(TENANT,'reader',OBJECT,100,'same-group','set_test')
+        for tenant,member,predicate,set_id in [('other','reader','same-group','set_test'),
+            (TENANT,'outsider','same-group','set_test'),(TENANT,'reader','same-group','set_missing'),
+            (TENANT,'reader','other','set_test')]:
+            with self.assertRaises(AdmissionRejected):self.source.group_consent_view(tenant,member,OBJECT,100,predicate,set_id)
+        def cancel():raise AdmissionRejected('cancelled')
+        with self.assertRaises(AdmissionRejected):self.source.group_consent_view(TENANT,'reader',OBJECT,100,'same-group','set_test',cancel)
+
     def group_fixture(self):
         def verify(principal,at,**inputs):
             graph=inputs['groupGraph']
