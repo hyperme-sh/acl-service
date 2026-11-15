@@ -1365,3 +1365,15 @@ Exact status retries confirm checkpointed identical bytes before comparing the
 old preparation fence. `group_item_status_state` reconciles retained bytes after
 the signing window or current access has changed; an applied result never means
 that the status is still fresh or grants current access.
+
+
+Internal group-item wrap publication reserves one exact opaque payload per
+item/group epoch pair, with at most 64 reservations. The owner supplies a current
+group-granted reader as the authorization anchor; its private grant, independent
+membership and settled item/group history must remain current. The coordinator
+writes only through the media object's storage allocation and commits the
+protected metadata after storage confirms its digest. Commit rechecks both
+checkpoints and expiry. Publication advances the object version, so signed
+statuses must be refreshed afterward. An uncertain upload can reconcile the
+same bytes using a fresh preparation view; replacement bytes for the same epoch
+pair refuse. No publication or delivery HTTP route is installed by this change.

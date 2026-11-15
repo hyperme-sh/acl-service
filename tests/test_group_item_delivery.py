@@ -79,3 +79,58 @@ class GroupItemDeliveryTests(IsolatedAsyncioTestCase):
         self.authority.commit_group_item_read.side_effect=None
         def cancelled():raise asyncio.CancelledError()
         with self.assertRaises(asyncio.CancelledError):await self.deliver(cancel=cancelled)
+
+
+class GroupItemPublicationTests(IsolatedAsyncioTestCase):
+    def setUp(self):
+        from acl_service.domain.group_item_delivery import GroupItemWritePermit
+        self.now=100
+        self.permit=GroupItemWritePermit('tenant','owner','object','same-group','set','reader',DIGEST,len(DATA),'f'*64,102)
+        self.authority=SimpleNamespace(prepare_group_item_write=AsyncMock(return_value=self.permit),commit_group_item_write=AsyncMock(return_value=True))
+        self.bound=SimpleNamespace(create_or_reconcile=AsyncMock(return_value=DIGEST))
+        class Store:
+            tenant='tenant'
+            def for_object(inner,object):self.bound_object=object;return self.bound
+        self.store=Store()
+
+    async def publish(self,**changes):
+        from acl_service.domain.group_item_delivery import publish_group_item_wrap
+        args=dict(authority=self.authority,store=self.store,tenant='tenant',owner='owner',object='object',predicate='same-group',
+            set_id='set',reader='reader',at=100,fence='fence',metadata={'digest':DIGEST},payload=DATA,clock=lambda:self.now)
+        args.update(changes);return await publish_group_item_wrap(**args)
+
+    async def test_reserves_publishes_to_item_allocation_then_commits(self):
+        def commit(permit):
+            self.assertEqual(permit,self.permit);self.bound.create_or_reconcile.assert_awaited_once_with(DIGEST,DATA);return True
+        self.authority.commit_group_item_write.side_effect=commit
+        self.assertEqual(await self.publish(),DIGEST);self.assertEqual(self.bound_object,'object')
+        self.authority.prepare_group_item_write.assert_awaited_once_with('tenant','owner','object','same-group','set','reader',100,'fence',{'digest':DIGEST},len(DATA))
+
+    async def test_invalid_input_or_permit_never_uploads(self):
+        for change in [{'payload':None},{'payload':b''},{'payload':b'x'*65537},{'tenant':'other'},{'metadata':[]},{'metadata':{'digest':'other'}}]:
+            with self.assertRaises(GroupItemDeliveryRejected):await self.publish(**change)
+        self.authority.prepare_group_item_write.assert_not_awaited()
+        for permit in [None,*[replace(self.permit,**change) for change in [{'tenant':'other'},{'owner':'other'},{'object':'other'},
+            {'predicate':'other'},{'set_id':'other'},{'reader':'other'},{'digest':'a'*64},{'length':True},{'length':1},
+            {'expires_at':True},{'expires_at':100},{'expires_at':103},{'fence':'bad'},{'fence':None}]]]:
+            self.authority.prepare_group_item_write.return_value=permit
+            with self.assertRaises(GroupItemDeliveryRejected):await self.publish()
+        self.bound.create_or_reconcile.assert_not_awaited();self.authority.commit_group_item_write.assert_not_awaited()
+
+    async def test_storage_commit_and_expiry_fail_closed(self):
+        self.bound.create_or_reconcile.return_value='other'
+        with self.assertRaises(GroupItemDeliveryRejected):await self.publish()
+        self.authority.commit_group_item_write.assert_not_awaited()
+        self.bound.create_or_reconcile.return_value=DIGEST
+        self.authority.commit_group_item_write.return_value=1
+        with self.assertRaises(GroupItemDeliveryRejected):await self.publish()
+        self.authority.commit_group_item_write.return_value=True
+        self.bound.create_or_reconcile.side_effect=lambda *a:setattr(self,'now',102) or DIGEST
+        with self.assertRaises(GroupItemDeliveryRejected):await self.publish()
+        self.now=100;self.bound.create_or_reconcile.side_effect=None
+        self.authority.commit_group_item_write.side_effect=lambda *a:setattr(self,'now',102) or True
+        with self.assertRaises(GroupItemDeliveryRejected):await self.publish()
+        self.now=100;self.authority.commit_group_item_write.side_effect=HistoryConflict('changed')
+        with self.assertRaises(HistoryConflict):await self.publish()
+        self.bound.create_or_reconcile.side_effect=asyncio.CancelledError
+        with self.assertRaises(asyncio.CancelledError):await self.publish()

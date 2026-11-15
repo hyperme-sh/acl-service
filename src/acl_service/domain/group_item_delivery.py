@@ -74,3 +74,44 @@ async def deliver_group_item_wrap(authority,store,tenant,reader,object,predicate
         raise
     except Exception:
         raise GroupItemDeliveryRejected('group item delivery refused') from None
+
+
+@dataclass(frozen=True)
+class GroupItemWritePermit:
+    tenant: str
+    owner: str
+    object: str
+    predicate: str
+    set_id: str
+    reader: str
+    digest: str
+    length: int
+    fence: str
+    expires_at: int
+
+
+async def publish_group_item_wrap(authority,store,tenant,owner,object,predicate,set_id,reader,at,fence,metadata,payload,*,clock=time.time):
+    """Reserve exact opaque bytes, publish to the item allocation, then commit."""
+    import json
+    try:
+        if type(payload) is not bytes or not 1<=len(payload)<=65536 or store.tenant!=tenant:raise ValueError()
+        digest=hashlib.sha256(payload).hexdigest()
+        if type(metadata) is not dict or metadata.get('digest')!=digest:raise ValueError()
+        metadata=json.loads(json.dumps(metadata,allow_nan=False))
+        async with asyncio.timeout(4):
+            permit=await authority.prepare_group_item_write(tenant,owner,object,predicate,set_id,reader,at,fence,metadata,len(payload))
+            if (type(permit) is not GroupItemWritePermit or
+                    (permit.tenant,permit.owner,permit.object,permit.predicate,permit.set_id,permit.reader,permit.digest,permit.length)!=
+                    (tenant,owner,object,predicate,set_id,reader,digest,len(payload)) or
+                    type(permit.length) is not int or type(permit.expires_at) is not int or
+                    not clock()<permit.expires_at<=clock()+2 or type(permit.fence) is not str or
+                    re.fullmatch('[a-f0-9]{64}',permit.fence) is None):raise ValueError()
+            if await bind_wrap_store(store,object).create_or_reconcile(digest,payload)!=digest:raise ValueError()
+            if clock()>=permit.expires_at:raise ValueError()
+            if await authority.commit_group_item_write(permit) is not True:raise ValueError()
+            if clock()>=permit.expires_at:raise ValueError()
+            return digest
+    except HistoryConflict:
+        raise
+    except Exception:
+        raise GroupItemDeliveryRejected('group item publication refused') from None

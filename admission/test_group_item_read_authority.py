@@ -177,3 +177,66 @@ class GroupItemReadAuthorityTests(TestCase):
                 self.media._save.assert_not_called()
         for payload in [None,[],{'padding':'x'*4097}]:
             with self.assertRaises(AdmissionRejected):self.source.append_status('tenant','owner','media','same-group','set','reader',100,'f',payload)
+
+
+    def test_publication_reserves_exact_bytes_then_commits_current_metadata(self):
+        self.doc['groupItemWraps']={};self.doc['groupItemStatuses']={}
+        scope=('tenant','owner','media','same-group','set','reader')
+        view=self.source.publication_view(*scope)
+        metadata={**view['metadata'],'digest':'c'*64}
+        def save(*args):self.row=(self.row[0]+1,self.row[1],encoded(self.doc))
+        self.media._save.side_effect=save
+        permit=self.source.prepare_publication(*scope,100,view['fence'],metadata,24)
+        self.assertEqual(self.doc['groupItemWraps'],{})
+        self.assertEqual(len(self.doc['groupItemUploads']),1)
+        self.now=101;self.assertTrue(self.source.commit_publication(permit))
+        self.assertEqual(self.doc['objectVersion'],5);self.assertEqual(self.doc['floor'],2)
+        self.assertEqual(self.doc['groupItemWraps'][encoded(['same-group','set']).decode('ascii')],self.wrap)
+        self.assertEqual(self.store._observe_floor.call_count,2)
+        # A new view may reconcile identical durable bytes without a second version advance.
+        view=self.source.publication_view(*scope)
+        again=self.source.prepare_publication(*scope,101,view['fence'],metadata,24)
+        self.assertTrue(self.source.commit_publication(again));self.assertEqual(self.doc['objectVersion'],5)
+
+    def test_publication_rejects_mutation_capacity_and_commit_races(self):
+        scope=('tenant','owner','media','same-group','set','reader')
+        for case in ['owner','tenant','fence','metadata','boolean','digest','length','capacity','different-digest','different-length','row','key','cancel','expired','version']:
+            with self.subTest(case=case):
+                self.setUp();view=self.source.publication_view(*scope);metadata={**view['metadata'],'digest':'c'*64}
+                args=dict(tenant='tenant',owner='owner',object='media',predicate='same-group',set_id='set',reader='reader',
+                    at=100,fence=view['fence'],metadata=metadata,length=24)
+                if case=='owner':args['owner']='reader'
+                if case=='tenant':args['tenant']='other'
+                if case=='fence':args['fence']='bad'
+                if case=='metadata':metadata['itemDigest']='b'*64
+                if case=='boolean':metadata['groupEpoch']=True
+                if case=='digest':metadata['digest']='invalid'
+                if case=='length':args['length']=True
+                if case=='capacity':self.doc['groupItemUploads']={str(i):{} for i in range(64)}
+                if case.startswith('different'):
+                    self.source.prepare_publication(**args)
+                    if case=='different-digest':metadata['digest']='b'*64
+                    else:args['length']=25
+                if case in ['row','key','cancel','expired','version']:
+                    permit=self.source.prepare_publication(**args)
+                    if case=='row':self.row=(2,b'n'*32,b'changed')
+                    if case=='key':self.key=replace(self.key,fence='2'*64)
+                    if case=='cancel':self.claims['stated']=0
+                    if case=='expired':self.now=102
+                    if case=='version':self.doc['objectVersion']=9007199254740991;self.doc['groupItemWraps']={}
+                    with self.assertRaises((AdmissionRejected,HistoryConflict)):self.source.commit_publication(permit)
+                else:
+                    with self.assertRaises((AdmissionRejected,HistoryConflict)):self.source.prepare_publication(**args)
+        self.setUp()
+        with self.assertRaises(AdmissionRejected):self.source.commit_publication(None)
+        with self.assertRaises(AdmissionRejected):self.source._write_permit(self.db,*scope,'a'*64,100)
+        self.claims['until']=100000
+        with self.assertRaises(AdmissionRejected):self.source.publication_view(*scope)
+
+    def test_publication_uses_the_shorter_item_expiry_in_its_group_fence(self):
+        scope=('tenant','owner','media','same-group','set','reader')
+        self.claims['until']=101000
+        self.keys._read_permit.side_effect=lambda *a:replace(self.key,expires_at=a[-1] or 102,fence=str(a[-1] or 102).zfill(64))
+        view=self.source.publication_view(*scope)
+        permit=self.source.prepare_publication(*scope,100,view['fence'],{**view['metadata'],'digest':'c'*64},24)
+        self.assertEqual(permit.expires_at,101);self.assertTrue(self.source.commit_publication(permit))
