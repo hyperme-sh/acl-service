@@ -70,7 +70,7 @@ async def contact_operation(operation: str, request: Request,
                 data.extend(chunk)
             try:
                 body = json.loads(data.decode('utf-8'),object_pairs_hook=_unique_fields,parse_constant=_invalid_constant)
-                fields = {'evaluatedAt'} if operation=='config' else {'owner','kind','evaluatedAt'} | ({'revision','payload','signature'} if operation=='write' else set())
+                fields = {'evaluatedAt'} if operation=='config' else {'owner','kind','evaluatedAt'} | ({'revision','payload','signature','fence'} if operation=='write' else set())
                 if (type(body) is not dict or set(body)!=fields or type(body['evaluatedAt']) is not int
                         or body['evaluatedAt']<0):
                     raise ValueError()
@@ -78,7 +78,8 @@ async def contact_operation(operation: str, request: Request,
                         or PRINCIPAL.fullmatch(body['owner']) is None or type(body['kind']) is not str or body['kind'] not in LIMITS):
                     raise ValueError()
                 if operation=='write':
-                    if (type(body['revision']) is not int or not 0<=body['revision']<9007199254740991
+                    if (type(body['fence']) is not str or len(body['fence'])!=64 or any(c not in '0123456789abcdef' for c in body['fence'])
+                            or type(body['revision']) is not int or not 0<=body['revision']<9007199254740991
                             or type(body['payload']) is not str or type(body['signature']) is not str or len(body['signature'])>128):
                         raise ValueError()
                     payload=base64.b64decode(body['payload'],validate=True)
@@ -92,7 +93,7 @@ async def contact_operation(operation: str, request: Request,
             elif operation=='read':
                 work=asyncio.create_task(asyncio.to_thread(binding.source.read,*args,guard))
             else:
-                work=asyncio.create_task(asyncio.to_thread(binding.source.write,*args,body['revision'],payload,body['signature'],guard))
+                work=asyncio.create_task(asyncio.to_thread(binding.source.write,*args,body['revision'],payload,body['signature'],body['fence'],guard))
             result=await connected_result(request,work,stopped)
             return JSONResponse(result,headers={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'})
     except AdmissionRejected as exc:raise HTTPException(403,'Contact source refused') from exc

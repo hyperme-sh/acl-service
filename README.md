@@ -1290,13 +1290,15 @@ blocks and retry state within that vault.
 
 Both requests contain `owner`, `kind` (`descriptor` or `vault`) and `evaluatedAt`.
 Writes also contain `revision` (the expected committed revision, initially zero),
-canonical base64 `payload`, and a current-owner `signature`. The signature covers
+canonical base64 `payload`, the read response’s `fence`, and a current-owner `signature`. The signature covers
 SociACL length-prefixed strings: `s3rch-contact-document-v1`, tenant UUID, source
-UUID, owner principal, kind, expected revision, evaluation second, and lowercase
+UUID, owner principal, kind, expected revision, evaluation second, read fence, and lowercase
 SHA-256 of the decoded payload. Descriptor payloads are UTF-8 JSON with exactly
 `advertisement`: a verified signed first-contact descriptor whose revision equals
 the next storage revision, or `null` to disable discovery. Reads return revision,
-base64 payload (or null), and the current verified owner key head. Mutations
+base64 payload (or null), an authority fence, and the current verified owner key head.
+The fence covers complete source identity history and configured trust policy;
+changes to either refuse an otherwise current document revision. Mutations
 return the committed revision and payload digest. Conflicts require a fresh read
 and signature; an ambiguous response must be reconciled against retained bytes.
 

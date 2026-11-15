@@ -5,7 +5,8 @@ import json
 import time
 
 from history_admission import HistoryAdmission, _record, _peer_inputs
-from statement_source import StatementSource
+from statement_source import StatementSource, encoded
+from acl_service.infrastructure.authority_checkpoint import authority_digest
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 LIMITS = {'descriptor': (1,8192), 'vault': (28,1024*1024)}
 
@@ -32,6 +33,10 @@ class ContactSource:
             contactDocumentInput=dict(owner=owner, tenant=self.tenant, source=self.store.source, **operation)))
         return result
 
+    def _fence(self, db, at):
+        return hashlib.sha256(encoded(['s3rch-contact-authority-v1',self.tenant,self.store.source,
+            authority_digest(db).hex(),self.trust_at(at)])).hexdigest()
+
     def configuration(self, tenant, reader, at, cancel=lambda: None):
         self._guard(at, cancel)
         if tenant != self.tenant:
@@ -52,12 +57,12 @@ class ContactSource:
             head = self._verify(db, owner, at, action='read')
             row = self.journal.read(db, owner, kind)
             result = {'at': at, 'owner': owner, 'kind': kind, 'head': head,
-                      'revision': row.revision if row else 0,
+                      'fence': self._fence(db,at), 'revision': row.revision if row else 0,
                       'payload': base64.b64encode(row.payload).decode() if row else None}
         self._guard(at, cancel)
         return result
 
-    def write(self, tenant, writer, owner, kind, at, revision, payload, signature, cancel=lambda: None):
+    def write(self, tenant, writer, owner, kind, at, revision, payload, signature, fence, cancel=lambda: None):
         self._guard(at, cancel)
         if tenant != self.tenant or writer != owner or kind not in LIMITS:
             raise AdmissionRejected('contact write refused')
@@ -67,11 +72,13 @@ class ContactSource:
         if not minimum <= len(payload) <= maximum:
             raise AdmissionRejected('invalid contact payload')
         with self.store._transaction(write=True, before_commit=lambda: self._guard(at, cancel)) as db:
+            if type(fence) is not str or fence != self._fence(db,at):
+                raise HistoryConflict('contact authority changed')
             current = self.journal.read(db, owner, kind)
             if (current.revision if current else 0) != revision:
                 raise HistoryConflict('contact revision changed')
             self._verify(db, owner, at, action='write', kind=kind, revision=revision,
-                         payload=base64.b64encode(payload).decode(), signature=signature)
+                         payload=base64.b64encode(payload).decode(), signature=signature, fence=fence)
             saved = self.journal.write(db, owner, kind, current, payload)
         self._guard(at, cancel)
         return {'at': at, 'revision': saved.revision, 'digest': hashlib.sha256(saved.payload).hexdigest()}

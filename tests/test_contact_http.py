@@ -46,7 +46,7 @@ async def test_transport_uses_bound_reader_and_returns_no_store():
 @pytest.mark.asyncio
 async def test_write_decodes_only_canonical_bounded_ciphertext():
     app,source=setup()
-    value={**body(),'revision':0,'payload':base64.b64encode(b'x'*28).decode(),'signature':'sig'}
+    value={**body(),'revision':0,'payload':base64.b64encode(b'x'*28).decode(),'signature':'sig','fence':'ef'*32}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://unit') as client:
         assert (await client.post('/acl/sociacl/contacts/write',json=value)).status_code==200
         assert source.write.call_args.args[6]==b'x'*28

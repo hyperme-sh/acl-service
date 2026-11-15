@@ -26,6 +26,7 @@ def source():
     result.journal = Mock()
     result.journal.read.return_value = None
     result.journal.write.return_value = ContactDocument(1,b'n'*32,b'x'*28)
+    result._fence = Mock(return_value='ef'*32)
     result._verify = Mock(return_value={'currentKey':'owner-key'})
     return result, at
 
@@ -34,7 +35,7 @@ class ContactSourceTests(unittest.TestCase):
     def test_private_state_requires_same_authenticated_owner(self):
         s, _ = source()
         with self.assertRaises(AdmissionRejected): s.read('tenant','other','owner','vault',100)
-        with self.assertRaises(AdmissionRejected): s.write('tenant','other','owner','vault',100,0,b'x'*28,'sig')
+        with self.assertRaises(AdmissionRejected): s.write('tenant','other','owner','vault',100,0,b'x'*28,'sig','ef'*32)
         with self.assertRaises(AdmissionRejected): s.read('other','owner','owner','vault',100)
         s.journal.read.assert_not_called()
         s._verify.assert_not_called()
@@ -49,10 +50,10 @@ class ContactSourceTests(unittest.TestCase):
 
     def test_write_checks_revision_before_crypto_and_commits_verified_bytes(self):
         s, _ = source()
-        with self.assertRaises(HistoryConflict): s.write('tenant','owner','owner','vault',100,1,b'x'*28,'sig')
+        with self.assertRaises(HistoryConflict): s.write('tenant','owner','owner','vault',100,1,b'x'*28,'sig','ef'*32)
         s._verify.assert_not_called()
         s.journal.write.assert_not_called()
-        result=s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig')
+        result=s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig','ef'*32)
         assert result['revision']==1
         assert s._verify.call_args.kwargs['payload']==base64.b64encode(b'x'*28).decode()
         assert s.journal.write.call_args.args[-1]==b'x'*28
@@ -61,7 +62,7 @@ class ContactSourceTests(unittest.TestCase):
     def test_refused_signature_never_reaches_journal_write(self):
         s, _ = source()
         s._verify.side_effect=AdmissionRejected('bad signature')
-        with self.assertRaises(AdmissionRejected): s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig')
+        with self.assertRaises(AdmissionRejected): s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig','ef'*32)
         s.journal.write.assert_not_called()
 
 
@@ -71,7 +72,7 @@ class ContactSourceTests(unittest.TestCase):
             at[0]+=1
             return ContactDocument(1,b'n'*32,b'x'*28)
         s.journal.write.side_effect=changed
-        with self.assertRaises(HistoryConflict): s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig')
+        with self.assertRaises(HistoryConflict): s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig','ef'*32)
 
     def test_configuration_authenticates_reader_and_pins_source_scope(self):
         s, _ = source()
@@ -82,3 +83,10 @@ class ContactSourceTests(unittest.TestCase):
         self.assertEqual(result['currentKey'],'owner-key')
         self.assertEqual(result['source'],'source')
         with self.assertRaises(AdmissionRejected):s.configuration('wrong','owner',100)
+
+    def test_changed_authority_fence_refuses_even_unchanged_document_revision(self):
+        s, _ = source()
+        with self.assertRaises(HistoryConflict):
+            s.write('tenant','owner','owner','vault',100,0,b'x'*28,'sig','ab'*32)
+        s._verify.assert_not_called()
+        s.journal.write.assert_not_called()

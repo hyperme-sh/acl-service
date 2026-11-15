@@ -27,14 +27,14 @@ const accounts=new Map([1,2,3].map(n=>{
 const contextFor=account=>({jwks,policy,pinnedIss:new Set(),links:account.links,revocations:[],genesisEpubBindings:[account.genesis],now,
  history:(principal,from,until)=>accounts.has(principal)?{ok:true,value:historyState(principal,[],from,until)}:{ok:false,reason:'missing-history'}});
 
-const base=()=>({action:'write',owner,tenant:'tenant',source:'source',kind:'vault',revision:0,payload:Buffer.alloc(28,1).toString('base64')});
+const base=()=>({action:'write',owner,tenant:'tenant',source:'source',kind:'vault',revision:0,fence:'ef'.repeat(32),payload:Buffer.alloc(28,1).toString('base64')});
 function signed(input=base(),key=1) {
  const bytes=Buffer.from(input.payload,'base64');
- return {...input,signature:sign(take(lengthPrefixed(['s3rch-contact-document-v1',input.tenant,input.source,input.owner,input.kind,String(input.revision),String(now),createHash('sha256').update(bytes).digest('hex')])),key)};
+ return {...input,signature:sign(take(lengthPrefixed(['s3rch-contact-document-v1',input.tenant,input.source,input.owner,input.kind,String(input.revision),String(now),input.fence,createHash('sha256').update(bytes).digest('hex')])),key)};
 }
 test('current owner can sign encrypted state, other keys and changed scopes refuse',()=>{
  const input=signed();assert.equal(contactDocument(accounts,contextFor,now,input).currentKey,owner);
- for(const patch of [{tenant:'other'},{source:'other'},{owner:member},{kind:'descriptor'},{revision:1},{payload:Buffer.alloc(28,2).toString('base64')},{signature:'bad'}])assert.throws(()=>contactDocument(accounts,contextFor,now,{...input,...patch}));
+ for(const patch of [{tenant:'other'},{source:'other'},{owner:member},{kind:'descriptor'},{revision:1},{fence:'00'.repeat(32)},{payload:Buffer.alloc(28,2).toString('base64')},{signature:'bad'}])assert.throws(()=>contactDocument(accounts,contextFor,now,{...input,...patch}));
  assert.throws(()=>contactDocument(accounts,contextFor,now,signed(base(),2)));
  assert.throws(()=>contactDocument(accounts,contextFor,now+1,input));
 });

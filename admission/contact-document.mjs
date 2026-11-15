@@ -4,7 +4,7 @@ import {verifyFirstContactDescriptor} from 'sociacl-ids/first-contact';
 
 // Private verifier input: caller binds tenant/source/owner from provisioned scope.
 export function contactDocument(accounts, contextFor, now, input) {
-  const {owner, tenant, source, kind, revision, payload, signature} = input;
+  const {owner, tenant, source, kind, revision, payload, signature, fence} = input;
   const account = accounts.get(owner);
   if (!account || account.frozen || account.entries.some(row => row.issuedAt > now)) throw Error('unknown-contact-owner');
   const diagnostics = [], context = contextFor(account, now);
@@ -17,11 +17,11 @@ export function contactDocument(accounts, contextFor, now, input) {
         revocations:a.ownRevokes, genesisEpubBindings:[a.genesis]}))},
   };
   if (input.action !== 'write' || !['descriptor','vault'].includes(kind) || !Number.isSafeInteger(revision) || revision < 0 ||
-      typeof payload !== 'string' || payload.length > 1398104 || typeof signature !== 'string') throw Error('invalid-contact-write');
+      typeof fence !== 'string' || !/^[0-9a-f]{64}$/.test(fence) || typeof payload !== 'string' || payload.length > 1398104 || typeof signature !== 'string') throw Error('invalid-contact-write');
   const bytes = Buffer.from(payload, 'base64');
   const [minimum,maximum] = kind === 'descriptor' ? [1,8192] : [28,1048576];
   if (bytes.toString('base64') !== payload || bytes.length < minimum || bytes.length > maximum) throw Error('invalid-contact-payload');
-  const message = lengthPrefixed(['s3rch-contact-document-v1', tenant, source, owner, kind, String(revision), String(now), createHash('sha256').update(bytes).digest('hex')]);
+  const message = lengthPrefixed(['s3rch-contact-document-v1', tenant, source, owner, kind, String(revision), String(now), fence, createHash('sha256').update(bytes).digest('hex')]);
   if (!message.ok || !verifyKeySignature(head.currentKey, signature, message.value).ok) throw Error('contact-signature-refused');
   if (kind === 'descriptor') {
     const value = JSON.parse(new TextDecoder('utf-8', {fatal:true}).decode(bytes));
