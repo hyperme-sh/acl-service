@@ -273,6 +273,23 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(cancelled['direct'],first['direct'])
         self.assertGreater(cancelled['objectVersion'],live['objectVersion'])
 
+    def test_native_consent_requires_invitation_even_for_set_owner(self):
+        policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
+        view=lambda:self.source.group_consent_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+        with self.assertRaises(AdmissionRejected):view()
+        fence=self.source.group_authority_view(self.tenant,self.owner,self.object,self.now)['fence']
+        rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupInvitations'][0]]
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,fence,predicate,set_id,rows)
+        prepared=view()
+        self.assertIsNone(prepared['consent']['state']['memberAssent'])
+        self.assertEqual(prepared['consent']['state']['stated'],0)
+        self.assertEqual(prepared['consent']['draft']['member'],self.owner)
+        self.assertEqual(prepared['consent']['draft']['role'],'member')
+        self.assertEqual(prepared['consent']['draft']['hamState'],2)
+        self.assertEqual(view()['fence'],prepared['fence'])
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,prepared['fence'],predicate,set_id,[self.f['groupInvitations'][1]])
+        with self.assertRaises(AdmissionRejected):view()
+
     def test_native_group_append_reconciliation_never_writes_or_hides_withdrawal(self):
         policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
         rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupEdges'][0]]

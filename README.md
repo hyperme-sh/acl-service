@@ -972,3 +972,15 @@ Both results reverify the combined rows against current enrolled histories.
 The read creates no rows or versions. An applied older row does not revive a
 cancelled edge or grant access. After an absent result, explicit append must use
 the returned fence; an intervening authority change still refuses the write.
+
+`POST /api/v1/acl/sociacl/media/group-consent-view` accepts exactly
+`{object,predicate,set}` under the existing `acl:media:read` binding. The member
+comes from the authenticated subject's configured reader, never request JSON.
+The protected source reads retained rows, current enrolled histories and the
+source fence together. A current set-owner assent naming that member is
+required; withdrawals or unacknowledged cancellations refuse preparation.
+The response contains separate admitted consent state and a member-only unsigned
+`draft` with the next safe HAM state, server `issuedAt`, and cancellation IDs.
+The caller must choose `stated` before signing. No member write, epoch, direct
+grant, wrap or delivery is performed by this route. Member append capacity and
+group-wide epoch delivery remain separate unfinished work.

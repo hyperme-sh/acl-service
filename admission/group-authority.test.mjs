@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
 import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
-import {groupAuthority,groupObjectAuthority,groupPolicyAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority} from './group-authority.mjs';
 const now=1700000060;
 const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
@@ -126,4 +126,16 @@ test('policy signing context belongs to the authenticated set owner, not media o
  const frozen=new Map(accounts);frozen.set(outsider,{...accounts.get(outsider),frozen:true});
  assert.throws(()=>groupPolicyAuthority(frozen,contextFor,now,foreign));
  assert.throws(()=>groupPolicyAuthority(accounts,contextFor,now,{...foreign,rows:[]}));
+});
+
+test('consent preparation is member-specific and requires a current invitation',()=>{
+ const prepare=(value={...input([owned,assent('set')]),member},identities=accounts)=>groupConsentAuthority(identities,contextFor,now,value);
+ const held=prepare();assert.equal(held.memberPub,member);assert.equal(held.state.stated,0);
+ assert.deepEqual(held.draft,{role:'member',predicate:'same-group',set,member,setOwner:owner,hamState:2,issuedAt:now,cancels:[]});
+ assert.equal(prepare({...input([...rows(),assent('member',0,4)]),member}).draft.hamState,5);
+ for(const value of [null,{...input(),member:outsider},{...input(),member:owner},{...input(),member:'bad'},
+   {...input(),member,extra:1},{...input([owned,assent('member')]),member},
+   {...input([...rows(),assent('set',0,2)]),member},{...input([...rows(),cancel()]),member},
+   {...input([owned,assent('set',1,Number.MAX_SAFE_INTEGER)]),member}])assert.throws(()=>prepare(value));
+ const frozen=new Map(accounts);frozen.set(member,{...accounts.get(member),frozen:true});assert.throws(()=>prepare(undefined,frozen));
 });
