@@ -182,8 +182,12 @@ export function groupCohortAuthority(accounts,contextFor,now,input) {
 export function groupMemberStateAuthority(accounts,contextFor,now,input) {
   if(!input||Object.keys(input).sort().join()!=='member,predicate,rows,set'||!accounts.has(input.member))throw Error('invalid-group-member');
   const {member,...scope}=input;
-  const {graph,bindings,owner}=admittedCohort(accounts,contextFor,now,scope,false);
-  const state=groupMembershipState(graph,scope.predicate,scope.set,member);
-  if(!state)throw Error('group-member-state-unavailable');
+  const {graph,cohort,bindings,owner}=admittedCohort(accounts,contextFor,now,scope,false);
+  let state=groupMembershipState(graph,scope.predicate,scope.set,member);
+  if(!state) {
+    if(cohort.members.some(row=>row.accessor===member))throw Error('group-member-state-unavailable');
+    state={predicate:scope.predicate,set:scope.set,member,setOwner:owner,
+      memberAssent:null,setAssent:null,cancels:[],stated:0};
+  }
   return {state,memberPub:bindings.get(member).pub,ownerPub:bindings.get(owner).pub};
 }
