@@ -195,5 +195,10 @@ test('group cohort bindings follow current signing and encryption keys after rot
  assert.notEqual(result.bindings[f.genesis].epub,f.binding.epub);
  assert.equal(result.cohort.members[0].stated,1);
  rotations[0]=f['oidc-rotate'];
+ const object=group.replace('set_','media_'),record={object,owner:f.genesis,issuedAt:f.now};
+ record.sig=take(signWithKeyring(scalar(2),objectRecordBytes(record),rotations[0].nextKey));
+ const withdrawal=groupWithdrawalAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{object,predicate:'same-group',set:group,member:f.genesis,rows:[{kind:'object',soul:object,record},...rows]});
+ assert.equal(withdrawal.memberPub,rotations[0].nextKey);
+ assert.equal(withdrawal.draft.hamState,1);
  assert.throws(()=>groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows}),/invalid-group-history/);
 });

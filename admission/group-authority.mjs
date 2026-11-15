@@ -14,7 +14,7 @@ function admittedGroupGraph(accounts,contextFor,now,input) {
   if(!accounts.has(owner)||!accounts.has(setOwner))throw Error('unknown-group-owner');
   for(const account of accounts.values()) {
     const diagnostics=[],head=resolveStoreAccount(account.principal,account.rotations,contextFor(account,now),diagnostics);
-    if(account.frozen||diagnostics.length||!head.bindingEpub||!head.currentEpub||head.rotations.length!==account.rotations.length||
+    if(account.frozen||diagnostics.length||!head.bindingEpub||head.rotations.length!==account.rotations.length||
         account.entries.some(row=>row.issuedAt>now))throw Error('invalid-group-history');
   }
   const graph=new MemoryGroupGraph();
