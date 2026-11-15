@@ -1416,6 +1416,8 @@ class MediaSource:
         def run(cancel):
             group=GroupSource(self)
             at=int(self.clock())
+            if action=='catalog':
+                return GroupMembership(group).catalog(tenant,writer,at,body['page'],cancel)
             scope=(body['predicate'],body['set'])
             if action=='create-view':
                 return group.creation_view(tenant,writer,body['object'],at,*scope,cancel)
