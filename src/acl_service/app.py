@@ -57,6 +57,7 @@ def create_app(
     delegation_bindings: Mapping[tuple[UUID, str, str], StatementBinding] | None = None,
     private_wrap_bindings: Mapping[tuple[UUID, str], PrivateWrapBinding] | None = None,
     media_allocation_bindings: Mapping | None = None,
+    group_allocation_bindings: Mapping | None = None,
 ) -> FastAPI:
     if statement_bindings is None:
         from acl_service.infrastructure.statement_bindings import load_statement_bindings
@@ -68,6 +69,10 @@ def create_app(
     if owns_allocation_clients:
         from acl_service.infrastructure.media_allocation_bindings import load_allocation_bindings
         media_allocation_bindings = load_allocation_bindings()
+    owns_group_allocation_clients = group_allocation_bindings is None
+    if owns_group_allocation_clients:
+        from acl_service.infrastructure.group_allocation_bindings import load_group_allocation_bindings
+        group_allocation_bindings = load_group_allocation_bindings()
     owns_media_stores = private_wrap_bindings is None
     if owns_media_stores:
         from acl_service.infrastructure.media_bindings import load_media_bindings
@@ -110,6 +115,10 @@ def create_app(
         finally:
             if owns_allocation_clients:
                 clients = {id(binding.client): binding.client for binding in (media_allocation_bindings or {}).values()}
+                for client in clients.values():
+                    await client.close()
+            if owns_group_allocation_clients:
+                clients = {id(binding.client): binding.client for binding in (group_allocation_bindings or {}).values()}
                 for client in clients.values():
                     await client.close()
             if owns_media_stores:
@@ -193,6 +202,12 @@ def create_app(
     app.state.media_allocation_tenant_slots = {key[0]: asyncio.Semaphore(1) for key in (media_allocation_bindings or {})}
     from acl_service.interfaces.api.media_allocation_routes import router as media_allocation_router
     app.include_router(media_allocation_router, prefix='/api/v1')
+    app.state.group_allocation_bindings = MappingProxyType(dict(group_allocation_bindings)) if group_allocation_bindings is not None else None
+    app.state.group_allocation_slots = asyncio.Semaphore(2)
+    app.state.group_allocation_body_slots = {key: asyncio.Semaphore(1) for key in (group_allocation_bindings or {})}
+    app.state.group_allocation_tenant_slots = {key[0]: asyncio.Semaphore(1) for key in (group_allocation_bindings or {})}
+    from acl_service.interfaces.api.group_allocation_routes import router as group_allocation_router
+    app.include_router(group_allocation_router, prefix='/api/v1')
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
     app.add_middleware(AclServiceDbMiddleware)

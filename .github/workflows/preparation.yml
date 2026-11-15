@@ -96,6 +96,10 @@ jobs:
         run: |
           .venv/bin/python -m coverage run --branch --source=acl_service.domain.group_allocation,acl_service.infrastructure.group_allocation_client -m pytest -q tests/test_group_allocation.py tests/test_group_allocation_client.py
           .venv/bin/python -m coverage report --fail-under=90 --show-missing
+      - name: Group allocation binding and route coverage
+        run: |
+          .venv/bin/python -m coverage run --branch --source=acl_service.infrastructure.group_allocation_bindings,acl_service.interfaces.api.group_allocation_routes -m pytest -q tests/test_group_allocation_bindings.py tests/test_group_allocation_routes.py
+          .venv/bin/python -m coverage report --fail-under=90 --show-missing
       - name: Protected retirement adapter coverage
         run: |
           .venv/bin/python -m coverage run --branch --source=acl_service.domain.media_retirement -m pytest -q tests/test_media_retirement.py
