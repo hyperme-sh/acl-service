@@ -14,12 +14,17 @@ let now=records.context.now*1000,changed=false,unavailable=false;
 const rotations=v.rotationNames.map(n=>records.accept.find(r=>r.name===n).input);
 const trust={jwks:records.context.jwks,policy:records.context.policy,pinnedIss:records.context.pinnedIss};
 const entries=[...records.context.links.map(([,r])=>r).filter(r=>r.principal===principal),...rotations];
-const verifierInput={principal,genesis:v.genesisBindings[0],entries,peers:[],trust,now:now/1000,deviceTransfer:true};
+const enrolled=JSON.parse(readFileSync(root+'/admission/fixture.json'));
+const verifierInput={principal,genesis:enrolled.binding,entries,peers:[],trust,now:now/1000,deviceTransfer:true};
 function verified(input=verifierInput){
  const r=spawnSync(process.execPath,[root+'/admission/verify.mjs'],{input:JSON.stringify(input),encoding:'utf8'});
  if(r.status)throw Error('owner refused');return JSON.parse(r.stdout);
 }
 const state=verified();assert.deepEqual(state.identity,identity);
+const revoked=records.reject.find(r=>r.name==='revoked-recovery').revocations;
+assert.throws(()=>verified({...verifierInput,entries:[...entries,...revoked]}));
+assert.throws(()=>verified({...verifierInput,genesis:{}}));
+assert.throws(()=>verified({...verifierInput,now:0}));
 assert.throws(()=>verified({...verifierInput,entries:[...entries,{kind:'rotate',principal,issuedAt:now/1000,nextSig:'forged'}]}));
 const sent=[];
 const request=async(operation,body)=>{
