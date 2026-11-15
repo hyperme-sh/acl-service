@@ -360,6 +360,7 @@ class MediaSource:
         A withdrawal need not acknowledge cancellation IDs to remove assent.
         """
         reserve=0
+        pending=0
         for rows in scopes.values():
             winners={}
             for envelope in rows:
@@ -378,8 +379,10 @@ class MediaSource:
                 withdrawal.update(stated=0,issuedAt=9007199254740991,cancels=[],sig='0'*128)
                 reserve+=len(encoded({'kind':envelope['kind'],'soul':envelope['soul'],'record':withdrawal}))+1
                 count+=1
+            pending+=count
             if len(rows)+count>1024:raise AdmissionRejected('group withdrawal row capacity')
         if len(encoded(scopes))+reserve>512*1024:raise AdmissionRejected('group withdrawal byte capacity')
+        return pending
 
     def _save(self, db, object, row, doc):
         raw=encoded(doc)
@@ -395,8 +398,12 @@ class MediaSource:
             # writable even after later ordinary direct-media mutations.
             if 'deletion' not in doc:
                 if doc.get('groupWithdrawalCapacity') is True:
-                    self._group_withdrawal_capacity(doc['groupScopes'])
+                    pending=self._group_withdrawal_capacity(doc['groupScopes'])
+                    pending+=sum(entry['stated']==1 for entry in self._snapshot(doc)['entries'])
+                    if doc['objectVersion']>9007199254740991-pending:
+                        raise AdmissionRejected('withdrawal object version capacity')
                     reserve=512*1024-len(encoded(doc['groupScopes']))
+                    reserve+=16-len(str(doc['objectVersion']))
                 cancellations=sum(row['claims']['stated']==0 for row in doc['grants'])
                 reserve+=max(0,64-cancellations)*17*1024+4096
         if len(raw)+reserve>6*1024*1024: raise AdmissionRejected('media capacity')

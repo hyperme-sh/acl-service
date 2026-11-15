@@ -995,3 +995,7 @@ ordinary direct-media writes cannot consume that space. Existing journals keep
 their prior direct-unshare budget until a group write can adopt this rule
 atomically. These are capacity guarantees, not membership or delivery authority;
 current histories and signatures still must pass admission.
+
+Reservation-enabled journals also preserve maximum-width `objectVersion` bytes
+and remaining version increments for active group and direct removals. Ordinary
+writes cannot use the last increment needed for those withdrawals.

@@ -375,6 +375,40 @@ class MediaSourceContracts(TestCase):
                      [assent('set',0,9007199254740991),assent('set',1,9007199254740991)]):
             self.source._group_withdrawal_capacity({'scope':pair+[{}]*1022})
 
+    def test_group_withdrawal_reserves_version_width_at_exact_document_limit(self):
+        view=self.group_fixture();join=self.group_member_row()
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[join])
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['objectVersion']=999;doc['padding']=''
+            reserve=512*1024-len(encoded(doc['groupScopes']))+64*17*1024+4096+13
+            doc['padding']='x'*(6*1024*1024-len(encoded(doc))-reserve)
+            self.source._save(db,OBJECT,row,doc)
+        withdrawal={**join,'record':{**join['record'],'stated':0}}
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[withdrawal])
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,100)
+            self.assertEqual(doc['objectVersion'],1000)
+            reserve=512*1024-len(encoded(doc['groupScopes']))+64*17*1024+4096+12
+            self.assertEqual(len(encoded(doc))+reserve,6*1024*1024)
+
+    def test_group_withdrawal_keeps_last_version_increment_available(self):
+        view=self.group_fixture();join=self.group_member_row()
+        self.source.append_group(TENANT,'owner',OBJECT,100,view()['fence'],'same-group','set_test',[join])
+        with self.store._transaction(write=True) as db:
+            row,doc=self.source._load(db,OBJECT,100)
+            doc['objectVersion']=9007199254740990
+            self.source._save(db,OBJECT,row,doc)
+        before=view()['fence']
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_group(TENANT,'owner',OBJECT,100,before,'same-group','set_test',[{'extra':'row'}])
+        self.assertEqual(view()['fence'],before)
+        withdrawal={**join,'record':{**join['record'],'stated':0}}
+        self.source.append_group(TENANT,'owner',OBJECT,100,before,'same-group','set_test',[withdrawal])
+        with self.store._transaction(write=False) as db:
+            _,doc=self.source._load(db,OBJECT,100)
+            self.assertEqual(doc['objectVersion'],9007199254740991)
+
     def test_group_capacity_also_reserves_object_set_withdrawal(self):
         record={'owner':'owner','object':OBJECT,'predicate':'same-group','set':'set_test',
             'hamState':1,'stated':1,'issuedAt':100,'cancels':[],'sig':'signed'}
