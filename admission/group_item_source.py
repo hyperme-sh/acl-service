@@ -1,4 +1,4 @@
-"""Joint protected item/group key preparation; this does not grant delivery."""
+"""Protected group item preparation, admission and current read authority."""
 import hashlib
 import hmac
 import json
@@ -246,4 +246,111 @@ class GroupItemSource:
                 'epoch':expected['epoch'],'revisionId':expected['revisionId'],'settleWindowMs':plan['settleWindowMs']})
             doc['objectVersion']+=1
             self.media._save(db,object,row,doc)
+        return True
+
+    def _read_snapshot(self,doc,ids,projection,at):
+        from group_item_grants import journal,latest,grant_key
+        predicate,set_id=projection['predicate'],projection['set']
+        entries={entry['accessor']:entry for entry in self.media._snapshot(doc)['entries']}
+        members={member['accessor']:member for member in projection['snapshot']['members']}
+        readers={row['claims']['accessor'] for row in journal(doc)['rows'] if (row['predicate'],row['set'])==(predicate,set_id)}
+        owner=ids['owner'];owner_pub=ids['bindings'][owner]['pub']
+        for who in sorted(readers):
+            held=latest(doc,predicate,set_id,who);claims=held['claims'];member=members.get(who)
+            live=(claims['stated']==1 and claims['from']<=at*1000<claims['until'] and member is not None and
+                member['stated']==1 and who in projection['members'] and grant_key(predicate,set_id,who) not in journal(doc)['frozen'])
+            prior=entries.get(who)
+            if prior and ((prior['stated']==1 and prior['from']<=at*1000<prior['until']) or not live):continue
+            if live and (who not in ids['bindings'] or claims['owner']!=owner or
+                    not self.media.native[0].matches_grant(encoded(held['proof']),encoded({**claims,'ownerPub':owner_pub}))):
+                raise AdmissionRejected('current group item grant required')
+            entries[who]={'accessor':who,'grantRevision':claims['grantRevision'],'stated':1 if live else 0,
+                'from':claims['from'],'until':claims['until'],'scope':predicate,'setId':set_id,
+                'hamState':member['hamState'] if member else 0}
+        if len(entries)>64:raise AdmissionRejected('group item snapshot capacity')
+        return {'entries':[entries[who] for who in sorted(entries)],'objectSet':projection['snapshot']['objectSet']}
+
+    def _read_permit(self,db,tenant,reader,object,predicate,set_id,at,expires=None,key_expires=None):
+        from group_item_grants import journal,latest,grant_key
+        from acl_service.domain.group_item_delivery import GroupItemReadPermit
+        from acl_service.infrastructure.authority_checkpoint import authority_digest
+        import re
+        if tenant!=self.media.tenant:raise AdmissionRejected('wrong group item tenant')
+        _,doc=self.media._load(db,object,at);ids=self.media.identities(db,object,doc,at)
+        view,row,doc,ids,current=self._authority(db,tenant,ids['owner'],object,at)
+        projection=view['projection']
+        if current is None or (projection['predicate'],projection['set'])!=(predicate,set_id):
+            raise AdmissionRejected('current item group binding required')
+        key=self.keys._read_permit(db,tenant,reader,at,predicate,set_id,key_expires)
+        group,_,config=current
+        held=latest(doc,predicate,set_id,reader)
+        if held is None or grant_key(predicate,set_id,reader) in journal(doc)['frozen'] or reader not in ids['bindings']:
+            raise AdmissionRejected('group item grant unavailable')
+        claims=held['claims'];owner=ids['owner'];owner_pub=ids['bindings'][owner]['pub']
+        if (claims['owner']!=owner or claims['stated']!=1 or not claims['from']<=at*1000<claims['until'] or
+                not self.media.native[0].matches_grant(encoded(held['proof']),encoded({**claims,'ownerPub':owner_pub}))):
+            raise AdmissionRejected('group item grant inactive')
+        snapshot=self._read_snapshot(doc,ids,projection,at)
+        entry=next((entry for entry in snapshot['entries'] if entry['accessor']==reader),None)
+        if not entry or entry['scope']!=predicate or entry['setId']!=set_id or entry['stated']!=1:
+            raise AdmissionRejected('current group recipient required')
+        selected=None
+        for finalization in reversed(doc['finalizations']):
+            fin=finalization['proof']
+            if not any((record['predicate'],record['set'],record['epoch'],record['revisionId'])==
+                    (predicate,set_id,fin['epoch'],fin['revisionId']) for record in doc.get('groupItemEpochs',[])):continue
+            history=self.media._history(object,doc,at,fin)
+            history['current']=snapshot;history['groupWindowMs']=config['settleWindowMs']
+            if self.media.native[3].matches_settled(encoded(history)):
+                selected=next(record['document']['manifest'] for record in doc['manifests']
+                    if record['document']['manifest']['revisionId']==fin['revisionId'])
+                break
+        if selected is None or claims['epoch']!=selected['epoch']:
+            raise AdmissionRejected('current settled group item epoch required')
+        status=doc.get('groupItemStatuses',{}).get(grant_key(predicate,set_id,reader))
+        expected={'ownerPub':owner_pub,'object':object,'epoch':selected['epoch'],'revisionId':selected['revisionId'],
+            'accessor':reader,'grantRevision':claims['grantRevision'],'stated':1,
+            'zookie':{'object':object,'objectVersion':doc['objectVersion'],'snapshotHash':selected['aclSnapshot']}}
+        if not status or not self.media.native[1].matches_status(encoded(status),encoded(expected),
+                now_ms=at*1000,skew_ms=0,policy_max_age_ms=60000):
+            raise AdmissionRejected('current group item status required')
+        metadata=doc.get('groupItemWraps',{}).get(encoded([predicate,set_id]).decode('ascii'))
+        if (type(metadata) is not dict or set(metadata)!={'digest','length','itemEpoch','itemRevisionId','itemDigest','groupEpoch','groupRevisionId','groupKeyCommitment'} or
+                type(metadata['length']) is not int or not 1<=metadata['length']<=65536 or
+                any(type(metadata[field]) is not int or not 1<=metadata[field]<=9007199254740991 for field in ('itemEpoch','groupEpoch')) or
+                any(type(metadata[field]) is not str or re.fullmatch('[a-f0-9]{64}',metadata[field]) is None
+                    for field in ('digest','itemRevisionId','itemDigest','groupRevisionId','groupKeyCommitment')) or
+                (metadata['itemEpoch'],metadata['itemRevisionId'],metadata['itemDigest'])!=(selected['epoch'],selected['revisionId'],claims['itemCiphertextDigest']) or
+                (metadata['groupEpoch'],metadata['groupRevisionId'],metadata['groupKeyCommitment'])!=(key.epoch,key.revision_id,key.key_commitment)):
+            raise AdmissionRejected('current group item wrap required')
+        limit=min(at+2,doc['policyUntil'],group['policyUntil'],key.expires_at,claims['until']//1000,
+            (status['signedAt']+min(status['maxAgeMs'],60000))//1000)
+        expires=limit if expires is None else expires
+        if type(expires) is not int or not at<expires<=limit:raise AdmissionRejected('group item permit expired')
+        fields=['group-item-read-v1',tenant,reader,object,predicate,set_id,metadata,expires,key.fence,
+            row[0],hashlib.sha256(row[2]).hexdigest(),authority_digest(db).hex()]
+        fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+        return GroupItemReadPermit(key,object,selected['epoch'],selected['revisionId'],claims['itemCiphertextDigest'],
+            metadata['digest'],metadata['length'],fence,expires),ids,row,doc
+
+    def authorize_read(self,tenant,reader,object,predicate,set_id,cancel=lambda:None):
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            return self._read_permit(db,tenant,reader,object,predicate,set_id,at)[0]
+
+    def commit_read(self,permit,cancel=lambda:None):
+        from acl_service.domain.group_item_delivery import GroupItemReadPermit
+        from acl_service.domain.group_wrap import GroupKeyReadPermit
+        from acl_service.domain.history_store import HistoryConflict
+        if type(permit) is not GroupItemReadPermit or type(permit.key) is not GroupKeyReadPermit:
+            raise AdmissionRejected('invalid group item permit')
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        key=permit.key
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            current,ids,row,doc=self._read_permit(db,key.tenant,key.reader,permit.object,key.predicate,key.set_id,
+                at,permit.expires_at,key.expires_at)
+            if current!=permit:raise HistoryConflict('group item authority changed')
+            for who,binding in ids['bindings'].items():self.store._observe_floor(db,who,binding['head'])
+            if permit.item_epoch>doc['floor']:
+                doc['floor']=permit.item_epoch;self.media._save(db,permit.object,row,doc)
         return True

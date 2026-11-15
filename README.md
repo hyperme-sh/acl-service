@@ -1234,8 +1234,8 @@ media object's allocation, verifies length and digest, and requires a second
 protected commit before returning. Item and group epochs remain separate in the
 returned context. The authority contract requires current item grant/status,
 settled epoch, group membership and both protected checkpoints; group-key access
-alone never qualifies. No default authority or HTTP route installs this
-coordinator. Source admission and publication remain separate consumers.
+alone never qualifies. The protected media source supplies the joint authority methods. No HTTP route
+installs this coordinator. Status and wrap publication remain separate consumers.
 
 
 Group item grants use their own bounded `groupItemGrants` journal; they never
@@ -1342,3 +1342,12 @@ scope-bound current identity/history decisions for the shared browser SDK.
 Its browser adapter uses the supported `sociacl-ids/keyring` surface. Explicit
 subject bindings and expiring transfer eligibility are required; no private SEA
 keys or uploaded history are accepted by the authority service.
+
+The internal group-item read authority joins a current owner-signed item grant,
+independent current membership and group-key permit, native settled item history,
+current owner-signed status and exact item/group wrap metadata. It rechecks the
+same authority after the coordinator fetches bytes, before observing floors or
+releasing data. A live direct grant retains precedence over a group grant for the
+same reader. Missing status or publication metadata refuses by default. This
+adds no public read route or epoch-write route; combined direct delivery and the
+owner status/publication path must be completed before installing those routes.
