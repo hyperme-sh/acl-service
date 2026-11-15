@@ -18,7 +18,8 @@ PATH='/acl/sociacl/media/groups/'
 @pytest.fixture
 def setup(monkeypatch):
     tenant=uuid4();user=SimpleNamespace(sub='session',scopes=['acl:media:read','acl:media:write'])
-    authority=SimpleNamespace(group_wrap_view=AsyncMock(return_value={'fence':'a'*64}))
+    authority=SimpleNamespace(group_wrap_view=AsyncMock(return_value={'fence':'a'*64}),
+                              group_item_view=AsyncMock(return_value={'fence':'b'*64,'expiresAt':102}))
     binding=SimpleNamespace(tenant=str(tenant),reader='fixed-reader',authority=authority,store=SimpleNamespace(tenant=str(tenant)))
     app=FastAPI();app.include_router(routes.router)
     app.state.group_wrap_bindings={(tenant,user.sub):binding}
@@ -90,6 +91,28 @@ async def test_disconnect_cancels_work(setup):
         await routes.connected(SimpleNamespace(is_disconnected=disconnected),'wrap-read',s.binding,RECORD)
     assert cancelled.is_set()
 
+
+@pytest.mark.asyncio
+async def test_item_view_binds_owner_and_scope_without_storage(setup):
+    s=setup;body={**RECORD,'object':'media_owner_item'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        result=await client.post(PATH+'item-view',json=body)
+        assert result.status_code==200 and result.headers['cache-control']=='private, no-store'
+        assert result.json()=={'fence':'b'*64,'expiresAt':102}
+        s.authority.group_item_view.assert_awaited_once_with(str(s.tenant),'fixed-reader',body['object'],RECORD['predicate'],RECORD['set'])
+        s.publish.assert_not_awaited();s.read.assert_not_awaited()
+        s.authority.group_item_view.reset_mock()
+        for bad in [RECORD,{**body,'owner':'attacker'},{**body,'at':100},{**body,'object':[]},
+                    {**body,'object':''},{**body,'object':'with space'},{**body,'object':'x'*513}]:
+            assert (await client.post(PATH+'item-view',json=bad)).status_code==400
+        s.user.scopes=['acl:media:read']
+        assert (await client.post(PATH+'item-view',json=body)).status_code==403
+        s.authority.group_item_view.assert_not_awaited()
+        s.user.scopes=['acl:media:write']
+        s.authority.group_item_view.side_effect=AdmissionRejected('private source detail')
+        result=await client.post(PATH+'item-view',json=body)
+        assert result.status_code==403 and 'private source detail' not in result.text
+
 @pytest.mark.asyncio
 async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
     import importlib
@@ -107,4 +130,6 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
     app.dependency_overrides[require_matched_tenant]=lambda:s.tenant
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://acl') as client:
         assert (await client.post('/api/v1'+PATH+'wrap-view',json=RECORD)).status_code==200
+        assert (await client.post('/api/v1'+PATH+'item-view',json={**RECORD,'object':'media_owner_item'})).status_code==200
     s.authority.group_wrap_view.assert_awaited_once()
+    s.authority.group_item_view.assert_awaited_once()

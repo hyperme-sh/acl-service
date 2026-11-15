@@ -20,6 +20,8 @@ router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 
 async def execute(action,binding,body):
     args=(binding.tenant,binding.reader,body['predicate'],body['set'])
+    if action=='item-view':
+        return await binding.authority.group_item_view(args[0],args[1],body['object'],args[2],args[3])
     if action=='wrap-view':
         return await binding.authority.group_wrap_view(args[0],args[1],int(time.time()),args[2],args[3])
     if action=='wrap-publish':
@@ -47,9 +49,12 @@ async def connected(request,action,binding,body):
 def parse_body(data,action):
     body=json.loads(data,object_pairs_hook=_unique_fields,parse_constant=_invalid_constant)
     expected={'predicate','set'}
+    if action=='item-view':expected.add('object')
     if action=='wrap-publish':expected|={'at','fence','metadata','payload'}
     if (type(body) is not dict or set(body)!=expected or body['predicate'] not in ('same-group','named-circle')
             or type(body['set']) is not str or re.fullmatch(r'set_p_[0-9a-f]{128}_[0-9a-f]{32}',body['set']) is None):raise ValueError()
+    if action=='item-view' and (type(body['object']) is not str
+            or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
     if action=='wrap-publish':
         if (type(body['at']) is not int or not 0<=body['at']<=9007199254740991
                 or type(body['fence']) is not str or re.fullmatch('[0-9a-f]{64}',body['fence']) is None
@@ -90,6 +95,11 @@ async def operation(action,request,tenant,user):
 @router.post('/wrap-view')
 async def view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('wrap-view',request,tenant,user)
+
+
+@router.post('/item-view')
+async def item_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-view',request,tenant,user)
 
 
 @router.post('/wrap-publish')
