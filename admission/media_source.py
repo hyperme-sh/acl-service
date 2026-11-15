@@ -1410,7 +1410,9 @@ class MediaSource:
     async def group_operation(self, action, tenant, writer, body):
         from group_source import GroupSource
         from group_membership import GroupMembership
-        if type(body) is not dict or len(encoded(body))>18432:
+        from group_key_source import GroupKeySource
+        maximum=73728 if action in ('key-append','key-state') else 18432
+        if type(body) is not dict or len(encoded(body))>maximum:
             raise AdmissionRejected('invalid group command')
         body=json.loads(encoded(body))
         def run(cancel):
@@ -1426,6 +1428,15 @@ class MediaSource:
             if action=='create':
                 if group.create(tenant,writer,body['object'],body['at'],*scope,body['fence'],body['config'],cancel) is not True:
                     raise AdmissionRejected('group creation refused')
+                return {'accepted':True}
+            if action in ('key-view','key-append','key-state'):
+                keys=GroupKeySource(group)
+                if action=='key-view':
+                    return keys.view(tenant,writer,at,*scope,cancel)
+                if action=='key-state':
+                    return keys.state(tenant,writer,at,*scope,body['command'],cancel)
+                if keys.append(tenant,writer,body['at'],*scope,body['fence'],body['command'],cancel) is not True:
+                    raise AdmissionRejected('group key refused')
                 return {'accepted':True}
             members=GroupMembership(group)
             if action=='member-view':

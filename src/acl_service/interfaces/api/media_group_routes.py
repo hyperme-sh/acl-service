@@ -14,6 +14,9 @@ from acl_service.interfaces.api.signed_store_routes import _unique_fields, _inva
 router = APIRouter(prefix='/acl/sociacl/media/groups', tags=['SociACL'])
 FIELDS = {
     'catalog': {'page'},
+    'key-view': {'predicate','set'},
+    'key-append': {'predicate','set','at','fence','command'},
+    'key-state': {'predicate','set','command'},
     'create-view': {'object','predicate','set'},
     'create': {'object','predicate','set','at','fence','config'},
     'create-state': {'object','predicate','set','config'},
@@ -37,7 +40,7 @@ def _body(action, raw):
     if 'stated' in body and (type(body['stated']) is not int or body['stated'] not in (0,1)): raise ValueError()
     if 'at' in body and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991): raise ValueError()
     if 'fence' in body and (type(body['fence']) is not str or re.fullmatch(r'[a-f0-9]{64}',body['fence']) is None): raise ValueError()
-    for name in ('config','row'):
+    for name in ('config','row','command'):
         if name in body and type(body[name]) is not dict: raise ValueError()
     return body
 
@@ -64,7 +67,7 @@ async def group_operation(action: str, request: Request,
             async with capacity(request.app.state.private_wrap_body_slots[(tenant,user.sub)]):
                 async with asyncio.timeout(1):
                     async for chunk in request.stream():
-                        if len(raw)+len(chunk)>18432: raise refused(413,'Request too large')
+                        if len(raw)+len(chunk)>(73728 if action in ('key-append','key-state') else 18432): raise refused(413,'Request too large')
                         raw.extend(chunk)
             try: body = _body(action,raw)
             except (ValueError,TypeError,RecursionError): raise refused(400,'Invalid group request') from None

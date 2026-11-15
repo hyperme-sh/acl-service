@@ -21,6 +21,9 @@ CASES=[
     ('member-append',dict(SCOPE,member='member',role='member',at=100,fence='a'*64,row={})),
     ('member-state',dict(SCOPE,member='member',role='member',row={})),
     ('catalog',{'page':0}),
+    ('key-view',dict(SCOPE)),
+    ('key-append',dict(SCOPE,at=100,fence='a'*64,command={})),
+    ('key-state',dict(SCOPE,command={})),
 ]
 
 
@@ -94,7 +97,7 @@ async def test_invalid_command_fields_and_busy_capacity_refuse(setup):
     s=setup
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
         for action,body in CASES:
-            for key,value in [('predicate','unknown'),('set','bad'),('object',[]),('member',[]),('role','owner'),('stated',True),('at',True),('fence','bad'),('config',[]),('row',[])]:
+            for key,value in [('predicate','unknown'),('set','bad'),('object',[]),('member',[]),('role','owner'),('stated',True),('at',True),('fence','bad'),('config',[]),('row',[]),('command',[])]:
                 if key in body: assert (await client.post(BASE+action,json={**body,key:value})).status_code==400
         await s.app.state.private_wrap_tenant_slots[s.tenant].acquire()
         assert (await client.post(BASE+'create-view',json=CASES[0][1])).status_code==429
@@ -108,3 +111,15 @@ async def test_catalog_rejects_invalid_pages(setup):
         for page in (-1,16,True,0.5,'0',None):
             assert (await client.post(BASE+'catalog',json={'page':page})).status_code==400
     setup.authority.group_operation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_key_body_limit_is_bounded_without_expanding_other_actions(setup):
+    s=setup
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        for action in ('key-append','key-state'):
+            body=dict(SCOPE,command={'padding':'x'*20000})
+            if action=='key-append':body.update(at=100,fence='a'*64)
+            assert (await client.post(BASE+action,json=body)).status_code==200
+            assert (await client.post(BASE+action,content=b'x'*73729,headers={'content-type':'application/json'})).status_code==413
+        assert (await client.post(BASE+'key-view',content=b'x'*18433,headers={'content-type':'application/json'})).status_code==413
