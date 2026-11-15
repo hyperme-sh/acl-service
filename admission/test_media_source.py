@@ -39,6 +39,25 @@ class MediaSourceContracts(TestCase):
         self.source=MediaSource(self.store,TENANT,clock=lambda:self.now,identities=self.identities,native=self.native)
         self.source.provision(OBJECT,{},10000,exclusive_grant=lambda *args:True)
 
+    def test_group_commands_use_bounded_existing_worker_and_fixed_arguments(self):
+        with patch('group_source.GroupSource') as groups, patch('group_membership.GroupMembership') as members:
+            group=groups.return_value;member=members.return_value
+            scope={'predicate':'same-group','set':'set_test'}
+            cases=[('create-view',{**scope,'object':OBJECT},group.creation_view),
+                   ('create-state',{**scope,'object':OBJECT,'config':{}},group.creation_state),
+                   ('create',{**scope,'object':OBJECT,'at':100,'fence':'f','config':{}},group.create),
+                   ('member-view',{**scope,'member':'reader','role':'member','stated':1},member.view),
+                   ('member-state',{**scope,'member':'reader','role':'member','row':{}},member.state),
+                   ('member-append',{**scope,'member':'reader','role':'member','row':{},'at':100,'fence':'f'},member.append)]
+            for action,body,method in cases:
+                method.return_value=True if action in ('create','member-append') else {'ok':True}
+                result=asyncio.run(self.source.group_operation(action,TENANT,'owner',body))
+                self.assertEqual(result,{'accepted':True} if action in ('create','member-append') else {'ok':True})
+                self.assertEqual(method.call_args.args[:2],(TENANT,'owner'))
+                self.assertTrue(callable(method.call_args.args[-1]))
+            with self.assertRaises(AdmissionRejected):asyncio.run(self.source.group_operation('unknown',TENANT,'owner',scope))
+            with self.assertRaises(AdmissionRejected):asyncio.run(self.source.group_operation('create',TENANT,'owner',{'padding':'x'*18433}))
+
     def test_consent_view_is_bound_to_member_history_and_one_source_fence(self):
         with self.store._transaction(write=True) as db:
             row,doc=self.source._load(db,OBJECT,100)

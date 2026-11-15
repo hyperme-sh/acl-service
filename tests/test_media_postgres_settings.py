@@ -101,7 +101,7 @@ def test_postgres_source_uses_fixed_bundle_and_closes_on_failure(config, monkeyp
     import sys
     binding=config.binding();store=Mock();factory=Mock(return_value=SimpleNamespace())
     modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
-             for name in ('history_admission','statement_source','media_source')}
+             for name in ('history_admission','statement_source','media_source','group_source','group_membership')}
     modules['media_source'].MediaSource=factory
     for name,value in modules.items():monkeypatch.setitem(sys.modules,name,value)
     monkeypatch.setattr(postgres.PostgresMediaSettings,'open',lambda _:store)

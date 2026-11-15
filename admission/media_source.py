@@ -1406,3 +1406,33 @@ class MediaSource:
 
     async def commit_wrap_write(self, permit):
         return await self._work(self.commit_write,permit)
+
+    async def group_operation(self, action, tenant, writer, body):
+        from group_source import GroupSource
+        from group_membership import GroupMembership
+        if type(body) is not dict or len(encoded(body))>18432:
+            raise AdmissionRejected('invalid group command')
+        body=json.loads(encoded(body))
+        def run(cancel):
+            group=GroupSource(self)
+            at=int(self.clock())
+            scope=(body['predicate'],body['set'])
+            if action=='create-view':
+                return group.creation_view(tenant,writer,body['object'],at,*scope,cancel)
+            if action=='create-state':
+                return group.creation_state(tenant,writer,body['object'],at,*scope,body['config'],cancel)
+            if action=='create':
+                if group.create(tenant,writer,body['object'],body['at'],*scope,body['fence'],body['config'],cancel) is not True:
+                    raise AdmissionRejected('group creation refused')
+                return {'accepted':True}
+            members=GroupMembership(group)
+            if action=='member-view':
+                return members.view(tenant,writer,at,*scope,body['member'],body['role'],body['stated'],cancel)
+            if action=='member-state':
+                return members.state(tenant,writer,at,*scope,body['member'],body['role'],body['row'],cancel)
+            if action=='member-append':
+                if members.append(tenant,writer,body['at'],*scope,body['member'],body['role'],body['fence'],body['row'],cancel) is not True:
+                    raise AdmissionRejected('group response refused')
+                return {'accepted':True}
+            raise AdmissionRejected('unknown group command')
+        return await self._work(run)
