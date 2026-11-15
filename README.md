@@ -1111,3 +1111,13 @@ The journal preserves room for membership withdrawals. Exact-command state reads
 support lost-response recovery without producing replacement signatures.
 These internal methods do not grant media access or publish keys. HTTP wiring,
 recipient-wrap storage and delivery checks are separate consumers.
+
+The fixed-principal group command routes also provide `key-view`, `key-append`
+and `key-state`. Preparation takes `{predicate,set}`; append adds the fresh
+`at`, `fence` and exact signed `command`; recovery takes `{predicate,set,command}`.
+A command contains `{document:{manifest,snapshot},finalization}`. Only the
+currently authenticated group owner can use these operations. The outer key
+append/state body is capped at 72 KiB and the signed command at 64 KiB. Other
+group actions retain their existing 18 KiB transport bound. Existing worker,
+rate, cancellation and tenant capacity controls apply. No route accepts a caller
+chosen writer or supplies a group key, reader wrap or media authorization.
