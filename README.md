@@ -1226,3 +1226,13 @@ source transaction. Its short-lived fence binds both selectors and their
 checkpoints. It returns no key or storage location and does not create a media
 grant, object-set binding, publication or delivery permission. Group item-key
 publication and read authorization remain separate consumers of this context.
+
+
+The internal `deliver_group_item_wrap` coordinator accepts only a joint immutable
+item/group permit from a configured authority. It reads opaque bytes through the
+media object's allocation, verifies length and digest, and requires a second
+protected commit before returning. Item and group epochs remain separate in the
+returned context. The authority contract requires current item grant/status,
+settled epoch, group membership and both protected checkpoints; group-key access
+alone never qualifies. No default authority or HTTP route installs this
+coordinator. Source admission and publication remain separate consumers.
