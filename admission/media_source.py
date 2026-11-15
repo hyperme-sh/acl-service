@@ -1461,6 +1461,21 @@ class MediaSource:
                 tenant,owner,object,predicate,set_id,cancel)
         return await self._work(run)
 
+    async def _group_item_read_work(self,action,*args):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_item_source import GroupItemSource
+        def run(cancel):
+            source=GroupItemSource(GroupKeySource(GroupSource(self)))
+            return getattr(source,action)(*args,cancel=cancel)
+        return await self._work(run)
+
+    async def authorize_group_item_read(self,tenant,reader,object,predicate,set_id):
+        return await self._group_item_read_work('authorize_read',tenant,reader,object,predicate,set_id)
+
+    async def commit_group_item_read(self,permit):
+        return await self._group_item_read_work('commit_read',permit)
+
     async def _group_item_grant_work(self,action,*args):
         from group_source import GroupSource
         from group_key_source import GroupKeySource
