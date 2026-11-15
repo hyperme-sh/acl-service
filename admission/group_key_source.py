@@ -72,6 +72,25 @@ class GroupKeySource:
             'minimumEpoch': proof['epoch'], 'expectedEpoch': proof['epoch'],
             'expectedRevisionId': proof['revisionId']}
 
+    def prepare_allocation_request(self, tenant, writer, predicate, set_id, *, sign_request, cancel=lambda: None):
+        """Attest current owner authority without changing group or key history."""
+        at = int(self.media.clock())
+        guard = lambda: self.media._guard(at, cancel)
+        guard()
+        with self.store._transaction(write=False, before_commit=guard) as db:
+            _, document, snapshot, _ = self._load(db, tenant, writer, at, predicate, set_id)
+            # Bind the original retained creation, not the changing member cohort
+            # or epoch: rotations must not allocate another permanent group.
+            creation = encoded(['group-creation-v1', tenant, predicate, set_id, document['configs'][0]])
+            request = sign_request({'tenant': tenant, 'set': set_id, 'predicate': predicate,
+                'owner': snapshot['setOwner'],
+                'policyDigest': hashlib.sha256(encoded(document['policy'])).hexdigest(),
+                'creationDigest': hashlib.sha256(creation).hexdigest(),
+                'issuedAt': at, 'expiresAt': min(at + 30, document['policyUntil'])})
+            if type(request) is not bytes or not 1 <= len(request) <= 4096:
+                raise AdmissionRejected('invalid signed group allocation request')
+            return request
+
     def view(self, tenant, writer, at, predicate, set_id, cancel=lambda: None):
         self.media._guard(at, cancel)
         with self.store._transaction(write=False, before_commit=lambda: self.media._guard(at, cancel)) as db:
