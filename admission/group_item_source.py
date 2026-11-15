@@ -1,6 +1,7 @@
 """Joint protected item/group key preparation; this does not grant delivery."""
 import hashlib
 import hmac
+import json
 from statement_source import encoded
 from acl_service.domain.history_store import AdmissionRejected
 
@@ -8,6 +9,41 @@ from acl_service.domain.history_store import AdmissionRejected
 class GroupItemSource:
     def __init__(self, keys):
         self.keys,self.media,self.store=keys,keys.media,keys.store
+
+    def authority_view(self,tenant,owner,object,cancel=lambda:None):
+        """Join retained item edges with current independent membership, read-only."""
+        at=int(self.media.clock())
+        guard=lambda:self.media._guard(at,cancel)
+        guard()
+        if tenant!=self.media.tenant:
+            raise AdmissionRejected('wrong group item tenant')
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            row,document=self.media._load(db,object,at)
+            identities=self.media.identities(db,object,document,at)
+            if identities['owner']!=owner:
+                raise AdmissionRejected('media owner required')
+            scopes=document.get('groupScopes',{})
+            if type(scopes) is not dict or len(scopes)>8:
+                raise AdmissionRejected('group item scope capacity')
+            projected=json.loads(encoded(document))
+            projected['groupScopes']={}
+            group_fences=[]
+            for key,retained in sorted(scopes.items()):
+                predicate,_,set_id=key.partition(':')
+                held,group,_,_=self.keys._load_current(db,tenant,at,predicate,set_id)
+                # A media row may retain old membership rows for compatibility.
+                # They must never substitute for the independent current journal.
+                edges=[entry for entry in retained if entry['kind']!='membership' and not (
+                    entry['kind']=='cancel' and entry['record']['kind']=='membership')]
+                projected['groupScopes'][key]=edges+group['rows']
+                group_fences.append(self.keys._fence(db,held,at,predicate,set_id))
+            projection=self.media._group_object_projection(db,object,projected,at)
+            fields=['group-item-authority-v1',tenant,owner,object,at,
+                    self.media._fence(db,object,row,at),group_fences]
+            fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+            return {'at':at,'fence':fence,'projection':projection,
+                    'objectVersion':document['objectVersion'],
+                    'ownerPub':identities['bindings'][owner]['pub']}
 
     def view(self,tenant,owner,object,predicate,set_id,cancel=lambda:None):
         at=int(self.media.clock())
