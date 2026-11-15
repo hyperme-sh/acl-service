@@ -395,7 +395,7 @@ class GroupItemSource:
             raise AdmissionRejected('group item status owner required')
         held=doc.get('groupItemStatuses',{}).get(grant_key(predicate,set_id,reader))
         # Confirmation of retained bytes is not a current access decision.
-        return held is not None and held==payload
+        return held is not None and encoded(held)==encoded(payload)
 
     def status_state(self,tenant,owner,object,predicate,set_id,reader,payload,cancel=lambda:None):
         payload=json.loads(encoded(payload));at=int(self.media.clock())

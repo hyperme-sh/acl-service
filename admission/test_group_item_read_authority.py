@@ -153,6 +153,7 @@ class GroupItemReadAuthorityTests(TestCase):
         self.now=1000;self.claims['stated']=0;self.ids['bindings']['owner']['pub']='rotated'
         self.assertEqual(self.source.status_state(*scope,payload),{'at':1000,'state':'applied'})
         self.assertEqual(self.source.status_state(*scope,{**payload,'signature':'different'})['state'],'absent')
+        self.assertEqual(self.source.status_state(*scope,{**payload,'stated':True})['state'],'absent')
         for tenant,owner in [('other','owner'),('tenant','reader')]:
             with self.assertRaises(AdmissionRejected):self.source.status_state(tenant,owner,*scope[2:],payload)
         with self.assertRaises(AdmissionRejected):self.source.status_state(*scope,[])
