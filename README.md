@@ -1266,3 +1266,51 @@ verify against the current owner key. An applied result confirms retention only,
 including cancelled or frozen history. It neither refreshes a signature nor
 creates a delivery grant. Saved absent commands must retain their original
 write time and fence; an expired command is not silently re-signed.
+
+### Contact descriptors and encrypted private state
+
+`SOCIACL_CONTACT_BINDINGS_FILE` enables `/api/v1/acl/sociacl/contacts/read` and
+`/write` for explicit tenant/subject bindings. Version 1 configuration has
+`bindings` rows containing `tenant`, `subject`, `principal`, `postgresFile` and
+`policyFile`. All configuration files are private regular files. `postgresFile`
+uses the existing PostgreSQL source format. `policyFile` contains version 1,
+integer `from`/`until` seconds and `trust` with `jwks`, `policy` and `pinnedIss`.
+Expired trust refuses both reads and writes. Missing configuration disables the
+routes; runtime construction does not install tables or enroll identities.
+
+The contacts installer in `infrastructure.contact_journal` creates two absent
+relations in already provisioned source/checkpoint schemas. It is an explicit
+operator operation, not a startup step. Public descriptor bytes and encrypted
+vault bytes have separate revision counters and checkpoints. A signed disabled
+advertisement retains its descriptor revision. Private vault reads require the
+bound owner; descriptor reads require an authenticated enrolled reader. The
+vault is at most 1 MiB and may contain only client ciphertext; no unlocked
+keyring is sent to this service. The caller retains encrypted contact decisions,
+blocks and retry state within that vault.
+
+Both requests contain `owner`, `kind` (`descriptor` or `vault`) and `evaluatedAt`.
+Writes also contain `revision` (the expected committed revision, initially zero),
+canonical base64 `payload`, the read response’s `fence`, and a current-owner `signature`. The signature covers
+SociACL length-prefixed strings: `s3rch-contact-document-v1`, tenant UUID, source
+UUID, owner principal, kind, expected revision, evaluation second, read fence, and lowercase
+SHA-256 of the decoded payload. Descriptor payloads are UTF-8 JSON with exactly
+`advertisement`: a verified signed first-contact descriptor whose revision equals
+the next storage revision, or `null` to disable discovery. Reads return revision,
+base64 payload (or null), an authority fence, and the current verified owner key head.
+The fence covers complete source identity history and configured trust policy;
+changes to either refuse an otherwise current document revision. Mutations
+return the committed revision and payload digest. Conflicts require a fresh read
+and signature; an ambiguous response must be reconciled against retained bytes.
+
+Admission verifies complete enrolled identity history and the source checkpoint
+while holding the same transaction lock as the document update. Separate
+checkpoints reject missing or restored document rows. These contracts do not yet
+provide contact-secret recovery, grant delivery or message admission.
+
+`/contacts/config` accepts only `evaluatedAt` and returns the authenticated
+binding's principal, current key, tenant/source identifiers and configured public
+trust policy. Document reads also return the source's complete public identity
+history for browser verification; they do not install a new witness policy.
+Clients bind that history to the independently fetched configured trust and never
+substitute a returned key head for history verification. The explicit installer
+accepts `active_media_index=True` for already-upgraded version-2 source markers.

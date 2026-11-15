@@ -17,7 +17,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --no-audit
         working-directory: admission
-      - run: PYTHONPATH=../src python3 -m unittest -v test_admission test_history_freshness test_statement_source test_statement_graph test_delegation_source
+      - run: PYTHONPATH=../src python3 -m unittest -v test_admission test_history_freshness test_statement_source test_statement_graph test_delegation_source test_contact_source
         working-directory: admission
       - name: Statement transaction unit coverage
         working-directory: admission
@@ -68,7 +68,7 @@ jobs:
           node --test --test-isolation=none --experimental-test-coverage
           --test-coverage-include=admission/group-authority.mjs
           --test-coverage-lines=90 --test-coverage-branches=75
-          admission/group-authority.test.mjs
+          admission/group-authority.test.mjs admission/contact-document.test.mjs
       - name: Delegation verifier contract coverage (CI only)
         run: >-
           node --test --test-isolation=none --experimental-test-coverage
