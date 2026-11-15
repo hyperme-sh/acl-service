@@ -14,11 +14,15 @@ keeps it disabled; clients cannot supply an owner or evaluation time.
 The internal `group_item_authority_view` prepares retained item edges against
 current independent group membership in one protected read transaction. It
 ignores membership rows and membership cancellations copied into an older
-media document, replacing them with each group's protected journal rows before
-native object-set projection. Missing groups or invalid current group policy
-refuse; there is no fallback to those copied members. Its fence covers the
-media source and every participating group. It does not change retained rows,
-admit a binding, or grant delivery, and has no HTTP route yet.
+media document. Native projection first selects the current owner-signed
+object-set edge without group membership rows. Only a live selected edge reads
+its independent group journal, and the caller must be an explicit current
+member before its rows enter the returned projection. Owning an item or a set
+does not bypass that requirement. Detached and superseded groups disclose no
+membership. Missing selected groups or invalid current group policy refuse;
+there is no fallback to copied members. Its fence covers the media source and
+the selected group. It does not change retained rows, admit a binding, or grant
+delivery, and has no HTTP route yet.
 
 `SOCIACL_MEDIA_BINDINGS_FILE` enables private wrap delivery only for explicit
 authenticated tenant/subject pairs. Its private JSON file has `version: 1` and
