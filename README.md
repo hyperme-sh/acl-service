@@ -1075,3 +1075,14 @@ Exact retained rows reconcile after lost responses. New rows must match the
 protected draft, source fence and four-second signing window. Positive history
 is bounded per party/member, with reserved row, byte and revision capacity for
 withdrawals. Membership writes do not create media grants, epochs or key wraps.
+
+`/api/v1/acl/sociacl/media/groups/{action}` exposes bounded creation and
+membership commands through existing fixed private-media identity bindings.
+Both media read and write scopes are required; the authenticated binding
+supplies the writer, never request JSON. Actions are `create-view`, `create`,
+`create-state`, `member-view`, `member-append` and `member-state`. Bodies contain
+only the action's group scope and draft/command fields. The handlers share
+existing request, tenant and source worker limits and return private/no-store
+responses. They perform no installation: missing PostgreSQL group tables refuse
+operation, and existing SQLite-backed media flows remain unchanged. No group
+key delivery or media authorization is enabled by these routes.
