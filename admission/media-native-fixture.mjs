@@ -118,6 +118,15 @@ const itemEpochCommand={grants:[itemEpochOwnerGrant],document:{manifest:itemEpoc
 const itemEpochOwnerStatus={...status,zookie:{...status.zookie,objectVersion:5}};
 itemEpochOwnerStatus.signature=sign(canonical(['s3rch-epoch-status-v1',object,'1',manifest.revisionId,f.genesis,'1','1',
   String(status.signedAt),'60000',object,'5',aclSnapshot]));
-const output={itemEpochCommand,itemEpochOwnerStatus,itemMemberWithdraw,itemGroupGrant,itemGroupCancel,itemGroupFork,groupOwnerStatus,groupKeyEpoch,groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const combinedOwnerStatus={object,epoch:2,revisionId:itemEpochManifest.revisionId,accessor:f.genesis,
+  grantRevision:2,stated:1,signedAt:(f.now+7200)*1000,maxAgeMs:60000,
+  zookie:{object,objectVersion:7,snapshotHash:itemEpochSnapshotId}};
+combinedOwnerStatus.signature=sign(canonical(['s3rch-epoch-status-v1',object,'2',itemEpochManifest.revisionId,f.genesis,'2','1',
+  String(combinedOwnerStatus.signedAt),'60000',object,'7',itemEpochSnapshotId]));
+const combinedWithdrawRecord={...itemMemberWithdrawRecord,issuedAt:f.now+7200};
+const combinedWithdrawSigned=signWithKeyring(key,membershipAssentBytes(combinedWithdrawRecord),f.genesis);
+if(!combinedWithdrawSigned.ok)throw Error(combinedWithdrawSigned.reason);
+const combinedMemberWithdraw={...itemMemberWithdraw,record:{...combinedWithdrawRecord,sig:combinedWithdrawSigned.value}};
+const output={combinedOwnerStatus,combinedMemberWithdraw,itemEpochCommand,itemEpochOwnerStatus,itemMemberWithdraw,itemGroupGrant,itemGroupCancel,itemGroupFork,groupOwnerStatus,groupKeyEpoch,groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

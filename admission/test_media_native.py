@@ -116,7 +116,32 @@ class NativeMediaContracts(TestCase):
         self.assertTrue(items.append_epoch(*args,self.now,'unused',command))
         self.assertEqual(self.source.read_view(self.object,self.now)['objectVersion'],after['objectVersion'])
         # Admission alone must never release an item key or bypass settlement.
-        with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+        from unittest.mock import patch
+        with patch('group_source.GroupSource',return_value=items.keys.source):
+            with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+
+    def test_native_direct_reader_uses_combined_epoch_and_current_group_checkpoint(self):
+        from unittest.mock import patch
+        grants,members,predicate,set_id=self.item_group_setup()
+        args=(self.tenant,self.owner,self.object,predicate,set_id)
+        view=grants.view(*args,self.owner)
+        grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant'])
+        self.mutate('status',self.f['itemEpochOwnerStatus'])
+        items=grants.items;plan=items.epoch_view(*args)
+        items.append_epoch(*args,self.now,plan['fence'],self.f['itemEpochCommand'])
+        self.now+=3600
+        with patch('group_source.GroupSource',return_value=items.keys.source):
+            with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+            self.mutate('wrap',{**self.f['wrap'],'epoch':2,'revisionId':self.f['itemEpochCommand']['document']['manifest']['revisionId']})
+            self.mutate('status',self.f['combinedOwnerStatus'])
+            permit=self.source.authorize(self.tenant,self.owner,self.object)
+            self.assertEqual(permit.epoch,2)
+            self.assertTrue(self.source.commit(permit))
+            margs=(self.tenant,self.owner,self.now,predicate,set_id,self.owner)
+            withdrawal=members.view(*margs,'member',0)
+            members.append(*margs,'member',withdrawal['fence'],self.f['combinedMemberWithdraw'])
+            with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+            with self.assertRaises(AdmissionRejected):self.source.commit(permit)
 
     def test_native_group_item_signed_fork_freezes_only_group_journal(self):
         grants,_,predicate,set_id=self.item_group_setup()

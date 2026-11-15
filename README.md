@@ -1377,3 +1377,15 @@ checkpoints and expiry. Publication advances the object version, so signed
 statuses must be refreshed afterward. An uncertain upload can reconcile the
 same bytes using a fresh preparation view; replacement bytes for the same epoch
 pair refuse. No publication or delivery HTTP route is installed by this change.
+
+
+Direct delivery for an item with combined group epochs selects against the same
+current complete grant/membership snapshot and group settlement window. It still
+requires its own current direct grant, owner-signed status, identity and direct
+wrap; group access never substitutes for those checks. The direct permit also
+binds the independent group checkpoint through its final commit. Historical
+parent selection uses the exact epoch's recorded group window, and selection
+cannot fall back below the latest combined epoch. Group journal construction can
+reuse the caller's already-owned PostgreSQL transaction after verifying its store
+and schema scope; it does not open a nested transaction. Owner repair and public
+group delivery installation remain separate work.

@@ -99,7 +99,7 @@ class GroupItemSource:
             raise AdmissionRejected('current item group binding required')
         group,cohort,config=current
         item,_,_,_=self.media._permit(db,tenant,owner,object,at)
-        parent=self.media._selected_finalization(object,doc,at,historical=True)
+        parent=self.media._selected_finalization(object,doc,at,historical=True,db=db)
         if parent['epoch']!=item.epoch or not 1<=item.epoch<MAX_SAFE:
             raise AdmissionRejected('current item epoch required')
         epoch=item.epoch+1;window=config['settleWindowMs'];owner_pub=ids['bindings'][owner]['pub']
@@ -225,7 +225,7 @@ class GroupItemSource:
             expected={'ownerPub':owner_pub,'object':object,'epoch':plan['previousEpoch']+1,'revisionId':manifest.get('revisionId')}
             if (document.get('snapshot')!=plan['snapshot'] or manifest.get('previousEpoch')!=plan['previousEpoch'] or
                     manifest.get('settleWindowMs')!=plan['settleWindowMs'] or
-                    manifest.get('keyCommitment')!=self.media._selected(object,doc,at)['keyCommitment'] or
+                    manifest.get('keyCommitment')!=self.media._selected(object,doc,at,db=db)['keyCommitment'] or
                     not self.media.native[2].matches_manifest(encoded(document),encoded(expected))):
                 raise AdmissionRejected('group item manifest refused')
             if (fin.get('previousEpoch')!=plan['previousEpoch'] or fin.get('previousFinalizationId')!=plan['previousFinalizationId'] or

@@ -10,11 +10,11 @@ from acl_service.infrastructure.epoch_verifier import GroupEpochConfigVerifier
 
 
 class GroupSource:
-    def __init__(self, media):
+    def __init__(self, media, *, transaction=None):
         from acl_service.infrastructure.group_media_journal import GroupMediaJournal
         self.media = media
         self.store = media.store
-        self.journal = GroupMediaJournal(self.store)
+        self.journal = GroupMediaJournal(self.store, transaction=transaction)
 
     def _cohort(self, db, policy, at, predicate, set_id, rows):
         accounts = self.media._accounts(db)

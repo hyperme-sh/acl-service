@@ -725,7 +725,7 @@ class MediaSource:
                 who=payload.get('accessor')
                 grant=self._latest(doc).get(who) if type(who) is str else None
                 if not grant: raise AdmissionRejected('unknown status grant')
-                self._status(object,doc,grant,payload,owner_pub,at)
+                self._status(object,doc,grant,payload,owner_pub,at,db=db)
                 doc['statuses'][who]=payload
             else: raise AdmissionRejected('unknown media operation')
             if operation!='status': doc['objectVersion']+=1
@@ -940,25 +940,47 @@ class MediaSource:
                     raise HistoryConflict('media active checkpoint missing')
             return True
 
-    def _selected_finalization(self, object, doc, at, *, historical=False):
+    def _combined_current(self,db,object,doc,at):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_item_source import GroupItemSource
+        if db is None:raise AdmissionRejected('current group transaction required')
+        try:groups=GroupSource(self,transaction=db)
+        except ValueError:raise AdmissionRejected('group authority unavailable') from None
+        items=GroupItemSource(GroupKeySource(groups))
+        ids=self.identities(db,object,doc,at)
+        view,_,current_doc,ids,current=items._authority(db,self.tenant,ids['owner'],object,at)
+        if current is None:raise AdmissionRejected('current combined item binding required')
+        projection=view['projection']
+        held,_,_,_=items.keys._load_current(db,self.tenant,at,projection['predicate'],projection['set'])
+        group_fence=items.keys._fence(db,held,0,projection['predicate'],projection['set'])
+        return items._read_snapshot(current_doc,ids,projection,at),current[2]['settleWindowMs'],group_fence
+
+    def _selected_finalization(self, object, doc, at, *, historical=False, db=None):
+        combined=doc.get('groupItemEpochs',[])
+        current=self._combined_current(db,object,doc,at) if combined and not historical else None
+        minimum=max((record['epoch'] for record in combined),default=doc['floor'])
         for row in reversed(doc['finalizations']):
             fin=row['proof']
+            if combined and fin['epoch']<minimum:continue
             history=self._history(object,doc,at,fin)
             if historical:
-                # Parent preparation authenticates the retained signed snapshot.
-                # Delivery must still compare against the current grant snapshot.
                 document=next(r['document'] for r in doc['manifests'] if r['document']['manifest']['revisionId']==fin['revisionId'])
                 history['current']=document['snapshot']
+                recorded=next((record for record in combined if (record['epoch'],record['revisionId'])==(fin['epoch'],fin['revisionId'])),None)
+                if recorded:history['groupWindowMs']=recorded['settleWindowMs']
+            elif current:
+                history['current'],history['groupWindowMs']=current[:2]
             if self.native[3].matches_settled(encoded(history)):
                 return fin
         raise AdmissionRejected('no current settled epoch')
 
-    def _selected(self, object, doc, at):
-        fin=self._selected_finalization(object,doc,at)
+    def _selected(self, object, doc, at, *, db=None):
+        fin=self._selected_finalization(object,doc,at,db=db)
         return next(r['document']['manifest'] for r in doc['manifests'] if r['document']['manifest']['revisionId']==fin['revisionId'])
 
-    def _status(self, object, doc, grant, proof, owner_pub, at):
-        selected=self._selected(object,doc,at); claims=grant['claims']
+    def _status(self, object, doc, grant, proof, owner_pub, at, *, db=None):
+        selected=self._selected(object,doc,at,db=db); claims=grant['claims']
         expected={'ownerPub':owner_pub,'object':object,'epoch':selected['epoch'],'revisionId':selected['revisionId'],
             'accessor':claims['accessor'],'grantRevision':claims['grantRevision'],'stated':claims['stated'],
             'zookie':{'object':object,'objectVersion':doc['objectVersion'],'snapshotHash':selected['aclSnapshot']}}
@@ -977,13 +999,14 @@ class MediaSource:
             raise AdmissionRejected('private grant inactive')
         if not self.native[0].matches_grant(encoded(grant['proof']),encoded({**claims,'ownerPub':owner_pub})):
             raise AdmissionRejected('private grant owner changed')
-        selected=self._status(object,doc,grant,status,owner_pub,at)
+        selected=self._status(object,doc,grant,status,owner_pub,at,db=db)
         if wrap['epoch']!=selected['epoch'] or wrap['revisionId']!=selected['revisionId'] or wrap['readerEpub']!=ids['bindings'][reader]['epub'] or wrap['itemDigest']!=claims['itemCiphertextDigest']:
             raise AdmissionRejected('private wrap no longer current')
         limit=min(at+2,doc['policyUntil'],claims['until']//1000,(status['signedAt']+min(status['maxAgeMs'],60_000))//1000)
         expires=limit if expires is None else expires
         if type(expires) is not int or not at<expires<=limit: raise AdmissionRejected('private permit expired')
         fields=[tenant,reader,object,wrap['record'],wrap['digest'],selected['epoch'],selected['revisionId'],wrap['readerEpub'],expires]
+        if doc.get('groupItemEpochs'):fields.append(self._combined_current(db,object,doc,at)[2])
         fence=hmac.new(row[1],encoded([fields,row[0],hashlib.sha256(row[2]).hexdigest(),authority_digest(db).hex()]),hashlib.sha256).hexdigest()
         permit=WrapReadPermit(tenant,reader,object,wrap['record'],wrap['digest'],selected['epoch'],selected['revisionId'],wrap['readerEpub'],fence,expires)
         return permit,ids,row,doc
@@ -1171,7 +1194,7 @@ class MediaSource:
             row,doc=self._load(db,object,at)
             identities=self.identities(db,object,doc,at)
             if writer!=identities['owner']: raise AdmissionRejected('media owner required')
-            parent=self._selected_finalization(object,doc,at,historical=True)
+            parent=self._selected_finalization(object,doc,at,historical=True,db=db)
             if type(parent['epoch']) is not int or not 1<=parent['epoch']<9007199254740991:
                 raise AdmissionRejected('media epoch exhausted')
             snapshot=self._snapshot(doc)
@@ -1194,7 +1217,7 @@ class MediaSource:
             _,ids,row,doc=self._permit(db,tenant,writer,object,at)
             if writer!=ids['owner'] or reader not in ids['bindings'] or reader in doc['frozen']:
                 raise AdmissionRejected('media owner and enrolled recipient required')
-            parent=self._selected_finalization(object,doc,at)
+            parent=self._selected_finalization(object,doc,at,db=db)
             epoch=parent['epoch']
             if type(epoch) is not int or not 1<=epoch<9007199254740991:
                 raise AdmissionRejected('media epoch exhausted')
@@ -1304,7 +1327,7 @@ class MediaSource:
                 raise AdmissionRejected('private grant inactive')
             if not self.native[0].matches_grant(encoded(grant['proof']),encoded({**claims,'ownerPub':owner_pub})):
                 raise AdmissionRejected('private grant owner changed')
-            selected=self._selected(object,doc,at)
+            selected=self._selected(object,doc,at,db=db)
             if claims['epoch']!=selected['epoch']:
                 raise AdmissionRejected('private grant epoch changed')
             status={'object':object,'epoch':selected['epoch'],'revisionId':selected['revisionId'],
