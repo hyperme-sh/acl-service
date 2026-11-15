@@ -1049,3 +1049,13 @@ limit protect retained state. This storage primitive neither accepts keys nor
 decides membership, epochs or access. Restored or missing state with a surviving
 checkpoint is refused; it cannot protect against a coordinated rollback of both
 independent stores. Group key wrapping and delivery remain separate work.
+
+The internal `GroupSource` creation command uses an already owned, active media
+object only as the trusted policy anchor. It resolves the set owner's current
+history, binds the preparation fence to the group scope, and requires the
+current set-owner signature on the group configuration. Creation copies the
+protected policy into an independent, empty group document. No member is added
+implicitly and no epoch, key or media grant is created. Existing groups cannot
+be overwritten. These commands are not exposed through HTTP or activated by
+this change; later membership and delivery work must consume this independent
+group state rather than silently importing per-object preparation rows.

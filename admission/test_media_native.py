@@ -32,6 +32,30 @@ class NativeMediaContracts(TestCase):
         self.source.provision(self.object,policy,self.now+7200,exclusive_grant=lambda *a:True)
         self.mutate('grant',self.f['grant']);self.mutate('epoch',self.f['epoch']);self.mutate('wrap',self.f['wrap'])
 
+    def test_native_independent_group_creation_requires_current_owner_signature(self):
+        from unittest.mock import Mock
+        from group_source import GroupSource
+        # This contract exercises the real history and Rust adapters. The
+        # journal's PostgreSQL atomicity is covered separately in CI.
+        source=object.__new__(GroupSource)
+        source.media=self.source;source.store=self.store
+        source.journal=Mock();source.journal.read.return_value=None
+        config=self.f['groupPolicy']
+        args=(self.tenant,self.owner,self.object,self.now,config['predicate'],config['setId'])
+        view=source.creation_view(*args)
+        self.assertEqual(view['context']['ownerPub'],self.owner)
+        self.assertTrue(source.create(*args,view['fence'],config))
+        saved=source.journal.write.call_args.args[4]
+        self.assertEqual(saved['rows'],[])
+        self.assertEqual(saved['epochs'],[])
+        self.assertEqual(saved['configs'],[config])
+        source.journal.write.reset_mock()
+        with self.assertRaises(AdmissionRejected):
+            source.create(*args,view['fence'],{**config,'signature':'0'*128})
+        with self.assertRaises(AdmissionRejected):
+            source.create(*args,view['fence'],{**config,'setId':config['setId'][:-1]+'f'})
+        source.journal.write.assert_not_called()
+
     def mutate(self,operation,payload):
         if operation == 'epoch':
             self.assertEqual(self.source.read_view(self.object,self.now)['snapshot']['entries'][0]['hamState'],0)
