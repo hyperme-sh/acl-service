@@ -1139,3 +1139,11 @@ presence but never creates tables or grants. The group Storage credential must
 have `storage:group-allocations:issue`; media allocation scope alone does not
 work. Missing configuration disables the route. No deployment is activated by
 adding these modules.
+
+The protected group key source can issue a two-second read permit only for an
+explicit current member of an allocated group whose latest key has settled.
+The permit binds the current recipient encryption key, epoch, revision, key
+commitment, group document and complete authority checkpoint. Final delivery
+must revalidate it in the protected write transaction. Owner status is not
+implicit membership, and old epochs are never a fallback. This internal source
+boundary does not expose bytes or activate a delivery route.

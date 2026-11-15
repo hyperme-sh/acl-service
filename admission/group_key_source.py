@@ -1,4 +1,5 @@
 """Protected independent group key history; no plaintext keys or media grants."""
+from dataclasses import dataclass
 import hashlib
 import hmac
 import json
@@ -12,13 +13,27 @@ from acl_service.infrastructure.group_epoch_verifier import GroupEpochVerifier
 MAX_SAFE = 9007199254740991
 
 
+@dataclass(frozen=True)
+class GroupKeyReadPermit:
+    tenant: str
+    reader: str
+    predicate: str
+    set_id: str
+    epoch: int
+    revision_id: str
+    reader_epub: str
+    key_commitment: str
+    fence: str
+    expires_at: int
+
+
 class GroupKeySource:
     def __init__(self, source):
         self.source, self.media, self.store, self.journal = source, source.media, source.store, source.journal
         self.native = GroupEpochVerifier()
         self.configs = GroupEpochConfigVerifier()
 
-    def _load(self, db, tenant, writer, at, predicate, set_id):
+    def _load_current(self, db, tenant, at, predicate, set_id):
         self.media._group_key(predicate, set_id)
         if tenant != self.media.tenant:
             raise AdmissionRejected('wrong group tenant')
@@ -31,8 +46,6 @@ class GroupKeySource:
         current = self.source._cohort(db, document['policy'], at, predicate, set_id, document['rows'])
         cohort, bindings = current['cohort'], current['bindings']
         owner = cohort['setOwner']
-        if writer != owner:
-            raise AdmissionRejected('group owner required')
         owner_binding = bindings[owner]
         snapshot = {'predicate': predicate, 'setId': set_id, 'setOwner': owner,
             'ownerSigningPub': owner_binding['pub'], 'ownerEncryptionPub': owner_binding['epub'],
@@ -48,6 +61,54 @@ class GroupKeySource:
         if not self.configs.matches_config(encoded(config), encoded(expected)):
             raise AdmissionRejected('current group policy signature required')
         return held, document, snapshot, config
+
+    def _load(self, db, tenant, writer, at, predicate, set_id):
+        result = self._load_current(db, tenant, at, predicate, set_id)
+        if writer != result[2]['setOwner']:
+            raise AdmissionRejected('group owner required')
+        return result
+
+    def _read_permit(self, db, tenant, reader, at, predicate, set_id, expires=None):
+        held, document, snapshot, config = self._load_current(db, tenant, at, predicate, set_id)
+        members = [member for member in snapshot['members']
+                   if member['accessor'] == reader and member['stated'] == 1]
+        if len(members) != 1 or not document['epochs'] or not document.get('allocation'):
+            raise AdmissionRejected('current allocated group membership required')
+        if not self.native.matches_settled(encoded(self._history(document, snapshot, config, at))):
+            raise AdmissionRejected('current settled group key required')
+        manifest = document['epochs'][-1]['document']['manifest']
+        limit = min(at + 2, document['policyUntil'])
+        expires = limit if expires is None else expires
+        if type(expires) is not int or not at < expires <= limit:
+            raise AdmissionRejected('group key permit expired')
+        fields = [tenant, reader, predicate, set_id, manifest['epoch'],
+                  manifest['revisionId'], members[0]['encryptionPub'], manifest['keyCommitment'], expires]
+        fence = hmac.new(held.nonce, encoded(['group-key-read-v1', fields, held.revision,
+            hashlib.sha256(held.document).hexdigest(), authority_digest(db).hex()]), hashlib.sha256).hexdigest()
+        return GroupKeyReadPermit(*fields[:-1], fence, expires)
+
+    def authorize_key_read(self, tenant, reader, predicate, set_id, cancel=lambda: None):
+        at = int(self.media.clock())
+        guard = lambda: self.media._guard(at, cancel)
+        guard()
+        with self.store._transaction(write=False, before_commit=guard) as db:
+            return self._read_permit(db, tenant, reader, at, predicate, set_id)
+
+    def commit_key_read(self, permit, cancel=lambda: None):
+        if type(permit) is not GroupKeyReadPermit:
+            raise AdmissionRejected('invalid group key permit')
+        at = int(self.media.clock())
+        guard = lambda: self.media._guard(at, cancel)
+        guard()
+        # The independent group checkpoint covers the complete latest history.
+        # Revalidate in the protected write transaction immediately before bytes
+        # can be returned; neither owner status nor an older epoch is a fallback.
+        with self.store._transaction(write=True, before_commit=guard) as db:
+            current = self._read_permit(db, permit.tenant, permit.reader, at,
+                permit.predicate, permit.set_id, permit.expires_at)
+            if current != permit:
+                raise HistoryConflict('group key delivery authority changed')
+        return True
 
     def _fence(self, db, held, at, predicate, set_id):
         message = encoded(['group-key-v1', self.media.tenant, predicate, set_id, at,

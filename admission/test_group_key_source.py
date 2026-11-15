@@ -231,3 +231,67 @@ class GroupKeySourceTests(TestCase):
                 proof.issued_at,proof.expires_at=issued,expires
                 with self.assertRaises(AdmissionRejected):
                     self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify)
+
+    def ready_read(self):
+        self.command['document']['manifest']['keyCommitment'] = 'c'*64
+        self.commit()
+        self.document['allocation'] = {'retained': True}
+        self.retain(3)
+        self.media.clock.return_value = 100
+        self.source.native.matches_settled.return_value = True
+        return self.source.authorize_key_read('tenant','member','same-group','set_a')
+
+    def test_current_member_read_permit_and_protected_commit(self):
+        permit = self.ready_read()
+        self.assertEqual((permit.reader,permit.epoch,permit.revision_id,permit.reader_epub,
+                          permit.key_commitment,permit.expires_at),
+                         ('member',1,'a'*64,'member-epub','c'*64,102))
+        self.media.clock.return_value = 101
+        self.assertTrue(self.source.commit_key_read(permit))
+        self.journal.write.assert_not_called()
+        history = json.loads(self.source.native.matches_settled.call_args.args[0])
+        self.assertEqual(history['minimumEpoch'],1)
+        self.assertEqual(history['nowMs'],101000)
+        self.assertTrue(self.store._transaction.call_args.kwargs['write'])
+
+    def test_owner_is_not_an_implicit_group_reader(self):
+        self.ready_read()
+        for reader in ['owner','unknown']:
+            with self.assertRaises(AdmissionRejected):
+                self.source.authorize_key_read('tenant',reader,'same-group','set_a')
+        self.origin._cohort.return_value['cohort']['members'][0]['stated'] = 0
+        with self.assertRaises(AdmissionRejected):
+            self.source.authorize_key_read('tenant','member','same-group','set_a')
+
+    def test_no_allocation_pending_epoch_or_missing_history_refuses(self):
+        self.ready_read()
+        self.source.native.matches_settled.return_value = False
+        with self.assertRaises(AdmissionRejected):
+            self.source.authorize_key_read('tenant','member','same-group','set_a')
+        self.source.native.matches_settled.return_value = True
+        self.document.pop('allocation');self.retain(4)
+        with self.assertRaises(AdmissionRejected):
+            self.source.authorize_key_read('tenant','member','same-group','set_a')
+        self.document['allocation'] = {'retained':True};self.document['epochs'] = [];self.retain(5)
+        with self.assertRaises(AdmissionRejected):
+            self.source.authorize_key_read('tenant','member','same-group','set_a')
+
+    def test_delivery_rechecks_identity_checkpoint_expiry_and_permit(self):
+        from dataclasses import replace
+        permit = self.ready_read()
+        with self.assertRaises(AdmissionRejected):self.source.commit_key_read(None)
+        for changed in [replace(permit,fence='wrong'),replace(permit,key_commitment='d'*64),
+                        replace(permit,reader_epub='other'),replace(permit,epoch=0)]:
+            with self.assertRaises(HistoryConflict):self.source.commit_key_read(changed)
+        for expires in [True,100,103]:
+            with self.assertRaises(AdmissionRejected):self.source.commit_key_read(replace(permit,expires_at=expires))
+        self.digest.return_value = b'changed'
+        with self.assertRaises(HistoryConflict):self.source.commit_key_read(permit)
+        self.digest.return_value = b'authority'
+        self.retain(4)
+        with self.assertRaises(HistoryConflict):self.source.commit_key_read(permit)
+        self.retain(3)
+        self.origin._cohort.return_value['bindings']['member']['epub'] = 'rotated'
+        with self.assertRaises(HistoryConflict):self.source.commit_key_read(permit)
+        self.media.clock.return_value = 102
+        with self.assertRaises(AdmissionRejected):self.source.commit_key_read(permit)
