@@ -119,11 +119,20 @@ class GroupItemSource:
         """Prepare the complete next item snapshot without changing either grant journal."""
         from group_item_grants import journal, latest, grant_key, MAX_SAFE
         view,row,doc,ids,current=self._authority(db,tenant,owner,object,at)
-        if current is None or (view['projection']['predicate'],view['projection']['set'])!=(predicate,set_id):
+        projection=view['projection']
+        if (not projection or not projection.get('snapshot') or
+                (projection['predicate'],projection['set'])!=(predicate,set_id) or
+                (current is None and projection['snapshot']['objectSet']['stated']!=0)):
             raise AdmissionRejected('current item group binding required')
-        group,cohort,config=current
         if len(doc['manifests'])>=64 or len(doc['finalizations'])>=64:raise AdmissionRejected('group item epoch capacity')
         parent,item_digest,key_commitment,maintenance_fence=self._maintenance_parent(db,tenant,owner,object,row,doc,ids,at)
+        if current is None:
+            # Only an owner-signed detached object edge reaches this branch.
+            # Inherit the authentic parent's window without reading group members.
+            previous=next(entry['document']['manifest'] for entry in doc['manifests']
+                if entry['document']['manifest']['revisionId']==parent['revisionId'])
+            group={'policyUntil':doc['policyUntil']};config={'settleWindowMs':previous['settleWindowMs']}
+        else:group,_,config=current
         epoch=parent['epoch']+1;window=config['settleWindowMs'];owner_pub=ids['bindings'][owner]['pub']
         if min(doc['policyUntil'],group['policyUntil'])*1000<=at*1000+window:
             raise AdmissionRejected('group item policy cannot cover settlement')
@@ -156,7 +165,7 @@ class GroupItemSource:
         group_readers=[]
         for who in sorted(granted):
             held=latest(doc,predicate,set_id,who);claims=held['claims'];member=members.get(who)
-            live=(claims['stated']==1 and claims['from']<=at*1000<claims['until'] and
+            live=(projection['snapshot']['objectSet']['stated']==1 and claims['stated']==1 and claims['from']<=at*1000<claims['until'] and
                   member is not None and member['stated']==1 and who in projection['members'] and
                   grant_key(predicate,set_id,who) not in journal(doc)['frozen'])
             prior=entries.get(who)
@@ -278,7 +287,7 @@ class GroupItemSource:
         owner=ids['owner'];owner_pub=ids['bindings'][owner]['pub']
         for who in sorted(readers):
             held=latest(doc,predicate,set_id,who);claims=held['claims'];member=members.get(who)
-            live=(claims['stated']==1 and claims['from']<=at*1000<claims['until'] and member is not None and
+            live=(projection['snapshot']['objectSet']['stated']==1 and claims['stated']==1 and claims['from']<=at*1000<claims['until'] and member is not None and
                 member['stated']==1 and who in projection['members'] and grant_key(predicate,set_id,who) not in journal(doc)['frozen'])
             prior=entries.get(who)
             if prior and ((prior['stated']==1 and prior['from']<=at*1000<prior['until']) or not live):continue

@@ -1400,3 +1400,12 @@ stale read status therefore does not prevent the owner from preparing a repair;
 no wrap bytes, read permit or keys are returned. Positive group changes still
 require the owner's explicit current group membership. A separate negative-only
 detach path is still required when the owner has left the group.
+
+
+After the owner signs an object-set withdrawal, metadata-only maintenance can
+prepare a detached item epoch without loading independent group membership.
+Every group-derived row is inactive; independently signed direct grants are
+refreshed under the authentic historical parent's settlement window. Publication
+and fresh status still precede direct delivery, and group delivery remains
+refused. The same negative snapshot is used by direct selection after admission;
+there is no fallback to a prior positive group snapshot or an earlier epoch.

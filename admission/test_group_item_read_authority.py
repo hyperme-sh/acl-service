@@ -27,7 +27,7 @@ class GroupItemReadAuthorityTests(TestCase):
             'groupItemWraps':{encoded(['same-group','set']).decode('ascii'):self.wrap}}
         self.ids={'owner':'owner','bindings':{who:{'pub':who,'head':who} for who in ['owner','reader']}}
         self.projection={'predicate':'same-group','set':'set','members':['reader'],
-            'snapshot':{'objectSet':{},'members':[{'accessor':'reader','stated':1,'hamState':2}]}}
+            'snapshot':{'objectSet':{'stated':1},'members':[{'accessor':'reader','stated':1,'hamState':2}]}}
         self.current=({'policyUntil':9000},{},{'settleWindowMs':3600000})
         @contextmanager
         def transaction(*,write,before_commit):yield self.db;before_commit()
