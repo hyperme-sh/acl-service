@@ -1,5 +1,16 @@
 # acl-service
 
+`POST /api/v1/acl/sociacl/media/groups/item-view` accepts exactly
+`{object, predicate, set}` under an existing `SOCIACL_GROUP_WRAP_FILE` subject
+binding and `acl:media:write`. The owner comes from that authenticated binding.
+The protected source verifies the owned item's current direct access and the
+owner's current group-key access in one transaction. It returns the item and
+group epoch context, owner public key, fence and short expiry for browser
+preparation. This read does not grant group access, publish wraps, or change
+storage. It shares the group routes' bounded input, capacity, timeout,
+disconnect cancellation and private, no-store responses. Missing configuration
+keeps it disabled; clients cannot supply an owner or evaluation time.
+
 `SOCIACL_MEDIA_BINDINGS_FILE` enables private wrap delivery only for explicit
 authenticated tenant/subject pairs. Its private JSON file has `version: 1` and
 at most 64 `bindings`, each containing `tenant`, `subject`, `reader` (the enrolled
