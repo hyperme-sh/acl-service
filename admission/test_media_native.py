@@ -56,6 +56,45 @@ class NativeMediaContracts(TestCase):
             source.create(*args,view['fence'],{**config,'setId':config['setId'][:-1]+'f'})
         source.journal.write.assert_not_called()
 
+    def test_native_independent_group_invitation_acceptance_and_withdrawal(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from group_source import GroupSource
+        from group_membership import GroupMembership
+        source=object.__new__(GroupSource)
+        source.media=self.source;source.store=self.store;source.journal=Mock()
+        retained={'row':None}
+        source.journal.read.side_effect=lambda *args:retained['row']
+        def save(db,predicate,set_id,expected,document):
+            self.assertIs(expected,retained['row'])
+            retained['row']=SimpleNamespace(revision=1 if expected is None else expected.revision+1,
+                nonce=b'n'*32,document=json.dumps(document).encode())
+            return retained['row']
+        source.journal.write.side_effect=save
+        config=self.f['groupPolicy'];predicate=config['predicate'];group=config['setId']
+        create_args=(self.tenant,self.owner,self.object,self.now,predicate,group)
+        view=source.creation_view(*create_args)
+        source.create(*create_args,view['fence'],config)
+        members=GroupMembership(source)
+        args=(self.tenant,self.owner,self.now,predicate,group,self.owner)
+        with self.assertRaises(AdmissionRejected):members.view(*args,'member',1)
+        invite=members.view(*args,'set',1)
+        members.append(*args,'set',invite['fence'],self.f['groupInvitations'][0])
+        join=members.view(*args,'member',1)
+        self.assertEqual(join['draft']['hamState'],2)
+        members.append(*args,'member',join['fence'],self.f['groupMemberRows'][0])
+        self.assertEqual(members.state(*args,'member',self.f['groupMemberRows'][0])['state'],'applied')
+        withdraw=members.view(*args,'member',0)
+        members.append(*args,'member',withdraw['fence'],self.f['groupMemberRows'][1])
+        with self.store._transaction(write=False) as db:
+            doc=json.loads(retained['row'].document)
+            state=members._state(db,doc,self.now,predicate,group,self.owner,doc['rows'])
+            self.assertEqual(state['state']['stated'],0)
+        # Reconciliation records the old command without restoring membership.
+        self.assertEqual(members.state(*args,'member',self.f['groupMemberRows'][0])['state'],'applied')
+        self.assertEqual(doc['epochs'],[])
+        self.assertEqual(doc['wraps'],[])
+
     def mutate(self,operation,payload):
         if operation == 'epoch':
             self.assertEqual(self.source.read_view(self.object,self.now)['snapshot']['entries'][0]['hamState'],0)
