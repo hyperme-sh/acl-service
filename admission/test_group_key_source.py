@@ -194,3 +194,40 @@ class GroupKeySourceTests(TestCase):
             self.source.prepare_allocation_request('tenant','owner','same-group','set_a',sign_request=signer)
         signer.assert_not_called()
         self.journal.write.assert_not_called()
+
+    def test_allocation_consumption_binds_current_source_and_exact_group(self):
+        import hashlib
+        self.media.clock.return_value=100
+        self.store.source='source'
+        claims={'issuer':'issuer','tenant':'tenant','set':'set_a','predicate':'same-group','owner':'owner','source':'source',
+            'policyDigest':hashlib.sha256(encoded({})).hexdigest(),
+            'creationDigest':hashlib.sha256(encoded(['group-creation-v1','tenant','same-group','set_a',self.config])).hexdigest()}
+        proof=SimpleNamespace(scope=Mock(),allocation='allocation',issued_at=100,expires_at=130)
+        proof.scope.claims.return_value=claims
+        verify=Mock(return_value=proof)
+        cls=Mock()
+        with patch.dict('sys.modules', {'acl_service.infrastructure.group_allocation_journal':SimpleNamespace(GroupAllocationJournal=cls)}):
+            ledger=cls.return_value;ledger.consume.return_value=True
+            self.assertTrue(self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify))
+            verify.assert_called_with(100)
+            self.document=self.journal.write.call_args.args[-1];self.retain(2)
+            ledger.consume.return_value=False;self.journal.write.reset_mock()
+            self.assertTrue(self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify))
+            self.journal.write.assert_not_called()
+            ledger.consume.return_value=True
+            with self.assertRaises(HistoryConflict):
+                self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify)
+            ledger.consume.return_value=False
+            proof.allocation='changed'
+            with self.assertRaises(HistoryConflict):
+                self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify)
+            proof.allocation='allocation'
+            for key in ['tenant','set','predicate','owner','source','policyDigest','creationDigest']:
+                proof.scope.claims.return_value={**claims,key:'wrong'}
+                with self.assertRaises(AdmissionRejected):
+                    self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify)
+            proof.scope.claims.return_value=claims
+            for issued,expires in [(True,130),(100,True),(-1,130),(101,130),(100,100),(100,401),(100,1001)]:
+                proof.issued_at,proof.expires_at=issued,expires
+                with self.assertRaises(AdmissionRejected):
+                    self.source.consume_allocation('tenant','owner','same-group','set_a',verify_grant=verify)

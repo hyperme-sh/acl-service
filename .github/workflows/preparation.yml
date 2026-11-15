@@ -104,5 +104,5 @@ jobs:
           .venv/bin/python -m coverage report --fail-under=90 -m
       - name: Check policy storage contract against owned PostgreSQL
         run: |
-          .venv/bin/python -m coverage run --branch --source=acl_service.infrastructure.postgres_history_store,acl_service.infrastructure.postgres_media_provision -m pytest -q integration tests/test_postgres_history_units.py --ignore=integration/nightly
+          .venv/bin/python -m coverage run --branch --source=acl_service.infrastructure.postgres_history_store,acl_service.infrastructure.postgres_media_provision,acl_service.infrastructure.group_allocation_journal -m pytest -q integration tests/test_postgres_history_units.py tests/test_group_allocation_journal.py --ignore=integration/nightly
           .venv/bin/python -m coverage report --fail-under=85 -m

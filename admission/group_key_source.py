@@ -91,6 +91,43 @@ class GroupKeySource:
                 raise AdmissionRejected('invalid signed group allocation request')
             return request
 
+    def consume_allocation(self, tenant, writer, predicate, set_id, *, verify_grant, cancel=lambda: None):
+        """Consume the configured issuer's proof and group binding atomically."""
+        from acl_service.infrastructure.group_allocation_journal import GroupAllocationJournal
+        at = int(self.media.clock())
+        guard = lambda: self.media._guard(at, cancel)
+        guard()
+        allocations = GroupAllocationJournal(self.store)
+        with self.store._transaction(write=True, before_commit=guard) as db:
+            held, document, snapshot, _ = self._load(db, tenant, writer, at, predicate, set_id)
+            proof = verify_grant(at)
+            claims = proof.scope.claims()
+            creation = encoded(['group-creation-v1', tenant, predicate, set_id, document['configs'][0]])
+            expected = {'tenant': tenant, 'set': set_id, 'predicate': predicate,
+                'owner': snapshot['setOwner'], 'source': self.store.source,
+                'policyDigest': hashlib.sha256(encoded(document['policy'])).hexdigest(),
+                'creationDigest': hashlib.sha256(creation).hexdigest()}
+            if any(claims.get(key) != value for key, value in expected.items()):
+                raise AdmissionRejected('group allocation scope mismatch')
+            if (type(proof.issued_at) is not int or type(proof.expires_at) is not int or
+                    not 0 <= proof.issued_at <= at < proof.expires_at or
+                    not 0 < proof.expires_at - proof.issued_at <= 300 or
+                    proof.expires_at > document['policyUntil']):
+                raise AdmissionRejected('group allocation validity refused')
+            bound = {'claims': claims, 'allocation': proof.allocation,
+                'issuedAt': proof.issued_at, 'expiresAt': proof.expires_at}
+            digest = hashlib.sha256(encoded(bound)).digest()
+            previous = document.get('allocation')
+            if previous is not None and previous != bound:
+                raise HistoryConflict('different group allocation retained')
+            fresh = allocations.consume(db, proof.allocation, predicate, set_id, digest)
+            if fresh != (previous is None):
+                raise HistoryConflict('group allocation document mismatch')
+            if fresh:
+                document['allocation'] = bound
+                self.journal.write(db, predicate, set_id, held, document)
+        return True
+
     def view(self, tenant, writer, at, predicate, set_id, cancel=lambda: None):
         self.media._guard(at, cancel)
         with self.store._transaction(write=False, before_commit=lambda: self.media._guard(at, cancel)) as db:
