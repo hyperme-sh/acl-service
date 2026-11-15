@@ -13,7 +13,7 @@ const object=`media_${formatPrincipalKey(f.genesis)}_${'ab'.repeat(16)}`;
 const canonical=fields=>{const r=lengthPrefixed(fields);if(!r.ok)throw Error(r.reason);return r.value;};
 const hash=fields=>createHash('sha256').update(canonical(fields)).digest('hex');
 const sign=bytes=>Buffer.from(p256.sign(bytes,key,{prehash:true,lowS:true,format:'compact'})).toString('hex');
-const until=(f.now+7200)*1000;
+const until=(f.now+10800)*1000;
 function grant(stated,grantRevision){
   const claims={object,owner:f.genesis,accessor:f.genesis,from:0,until,stated,epoch:1,grantRevision,itemCiphertextDigest:'a'.repeat(64)};
   const bytes=canonical(['s3rch-grant-payload-v1',object,f.genesis,'0',String(until),String(stated),'1',f.genesis,String(grantRevision),claims.itemCiphertextDigest]);
@@ -99,6 +99,25 @@ const itemGroupFork=signItemGrant({...itemGrantClaims,until:itemGrantClaims.unti
 const groupOwnerStatus={...status,zookie:{...status.zookie,objectVersion:4}};
 groupOwnerStatus.signature=sign(canonical(['s3rch-epoch-status-v1',object,'1',manifest.revisionId,f.genesis,'1','1',
   String(status.signedAt),'60000',object,'4',aclSnapshot]));
-const output={itemMemberWithdraw,itemGroupGrant,itemGroupCancel,itemGroupFork,groupOwnerStatus,groupKeyEpoch,groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const itemEpochOwnerGrant=signItemGrant({...grant(1,1).claims,epoch:2,grantRevision:2});
+const itemEpochSnapshot={entries:[{...snapshot.entries[0],grantRevision:2}],
+  objectSet:{predicate:groupPolicy.predicate,setId:groupPolicy.setId,stated:1,hamState:1}};
+const itemEpochSnapshotId=hash(['s3rch-acl-snapshot-v1','1',groupPolicy.predicate,groupPolicy.setId,'1','1',
+  f.genesis,'2','1','0',String(until),'direct','','0']);
+const itemEpochManifest={object,previousEpoch:1,epoch:2,deviceId:'group-item-fixture',keyCommitment:manifest.keyCommitment,
+  settleWindowMs:3600000,aclSnapshot:itemEpochSnapshotId};
+itemEpochManifest.revisionId=hash(['s3rch-epoch-revision-v1',object,'2','1',itemEpochManifest.deviceId,
+  itemEpochManifest.keyCommitment,'3600000',itemEpochSnapshotId]);
+itemEpochManifest.signature=sign(canonical(['s3rch-epoch-manifest-sig-v1',itemEpochManifest.revisionId]));
+const itemEpochFinalization={object,previousEpoch:1,epoch:2,revisionId:itemEpochManifest.revisionId,
+  candidateRevisionIds:[itemEpochManifest.revisionId],previousFinalizationId:finalization.finalizationId};
+itemEpochFinalization.finalizationId=hash(['s3rch-epoch-finalization-v1',object,'2','1',itemEpochManifest.revisionId,
+  finalization.finalizationId,itemEpochManifest.revisionId]);
+itemEpochFinalization.signature=sign(canonical(['s3rch-epoch-finalization-sig-v1',itemEpochFinalization.finalizationId]));
+const itemEpochCommand={grants:[itemEpochOwnerGrant],document:{manifest:itemEpochManifest,snapshot:itemEpochSnapshot},finalization:itemEpochFinalization};
+const itemEpochOwnerStatus={...status,zookie:{...status.zookie,objectVersion:5}};
+itemEpochOwnerStatus.signature=sign(canonical(['s3rch-epoch-status-v1',object,'1',manifest.revisionId,f.genesis,'1','1',
+  String(status.signedAt),'60000',object,'5',aclSnapshot]));
+const output={itemEpochCommand,itemEpochOwnerStatus,itemMemberWithdraw,itemGroupGrant,itemGroupCancel,itemGroupFork,groupOwnerStatus,groupKeyEpoch,groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

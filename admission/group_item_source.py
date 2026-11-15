@@ -174,3 +174,76 @@ class GroupItemSource:
         self.media._group_key(predicate,set_id)
         with self.store._transaction(write=False,before_commit=guard) as db:
             return json.loads(encoded(self._epoch_plan(db,tenant,owner,object,at,predicate,set_id)))
+
+    @staticmethod
+    def _epoch_command(payload,object,owner):
+        from group_item_grants import parse_payload
+        if (type(payload) is not dict or set(payload)!={'grants','document','finalization'} or
+                len(encoded(payload))>262144 or type(payload['grants']) is not list or
+                not 1<=len(payload['grants'])<=64 or type(payload['document']) is not dict or
+                type(payload['finalization']) is not dict):
+            raise AdmissionRejected('invalid group item epoch command')
+        payload=json.loads(encoded(payload))
+        for grant in payload['grants']:parse_payload(grant,object,owner)
+        return payload
+
+    def _epoch_command_state(self,db,tenant,owner,object,at,predicate,set_id,payload):
+        from group_item_grants import GroupItemGrants
+        row,doc,ids=GroupItemGrants(self)._owner(db,tenant,owner,object,at,predicate,set_id)
+        digest=hashlib.sha256(encoded(['group-item-epoch-command-v1',tenant,owner,object,predicate,set_id,payload])).hexdigest()
+        retained=any(entry['command']==digest for entry in doc.get('groupItemEpochs',[]))
+        return retained,digest,row,doc,ids
+
+    def epoch_state(self,tenant,owner,object,predicate,set_id,payload,cancel=lambda:None):
+        """Confirm exact retained bytes, not settlement or present access."""
+        payload=self._epoch_command(payload,object,owner)
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            retained,_,_,_,_=self._epoch_command_state(db,tenant,owner,object,at,predicate,set_id,payload)
+            return {'at':at,'state':'applied' if retained else 'absent'}
+
+    def append_epoch(self,tenant,owner,object,predicate,set_id,at,fence,payload,cancel=lambda:None):
+        """Internal atomic admission; no HTTP installation or delivery activation."""
+        from acl_service.domain.history_store import HistoryConflict
+        from group_item_grants import MAX_SAFE
+        payload=self._epoch_command(payload,object,owner)
+        guard=lambda:self.media._guard(at,cancel);guard()
+        with self.store._transaction(write=True,before_commit=guard) as db:
+            retained,digest,row,doc,ids=self._epoch_command_state(db,tenant,owner,object,at,predicate,set_id,payload)
+            if retained:return True
+            plan=self._epoch_plan(db,tenant,owner,object,at,predicate,set_id)
+            if type(fence) is not str or not hmac.compare_digest(fence,plan['fence']):
+                raise HistoryConflict('group item epoch authority changed')
+            if encoded([grant['claims'] for grant in payload['grants']])!=encoded(plan['grants']):
+                raise HistoryConflict('group item epoch recipients changed')
+            owner_pub=ids['bindings'][owner]['pub']
+            for grant in payload['grants']:
+                if not self.media.native[0].matches_grant(encoded(grant['proof']),encoded({**grant['claims'],'ownerPub':owner_pub})):
+                    raise AdmissionRejected('group item direct grant signature refused')
+            document=payload['document'];fin=payload['finalization'];manifest=document.get('manifest')
+            if type(manifest) is not dict:raise AdmissionRejected('invalid group item manifest')
+            expected={'ownerPub':owner_pub,'object':object,'epoch':plan['previousEpoch']+1,'revisionId':manifest.get('revisionId')}
+            if (document.get('snapshot')!=plan['snapshot'] or manifest.get('previousEpoch')!=plan['previousEpoch'] or
+                    manifest.get('settleWindowMs')!=plan['settleWindowMs'] or
+                    manifest.get('keyCommitment')!=self.media._selected(object,doc,at)['keyCommitment'] or
+                    not self.media.native[2].matches_manifest(encoded(document),encoded(expected))):
+                raise AdmissionRejected('group item manifest refused')
+            if (fin.get('previousEpoch')!=plan['previousEpoch'] or fin.get('previousFinalizationId')!=plan['previousFinalizationId'] or
+                    fin.get('epoch')!=expected['epoch'] or fin.get('revisionId')!=expected['revisionId'] or
+                    fin.get('candidateRevisionIds')!=[expected['revisionId']] or
+                    any(entry['proof']['finalizationId']==fin.get('finalizationId') for entry in doc['finalizations'])):
+                raise HistoryConflict('group item ancestry changed')
+            if len(doc.get('groupItemEpochs',[]))>=64 or doc['objectVersion']>=MAX_SAFE:
+                raise AdmissionRejected('group item epoch capacity')
+            doc['grants'] += [{**grant,'ownerPub':owner_pub} for grant in payload['grants']]
+            doc['manifests'].append({'document':document,'expected':expected})
+            doc['finalizations'].append({'proof':fin,'ownerPub':owner_pub,'seenAt':at*1000})
+            history=self.media._history(object,doc,at,fin)
+            history['current']=plan['snapshot'];history['groupWindowMs']=plan['settleWindowMs']
+            if not self.media.native[4].verifies_history(encoded(history)):
+                raise AdmissionRejected('group item epoch history refused')
+            doc.setdefault('groupItemEpochs',[]).append({'command':digest,'predicate':predicate,'set':set_id,
+                'epoch':expected['epoch'],'revisionId':expected['revisionId'],'settleWindowMs':plan['settleWindowMs']})
+            doc['objectVersion']+=1
+            self.media._save(db,object,row,doc)
+        return True
