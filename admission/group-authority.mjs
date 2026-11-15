@@ -135,7 +135,7 @@ export function groupWithdrawalAuthority(accounts,contextFor,now,input) {
 
 
 /** Current group membership without importing any media object's binding. */
-export function groupCohortAuthority(accounts,contextFor,now,input) {
+function admittedCohort(accounts,contextFor,now,input,requireEncryption) {
   if(!Number.isSafeInteger(now)||now<0||!input||Object.keys(input).sort().join()!=='predicate,rows,set'||
       !['same-group','named-circle'].includes(input.predicate)||typeof input.set!=='string'||!input.set.startsWith('set_')||
       !Array.isArray(input.rows)||input.rows.length>1024||Buffer.byteLength(JSON.stringify(input))>512*1024||
@@ -145,7 +145,7 @@ export function groupCohortAuthority(accounts,contextFor,now,input) {
   const bindings=new Map();
   for(const account of accounts.values()) {
     const diagnostics=[],head=resolveStoreAccount(account.principal,account.rotations,contextFor(account,now),diagnostics);
-    if(account.frozen||diagnostics.length||!head.bindingEpub||!head.currentEpub||head.rotations.length!==account.rotations.length||
+    if(account.frozen||diagnostics.length||!head.bindingEpub||(requireEncryption&&!head.currentEpub)||head.rotations.length!==account.rotations.length||
         account.entries.some(row=>row.issuedAt>now))throw Error('invalid-group-history');
     bindings.set(account.principal,{pub:head.currentKey,epub:head.currentEpub});
   }
@@ -169,6 +169,25 @@ export function groupCohortAuthority(accounts,contextFor,now,input) {
   }
   const cohort=groupCohortSnapshot(graph,input.predicate,input.set);
   if(!cohort)throw Error('group-cohort-unavailable');
+  return {graph,cohort,bindings,owner};
+}
+
+export function groupCohortAuthority(accounts,contextFor,now,input) {
+  const {cohort,bindings,owner}=admittedCohort(accounts,contextFor,now,input,true);
   const named=new Set([owner,...cohort.members.map(row=>row.accessor)]);
   return {cohort,bindings:Object.fromEntries([...bindings].filter(([principal])=>named.has(principal)))};
+}
+
+/** Membership changes use current signing authority even without an encryption key. */
+export function groupMemberStateAuthority(accounts,contextFor,now,input) {
+  if(!input||Object.keys(input).sort().join()!=='member,predicate,rows,set'||!accounts.has(input.member))throw Error('invalid-group-member');
+  const {member,...scope}=input;
+  const {graph,cohort,bindings,owner}=admittedCohort(accounts,contextFor,now,scope,false);
+  let state=groupMembershipState(graph,scope.predicate,scope.set,member);
+  if(!state) {
+    if(cohort.members.some(row=>row.accessor===member))throw Error('group-member-state-unavailable');
+    state={predicate:scope.predicate,set:scope.set,member,setOwner:owner,
+      memberAssent:null,setAssent:null,cancels:[],stated:0};
+  }
+  return {state,memberPub:bindings.get(member).pub,ownerPub:bindings.get(owner).pub};
 }
