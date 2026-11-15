@@ -1,4 +1,4 @@
-import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority} from './group-authority.mjs';
 // Private subprocess protocol. Policy, snapshot, clock and grant come from the adapter.
 import {readFileSync} from 'node:fs';
 import {statementGraph} from './statement-graph.mjs';
@@ -13,7 +13,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, groupGraph, groupObjectGraph, groupPolicyGraph, groupConsentGraph, mediaObject, mediaRecord}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, agentGraph, groupGraph, groupObjectGraph, groupPolicyGraph, groupConsentGraph, groupWithdrawalGraph, mediaObject, mediaRecord}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -40,7 +40,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     accounts.set(account.principal, {...account, rotations, links, ownRevokes});
   }
-  if (!observe && !graph && !agentGraph && !groupGraph && !groupObjectGraph && !groupPolicyGraph && !groupConsentGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
+  if (!observe && !graph && !agentGraph && !groupGraph && !groupObjectGraph && !groupPolicyGraph && !groupConsentGraph && !groupWithdrawalGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
 
   function contextFor(account, until) {
     const links = new Map(account.links);
@@ -80,6 +80,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
 
   if (graph) return JSON.stringify(statementGraph(accounts, contextFor, now, graph));
   if (agentGraph) return JSON.stringify(delegationGraph(accounts, contextFor, now, agentGraph));
+  if (groupWithdrawalGraph) return JSON.stringify(groupWithdrawalAuthority(accounts, contextFor, now, groupWithdrawalGraph));
   if (groupConsentGraph) return JSON.stringify(groupConsentAuthority(accounts, contextFor, now, groupConsentGraph));
   if (groupPolicyGraph) return JSON.stringify(groupPolicyAuthority(accounts, contextFor, now, groupPolicyGraph));
   if (groupGraph) return JSON.stringify(groupAuthority(accounts, contextFor, now, groupGraph));

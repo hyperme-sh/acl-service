@@ -58,6 +58,13 @@ const groupInvitations=[1,0].map((stated)=>{
   if(!signed.ok)throw Error(signed.reason);
   return {kind:'membership',soul:membershipSoul(row.setOwner,row.predicate,row.set,row.member),record:{...row,sig:signed.value}};
 });
-const output={groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const groupMemberRows=[1,0].map(stated=>{
+  const row={role:'member',predicate:groupPolicy.predicate,set:groupPolicy.setId,member:f.genesis,
+    setOwner:f.genesis,stated,hamState:2,issuedAt:f.now,cancels:[]};
+  const signed=signWithKeyring(key,membershipAssentBytes(row),f.genesis);
+  if(!signed.ok)throw Error(signed.reason);
+  return {kind:'membership',soul:membershipSoul(row.setOwner,row.predicate,row.set,row.member),record:{...row,sig:signed.value}};
+});
+const output={groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));

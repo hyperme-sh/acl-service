@@ -132,7 +132,7 @@ class MediaSource:
                     'bindings':{who:identities['bindings'][who] for who in sorted(named)},
                     'objectVersion':doc['objectVersion'],'fence':self._fence(db,object,row,at)}
 
-    def group_consent_view(self,tenant,member,object,at,predicate,set_id,cancel=lambda:None):
+    def group_consent_view(self,tenant,member,object,at,predicate,set_id,cancel=lambda:None,*,withdraw=False):
         """Prepare this member's response under the current protected source fence."""
         self._guard(at,cancel)
         key=self._group_key(predicate,set_id)
@@ -141,19 +141,80 @@ class MediaSource:
             row,doc=self._load(db,object,at)
             identities=self.identities(db,object,doc,at)
             if member not in identities['bindings']:raise AdmissionRejected('group member unavailable')
-            rows=doc.get('groupScopes',{}).get(key)
-            if not rows:raise AdmissionRejected('group invitation unavailable')
-            accounts=self._accounts(db)
-            principal=next(iter(accounts));account=accounts[principal]
-            runner=HistoryAdmission(self.store,grant_for=lambda _:None,
-                                    trust_at=lambda _:doc['policy'],clock=self.clock)
-            consent=json.loads(runner._run_verifier(principal,at,
-                genesis=_record(account.genesis),entries=[_record(entry) for entry in account.entries],
-                peers=_peer_inputs(principal,accounts),groupConsentGraph={
-                    'member':member,'object':object,'predicate':predicate,'set':set_id,'rows':rows}))
+            consent=self._group_member_context(db,object,doc,at,predicate,set_id,member,withdraw)
             if consent['memberPub']!=identities['bindings'][member]['pub']:
                 raise AdmissionRejected('group member key changed')
             return {'consent':consent,'fence':self._fence(db,object,row,at)}
+
+    def _group_member_context(self,db,object,doc,at,predicate,set_id,member,withdraw=False):
+        key=self._group_key(predicate,set_id)
+        rows=doc.get('groupScopes',{}).get(key)
+        if not rows:raise AdmissionRejected('group invitation unavailable')
+        accounts=self._accounts(db)
+        principal=next(iter(accounts));account=accounts[principal]
+        runner=HistoryAdmission(self.store,grant_for=lambda _:None,
+                                trust_at=lambda _:doc['policy'],clock=self.clock)
+        graph={'member':member,'object':object,'predicate':predicate,'set':set_id,'rows':rows}
+        return json.loads(runner._run_verifier(principal,at,
+            genesis=_record(account.genesis),entries=[_record(entry) for entry in account.entries],
+            peers=_peer_inputs(principal,accounts),**{'groupWithdrawalGraph' if withdraw else 'groupConsentGraph':graph}))
+
+    @staticmethod
+    def _member_group_row(row,member,predicate,set_id):
+        if type(row) is not dict or set(row)!={'kind','soul','record'} or row['kind']!='membership':
+            raise AdmissionRejected('invalid member row')
+        record=row['record']
+        if (type(record) is not dict or set(record)!={'role','predicate','set','member','setOwner','stated','hamState','issuedAt','cancels','sig'}
+                or record['role']!='member' or record['member']!=member or record['predicate']!=predicate or record['set']!=set_id
+                or type(record['stated']) is not int or record['stated'] not in (0,1)
+                or type(record['sig']) is not str or not 1<=len(record['sig'])<=128 or len(encoded(row))>8192):
+            raise AdmissionRejected('invalid member row')
+        return json.loads(encoded(row))
+
+    def member_group_state(self,tenant,member,object,at,predicate,set_id,row,cancel=lambda:None):
+        self._guard(at,cancel)
+        key=self._group_key(predicate,set_id)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        row=self._member_group_row(row,member,predicate,set_id)
+        with self.store._transaction(write=False,before_commit=lambda:self._guard(at,cancel)) as db:
+            held,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if member not in identities['bindings']:raise AdmissionRejected('group member unavailable')
+            retained=doc.get('groupScopes',{}).get(key)
+            if not retained:raise AdmissionRejected('group scope unavailable')
+            candidate=self._group_candidate(retained,[row])
+            self._group_projection(db,object,doc,at,predicate,set_id,candidate)
+            state='applied' if any(encoded(value)==encoded(row) for value in retained) else 'absent'
+            return {'state':state,'fence':self._fence(db,object,held,at)}
+
+    def append_member_group(self,tenant,member,object,at,fence,predicate,set_id,row,cancel=lambda:None):
+        self._guard(at,cancel)
+        key=self._group_key(predicate,set_id)
+        if tenant!=self.tenant:raise AdmissionRejected('wrong group tenant')
+        row=self._member_group_row(row,member,predicate,set_id)
+        with self.store._transaction(write=True,before_commit=lambda:self._guard(at,cancel)) as db:
+            held,doc=self._load(db,object,at)
+            identities=self.identities(db,object,doc,at)
+            if member not in identities['bindings']:raise AdmissionRejected('group member unavailable')
+            if type(fence) is not str or not hmac.compare_digest(fence,self._fence(db,object,held,at)):
+                raise HistoryConflict('group authority changed')
+            retained=doc.get('groupScopes',{}).get(key)
+            if not retained:raise AdmissionRejected('group scope unavailable')
+            candidate=self._group_candidate(retained,[row])
+            self._group_projection(db,object,doc,at,predicate,set_id,candidate)
+            if len(candidate)==len(retained):return True
+            record=row['record']
+            consent=self._group_member_context(db,object,doc,at,predicate,set_id,member,record['stated']==0)
+            if consent['memberPub']!=identities['bindings'][member]['pub']:
+                raise AdmissionRejected('group member key changed')
+            expected={**consent['draft'],'stated':record['stated'],'sig':record['sig']}
+            if encoded(expected)!=encoded(record):raise AdmissionRejected('group consent changed')
+            if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
+            doc['objectVersion']+=1
+            doc['groupScopes'][key]=candidate
+            doc['groupWithdrawalCapacity']=True
+            self._save(db,object,held,doc)
+        return True
 
     @staticmethod
     def _group_key(predicate,set_id):
@@ -1269,6 +1330,23 @@ class MediaSource:
 
     async def member_group_consent_view(self,tenant,member,object,predicate,set_id):
         return await self._work(self._member_group_consent_view,tenant,member,object,predicate,set_id)
+
+    async def member_group_withdrawal_view(self,tenant,member,object,predicate,set_id):
+        def read(cancel):
+            at=int(self.clock())
+            return {'at':at,**self.group_consent_view(tenant,member,object,at,predicate,set_id,cancel,withdraw=True)}
+        return await self._work(read)
+
+    async def member_group_append_state(self,tenant,member,object,predicate,set_id,row):
+        row=self._member_group_row(row,member,predicate,set_id)
+        def read(cancel):
+            at=int(self.clock())
+            return {'at':at,**self.member_group_state(tenant,member,object,at,predicate,set_id,row,cancel)}
+        return await self._work(read)
+
+    async def member_append_group(self,tenant,member,object,at,fence,predicate,set_id,row):
+        row=self._member_group_row(row,member,predicate,set_id)
+        return await self._work(lambda cancel:self.append_member_group(tenant,member,object,at,fence,predicate,set_id,row,cancel))
 
     def _owner_group_authority_view(self,tenant,writer,object,cancel):
         at=int(self.clock())

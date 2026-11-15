@@ -62,6 +62,24 @@ async def group_consent_view(request: Request, tenant: UUID = Depends(require_ma
     return await _private_operation('group-consent-view',request,tenant,user)
 
 
+@router.post('/group-withdrawal-view')
+async def group_withdrawal_view(request: Request, tenant: UUID = Depends(require_matched_tenant),
+                                user: AuthMeResponse = Depends(get_current_user)):
+    return await _private_operation('group-withdrawal-view',request,tenant,user)
+
+
+@router.post('/group-consent-check')
+async def group_consent_check(request: Request, tenant: UUID = Depends(require_matched_tenant),
+                              user: AuthMeResponse = Depends(get_current_user)):
+    return await _private_operation('group-consent-check',request,tenant,user)
+
+
+@router.post('/group-consent-append')
+async def group_consent_append(request: Request, tenant: UUID = Depends(require_matched_tenant),
+                               user: AuthMeResponse = Depends(get_current_user)):
+    return await _private_operation('group-consent-append',request,tenant,user)
+
+
 async def _private_operation(action,request,tenant,user):
     # The authenticated subject is mapped by the owner, never by request JSON.
     bindings = request.app.state.private_wrap_bindings
@@ -70,7 +88,7 @@ async def _private_operation(action,request,tenant,user):
     binding = bindings.get((tenant, user.sub))
     if binding is None or binding.tenant != str(tenant) or binding.store.tenant != str(tenant):
         raise refused(403, 'Private wrap access refused')
-    if 'acl:media:read' not in user.scopes:
+    if 'acl:media:read' not in user.scopes or (action=='group-consent-append' and 'acl:media:write' not in user.scopes):
         raise refused(403, 'Private wrap access refused')
     if not request.app.state.rate_limiter.allow(tenant, user.sub):
         raise refused(429, 'Rate limit exceeded')
@@ -85,7 +103,8 @@ async def _private_operation(action,request,tenant,user):
             async with capacity(request.app.state.private_wrap_body_slots[(tenant, user.sub)]):
                 async with asyncio.timeout(1.0):
                     async for chunk in request.stream():
-                        if len(data) + len(chunk) > 2048:
+                        limit=12288 if action in ('group-consent-check','group-consent-append') else 2048
+                        if len(data) + len(chunk) > limit:
                             raise refused(413, 'Request too large')
                         data.extend(chunk)
             try:
@@ -94,12 +113,18 @@ async def _private_operation(action,request,tenant,user):
                 if action=='catalog':
                     if type(body) is not dict or set(body)!={'page'} or type(body['page']) is not int or not 0<=body['page']<16:
                         raise ValueError()
-                elif action=='group-consent-view':
-                    if (type(body) is not dict or set(body)!={'object','predicate','set'}
+                elif action in ('group-consent-view','group-withdrawal-view','group-consent-check','group-consent-append'):
+                    expected={'object','predicate','set'}
+                    if action in ('group-consent-check','group-consent-append'):expected.add('row')
+                    if action=='group-consent-append':expected.update(('at','fence'))
+                    if (type(body) is not dict or set(body)!=expected
                             or type(body['object']) is not str or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None
                             or body['predicate'] not in ('same-group','named-circle')
                             or type(body['set']) is not str or re.fullmatch(r'set_[\x21-\x7e]{1,508}',body['set']) is None):
                         raise ValueError()
+                    if action in ('group-consent-check','group-consent-append') and type(body['row']) is not dict:raise ValueError()
+                    if action=='group-consent-append' and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991
+                            or type(body['fence']) is not str or re.fullmatch(r'[0-9a-f]{64}',body['fence']) is None):raise ValueError()
                 elif (type(body) is not dict or set(body) != {'object'}
                         or type(body['object']) is not str
                         or re.fullmatch(r'[\x21-\x7e]{1,512}', body['object']) is None):
@@ -109,11 +134,22 @@ async def _private_operation(action,request,tenant,user):
             # One tenant cannot occupy both global delivery slots.
             async with capacity(request.app.state.private_wrap_tenant_slots[tenant]):
                 async with capacity(request.app.state.private_wrap_slots):
-                    if action=='group-consent-view':
-                        prepare=getattr(binding.authority,'member_group_consent_view',None)
+                    if action in ('group-consent-view','group-withdrawal-view'):
+                        prepare=getattr(binding.authority,'member_group_withdrawal_view' if action=='group-withdrawal-view' else 'member_group_consent_view',None)
                         if not callable(prepare):raise refused(503,'Group consent source unavailable')
                         result=await prepare(str(tenant),binding.reader,body['object'],body['predicate'],body['set'])
                         return JSONResponse(result,headers=PRIVATE)
+                    if action=='group-consent-check':
+                        check=getattr(binding.authority,'member_group_append_state',None)
+                        if not callable(check):raise refused(503,'Group consent source unavailable')
+                        result=await check(str(tenant),binding.reader,body['object'],body['predicate'],body['set'],body['row'])
+                        return JSONResponse(result,headers=PRIVATE)
+                    if action=='group-consent-append':
+                        append=getattr(binding.authority,'member_append_group',None)
+                        if not callable(append):raise refused(503,'Group consent source unavailable')
+                        applied=await append(str(tenant),binding.reader,body['object'],body['at'],body['fence'],body['predicate'],body['set'],body['row'])
+                        if applied is not True:raise refused(403,'Group consent refused')
+                        return JSONResponse({'applied':True},headers=PRIVATE)
                     if action=='catalog':
                         catalog=getattr(binding.authority,'reader_catalog',None)
                         if not callable(catalog):raise refused(503,'Private catalog unavailable')

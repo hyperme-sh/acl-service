@@ -290,6 +290,30 @@ class NativeMediaContracts(TestCase):
         self.source.append_group(self.tenant,self.owner,self.object,self.now,prepared['fence'],predicate,set_id,[self.f['groupInvitations'][1]])
         with self.assertRaises(AdmissionRejected):view()
 
+    def test_native_member_consent_retry_and_withdrawal_after_invitation_removal(self):
+        policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
+        owner_view=lambda:self.source.group_authority_view(self.tenant,self.owner,self.object,self.now)
+        before=owner_view()['direct']
+        rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupInvitations'][0]]
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,owner_view()['fence'],predicate,set_id,rows)
+        join,withdraw=self.f['groupMemberRows']
+        check=lambda row:asyncio.run(self.source.member_group_append_state(self.tenant,self.owner,self.object,predicate,set_id,row))
+        append=lambda row,fence:asyncio.run(self.source.member_append_group(self.tenant,self.owner,self.object,self.now,fence,predicate,set_id,row))
+        pending=check(join);self.assertEqual(pending['state'],'absent')
+        self.assertTrue(append(join,pending['fence']))
+        applied=check(join);self.assertEqual(applied['state'],'applied')
+        self.assertTrue(append(join,applied['fence']));self.assertEqual(check(join)['fence'],applied['fence'])
+        self.source.append_group(self.tenant,self.owner,self.object,self.now,applied['fence'],predicate,set_id,[self.f['groupInvitations'][1]])
+        with self.assertRaises(AdmissionRejected):self.source.group_consent_view(self.tenant,self.owner,self.object,self.now,predicate,set_id)
+        view=asyncio.run(self.source.member_group_withdrawal_view(self.tenant,self.owner,self.object,predicate,set_id))
+        self.assertEqual(view['consent']['draft']['hamState'],2)
+        self.assertTrue(append(withdraw,view['fence']))
+        self.assertEqual(check(withdraw)['state'],'applied')
+        self.assertEqual(owner_view()['direct'],before)
+        with self.assertRaises(AdmissionRejected):append(self.f['groupInvitations'][0],check(withdraw)['fence'])
+        malformed=json.loads(json.dumps(join));malformed['record']['sig']='a'*128
+        with self.assertRaises(AdmissionRejected):check(malformed)
+
     def test_native_group_append_reconciliation_never_writes_or_hides_withdrawal(self):
         policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
         rows=[{'kind':'object','soul':self.object,'record':self.f['groupObjectRecord']},self.f['groupEdges'][0]]
