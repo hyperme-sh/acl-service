@@ -1236,3 +1236,25 @@ returned context. The authority contract requires current item grant/status,
 settled epoch, group membership and both protected checkpoints; group-key access
 alone never qualifies. No default authority or HTTP route installs this
 coordinator. Source admission and publication remain separate consumers.
+
+
+Group item grants use their own bounded `groupItemGrants` journal; they never
+enter the direct `grants` list or authorize a direct wrap. The owner prepares a
+signed grant through `POST /api/v1/acl/sociacl/media/groups/item-grant-view`
+with `{object, predicate, set, reader, withdraw}`. Positive drafts require the
+current signed item-to-group binding, explicit current owner and recipient
+membership, and the owner's current item access. They bind the next item epoch,
+current ciphertext digest and validity bounded by both policies; insufficient
+remaining time for the signed group settlement window refuses preparation.
+Cancellation drafts preserve the retained scope and dates and remain available
+after the owner or recipient leaves the group.
+
+`item-grant-append` takes `{object, predicate, set, at, fence, payload}`, where
+payload is the native signed `{claims, proof}` (at most 4 KiB). Both endpoints
+require the existing fixed subject binding and `acl:media:write`. Current owner
+signatures and exact source drafts/fences are mandatory for new grants. Same
+claims at an already retained revision are idempotent; a signed same-revision
+fork permanently freezes that scoped recipient and preserves the conflicting
+record. The journal reserves cancellation/fork space and object versions across
+ordinary media writes. These grants still require current group-aware epoch,
+status and wrap admission before delivery; neither endpoint publishes bytes.

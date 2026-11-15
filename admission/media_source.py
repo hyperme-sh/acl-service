@@ -463,6 +463,7 @@ class MediaSource:
     def _save(self, db, object, row, doc):
         raw=encoded(doc)
         reserve=0
+        pending=0
         if doc.get('groupScopes'):
             if len(encoded(doc['groupScopes']))>512*1024: raise AdmissionRejected('aggregate group capacity')
             # New group writes reserve the whole bounded group envelope so later
@@ -482,6 +483,11 @@ class MediaSource:
                     reserve+=16-len(str(doc['objectVersion']))
                 cancellations=sum(row['claims']['stated']==0 for row in doc['grants'])
                 reserve+=max(0,64-cancellations)*17*1024+4096
+        if 'groupItemGrants' in doc and 'deletion' not in doc:
+            from group_item_grants import reserve as group_grant_reserve, version_reserve
+            reserve+=group_grant_reserve(doc)
+            if doc['objectVersion']>9007199254740991-pending-version_reserve(doc):
+                raise AdmissionRejected('group grant withdrawal version capacity')
         if len(raw)+reserve>6*1024*1024: raise AdmissionRejected('media capacity')
         updated=(row[0]+1,row[1],raw)
         db.execute('UPDATE media_sources SET revision=?,nonce=?,document=? WHERE object=?',(*updated,object))
@@ -1445,6 +1451,23 @@ class MediaSource:
             return GroupItemSource(GroupKeySource(GroupSource(self))).authority_view(
                 tenant,owner,object,cancel)
         return await self._work(run)
+
+    async def _group_item_grant_work(self,action,*args):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_item_source import GroupItemSource
+        from group_item_grants import GroupItemGrants
+        def run(cancel):
+            source=GroupItemGrants(GroupItemSource(GroupKeySource(GroupSource(self))))
+            return getattr(source,action)(*args,cancel=cancel)
+        return await self._work(run)
+
+    async def group_item_grant_view(self,tenant,owner,object,predicate,set_id,reader,withdraw):
+        return await self._group_item_grant_work('view',tenant,owner,object,predicate,set_id,reader,withdraw)
+
+    async def append_group_item_grant(self,tenant,owner,object,predicate,set_id,at,fence,payload):
+        payload=json.loads(encoded(payload))
+        return await self._group_item_grant_work('append',tenant,owner,object,predicate,set_id,at,fence,payload)
 
     async def group_wrap_view(self, tenant, owner, at, predicate, set_id):
         return await self._group_wrap_work('view',tenant,owner,at,predicate,set_id)

@@ -22,6 +22,12 @@ async def execute(action,binding,body):
     if action=='item-authority-view':
         return await binding.authority.group_item_authority_view(binding.tenant,binding.reader,body['object'])
     args=(binding.tenant,binding.reader,body['predicate'],body['set'])
+    if action=='item-grant-view':
+        return await binding.authority.group_item_grant_view(args[0],args[1],body['object'],args[2],args[3],body['reader'],body['withdraw'])
+    if action=='item-grant-append':
+        result=await binding.authority.append_group_item_grant(args[0],args[1],body['object'],args[2],args[3],body['at'],body['fence'],body['payload'])
+        if result is not True:raise AdmissionRejected('group item grant refused')
+        return {'accepted':True}
     if action=='item-view':
         return await binding.authority.group_item_view(args[0],args[1],body['object'],args[2],args[3])
     if action=='wrap-view':
@@ -55,12 +61,17 @@ def parse_body(data,action):
                 or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
         return body
     expected={'predicate','set'}
-    if action=='item-view':expected.add('object')
+    if action in ('item-view','item-grant-view','item-grant-append'):expected.add('object')
+    if action=='item-grant-view':expected|={'reader','withdraw'}
+    if action=='item-grant-append':expected|={'at','fence','payload'}
     if action=='wrap-publish':expected|={'at','fence','metadata','payload'}
     if (type(body) is not dict or set(body)!=expected or body['predicate'] not in ('same-group','named-circle')
             or type(body['set']) is not str or re.fullmatch(r'set_p_[0-9a-f]{128}_[0-9a-f]{32}',body['set']) is None):raise ValueError()
-    if action=='item-view' and (type(body['object']) is not str
+    if action in ('item-view','item-grant-view','item-grant-append') and (type(body['object']) is not str
             or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
+    if action=='item-grant-view' and (type(body['reader']) is not str or not 1<=len(body['reader'])<=1024 or type(body['withdraw']) is not bool):raise ValueError()
+    if action=='item-grant-append' and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991 or
+            type(body['fence']) is not str or re.fullmatch('[0-9a-f]{64}',body['fence']) is None or type(body['payload']) is not dict):raise ValueError()
     if action=='wrap-publish':
         if (type(body['at']) is not int or not 0<=body['at']<=9007199254740991
                 or type(body['fence']) is not str or re.fullmatch('[0-9a-f]{64}',body['fence']) is None
@@ -83,7 +94,7 @@ async def operation(action,request,tenant,user):
             or request.headers.get('content-encoding','identity')!='identity'):raise refused(415,'Expected uncompressed JSON')
     try:
         async with asyncio.timeout(5), capacity(request.app.state.group_wrap_body_slots[(tenant,user.sub)]):
-            data=bytearray();limit=92160 if action=='wrap-publish' else 2048
+            data=bytearray();limit=92160 if action=='wrap-publish' else 8192 if action=='item-grant-append' else 2048
             async with asyncio.timeout(1):
                 async for chunk in request.stream():
                     if len(data)+len(chunk)>limit:raise refused(413,'Request too large')
@@ -121,3 +132,13 @@ async def publish(request:Request,tenant:UUID=Depends(require_matched_tenant),us
 @router.post('/wrap-read')
 async def read(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('wrap-read',request,tenant,user)
+
+
+@router.post('/item-grant-view')
+async def item_grant_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-grant-view',request,tenant,user)
+
+
+@router.post('/item-grant-append')
+async def item_grant_append(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-grant-append',request,tenant,user)
