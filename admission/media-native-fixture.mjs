@@ -65,6 +65,21 @@ const groupMemberRows=[1,0].map(stated=>{
   if(!signed.ok)throw Error(signed.reason);
   return {kind:'membership',soul:membershipSoul(row.setOwner,row.predicate,row.set,row.member),record:{...row,sig:signed.value}};
 });
-const output={groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
+const groupKeySnapshot={predicate:groupPolicy.predicate,setId:groupPolicy.setId,setOwner:f.genesis,
+  ownerSigningPub:f.genesis,ownerEncryptionPub:f.binding.epub,ownerIdentityHead:0,members:[]};
+const groupKeySnapshotId=hash(['s3rch-group-key-snapshot-v1',groupKeySnapshot.predicate,groupKeySnapshot.setId,
+  f.genesis,f.genesis,f.binding.epub,'0','0']);
+const groupKeyManifest={object:groupPolicy.setId,previousEpoch:0,epoch:1,deviceId:'group-fixture',
+  keyCommitment:'a'.repeat(64),settleWindowMs:groupPolicy.settleWindowMs,aclSnapshot:groupKeySnapshotId};
+groupKeyManifest.revisionId=hash(['s3rch-epoch-revision-v1',groupKeyManifest.object,'1','0',groupKeyManifest.deviceId,
+  groupKeyManifest.keyCommitment,String(groupKeyManifest.settleWindowMs),groupKeySnapshotId]);
+groupKeyManifest.signature=sign(canonical(['s3rch-epoch-manifest-sig-v1',groupKeyManifest.revisionId]));
+const groupKeyFinalization={object:groupPolicy.setId,previousEpoch:0,epoch:1,revisionId:groupKeyManifest.revisionId,
+  candidateRevisionIds:[groupKeyManifest.revisionId],previousFinalizationId:''};
+groupKeyFinalization.finalizationId=hash(['s3rch-epoch-finalization-v1',groupKeyFinalization.object,'1','0',
+  groupKeyManifest.revisionId,'',groupKeyManifest.revisionId]);
+groupKeyFinalization.signature=sign(canonical(['s3rch-epoch-finalization-sig-v1',groupKeyFinalization.finalizationId]));
+const groupKeyEpoch={document:{manifest:groupKeyManifest,snapshot:groupKeySnapshot},finalization:groupKeyFinalization};
+const output={groupKeyEpoch,groupMemberRows,groupInvitations,groupEdges,groupPolicy,groupPolicyDigest,groupObjectRecord,allocationRecord,identity:f,object,grant:grant(1,1),cancel:grant(0,2),epoch:{document:{manifest,snapshot},finalization},status,
   wrap:{reader:f.genesis,record:'e'.repeat(64),digest:'f'.repeat(64),epoch:1,revisionId:manifest.revisionId,readerEpub:f.binding.epub,itemDigest:'a'.repeat(64)}};
 key.fill(0);console.log(JSON.stringify(output));
