@@ -195,7 +195,6 @@ def create_app(
     from acl_service.interfaces.api.media_owner_routes import router as media_owner_router
     app.include_router(media_owner_router, prefix="/api/v1")
     from acl_service.interfaces.api.media_group_routes import router as media_group_router
-    app.include_router(media_group_router, prefix="/api/v1")
     app.state.media_allocation_bindings = MappingProxyType(dict(media_allocation_bindings)) if media_allocation_bindings is not None else None
     app.state.media_allocation_slots = asyncio.Semaphore(2)
     app.state.media_allocation_body_slots = {key: asyncio.Semaphore(1) for key in (media_allocation_bindings or {})}
@@ -208,6 +207,7 @@ def create_app(
     app.state.group_allocation_tenant_slots = {key[0]: asyncio.Semaphore(1) for key in (group_allocation_bindings or {})}
     from acl_service.interfaces.api.group_allocation_routes import router as group_allocation_router
     app.include_router(group_allocation_router, prefix='/api/v1')
+    app.include_router(media_group_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
     app.add_middleware(AclServiceDbMiddleware)

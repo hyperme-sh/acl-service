@@ -71,3 +71,23 @@ async def test_disconnect_cancels_pending_authority_work():
     with pytest.raises(TimeoutError):
         await connected_allocate(SimpleNamespace(is_disconnected=disconnected),SimpleNamespace(allocate=allocate),RECORD)
     assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+async def test_assembled_application_reaches_allocation_before_group_action(setup,monkeypatch):
+    import importlib
+    from starlette.middleware.base import BaseHTTPMiddleware
+    module=importlib.import_module('acl_service.app')
+    class NoDatabase(BaseHTTPMiddleware):
+        async def dispatch(self,request,call_next):return await call_next(request)
+    monkeypatch.setattr(module,'AclServiceDbMiddleware',NoDatabase)
+    s=setup
+    app=module.create_app(signed_store_bindings={},statement_bindings={},delegation_bindings={},
+        private_wrap_bindings={},media_allocation_bindings={},group_allocation_bindings={(s.tenant,s.user.sub):s.binding})
+    app.state.rate_limiter=s.app.state.rate_limiter
+    app.dependency_overrides[get_current_user]=lambda:s.user
+    app.dependency_overrides[require_matched_tenant]=lambda:s.tenant
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://acl') as client:
+        response=await client.post('/api/v1'+PATH,json=RECORD)
+    assert response.status_code==200
+    s.binding.allocate.assert_awaited_once_with(RECORD)
