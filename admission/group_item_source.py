@@ -91,6 +91,30 @@ class GroupItemSource:
                     'group':{'epoch':group.epoch,'revisionId':group.revision_id,
                              'keyCommitment':group.key_commitment}}
 
+    def _maintenance_parent(self,db,tenant,owner,object,row,doc,ids,at):
+        from group_item_grants import MAX_SAFE
+        if tenant!=self.media.tenant or ids['owner']!=owner or owner not in ids['bindings']:
+            raise AdmissionRejected('item maintenance owner required')
+        parent=self.media._selected_finalization(object,doc,at,historical=True,db=db)
+        held=self.media._latest(doc).get(owner)
+        if held is None or owner in doc['frozen']:
+            raise AdmissionRejected('owner maintenance grant unavailable')
+        claims=held['claims'];owner_pub=ids['bindings'][owner]['pub']
+        if (claims['object']!=object or claims['owner']!=owner or claims['accessor']!=owner or claims['stated']!=1 or
+                not claims['from']<=at*1000<claims['until'] or claims['epoch']!=parent['epoch'] or
+                doc.get('wraps',{}).get(owner,{}).get('itemDigest')!=claims['itemCiphertextDigest'] or
+                not 1<=parent['epoch']<MAX_SAFE or
+                not self.media.native[0].matches_grant(encoded(held['proof']),encoded({**claims,'ownerPub':owner_pub}))):
+            raise AdmissionRejected('current signed owner maintenance grant required')
+        manifest=next((entry['document']['manifest'] for entry in doc['manifests']
+            if (entry['document']['manifest']['epoch'],entry['document']['manifest']['revisionId'])==
+               (parent['epoch'],parent['revisionId'])),None)
+        if manifest is None:raise AdmissionRejected('authentic maintenance parent required')
+        fields=['group-item-maintenance-v1',tenant,owner,object,at,self.media._fence(db,object,row,at),
+            parent,claims,owner_pub,manifest['keyCommitment']]
+        fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
+        return parent,claims['itemCiphertextDigest'],manifest['keyCommitment'],fence
+
     def _epoch_plan(self,db,tenant,owner,object,at,predicate,set_id):
         """Prepare the complete next item snapshot without changing either grant journal."""
         from group_item_grants import journal, latest, grant_key, MAX_SAFE
@@ -98,14 +122,11 @@ class GroupItemSource:
         if current is None or (view['projection']['predicate'],view['projection']['set'])!=(predicate,set_id):
             raise AdmissionRejected('current item group binding required')
         group,cohort,config=current
-        item,_,_,_=self.media._permit(db,tenant,owner,object,at)
-        parent=self.media._selected_finalization(object,doc,at,historical=True,db=db)
-        if parent['epoch']!=item.epoch or not 1<=item.epoch<MAX_SAFE:
-            raise AdmissionRejected('current item epoch required')
-        epoch=item.epoch+1;window=config['settleWindowMs'];owner_pub=ids['bindings'][owner]['pub']
+        if len(doc['manifests'])>=64 or len(doc['finalizations'])>=64:raise AdmissionRejected('group item epoch capacity')
+        parent,item_digest,key_commitment,maintenance_fence=self._maintenance_parent(db,tenant,owner,object,row,doc,ids,at)
+        epoch=parent['epoch']+1;window=config['settleWindowMs'];owner_pub=ids['bindings'][owner]['pub']
         if min(doc['policyUntil'],group['policyUntil'])*1000<=at*1000+window:
             raise AdmissionRejected('group item policy cannot cover settlement')
-        item_digest=doc['wraps'][owner]['itemDigest']
         direct=self.media._latest(doc);drafts=[];entries={};bindings={}
         # Refresh independently authorized direct recipients into the new item
         # epoch. Membership never creates a direct grant or extends its window.
@@ -159,13 +180,13 @@ class GroupItemSource:
                     sum(draft['stated']==stated for draft in drafts)>64 for stated in (0,1))):
             raise AdmissionRejected('group item epoch capacity')
         snapshot={'entries':[entries[who] for who in sorted(entries)],'objectSet':edge}
-        fields=['group-item-epoch-plan-v1',tenant,owner,object,at,predicate,set_id,view['fence'],item.fence,
+        fields=['group-item-epoch-plan-v1',tenant,owner,object,at,predicate,set_id,view['fence'],maintenance_fence,
                 parent['finalizationId'],snapshot,drafts,window]
         fence=hmac.new(row[1],encoded(fields),hashlib.sha256).hexdigest()
         return {'at':at,'fence':fence,'owner':owner,'ownerPub':owner_pub,'predicate':predicate,'set':set_id,
                 'previousEpoch':parent['epoch'],'previousFinalizationId':parent['finalizationId'],
                 'settleWindowMs':window,'grants':drafts,'snapshot':snapshot,'bindings':bindings,
-                'groupReaders':group_readers}
+                'groupReaders':group_readers,'keyCommitment':key_commitment}
 
     def epoch_view(self,tenant,owner,object,predicate,set_id,cancel=lambda:None):
         at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel)
@@ -225,7 +246,7 @@ class GroupItemSource:
             expected={'ownerPub':owner_pub,'object':object,'epoch':plan['previousEpoch']+1,'revisionId':manifest.get('revisionId')}
             if (document.get('snapshot')!=plan['snapshot'] or manifest.get('previousEpoch')!=plan['previousEpoch'] or
                     manifest.get('settleWindowMs')!=plan['settleWindowMs'] or
-                    manifest.get('keyCommitment')!=self.media._selected(object,doc,at,db=db)['keyCommitment'] or
+                    manifest.get('keyCommitment')!=plan['keyCommitment'] or
                     not self.media.native[2].matches_manifest(encoded(document),encoded(expected))):
                 raise AdmissionRejected('group item manifest refused')
             if (fin.get('previousEpoch')!=plan['previousEpoch'] or fin.get('previousFinalizationId')!=plan['previousFinalizationId'] or

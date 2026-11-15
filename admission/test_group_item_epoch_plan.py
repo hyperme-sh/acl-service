@@ -18,7 +18,7 @@ class GroupItemEpochPlanTests(TestCase):
             'stated':1,'epoch':1,'grantRevision':1,'itemCiphertextDigest':'d'*64}
         self.owner={'claims':dict(self.claims),'proof':{'sig':'owner'}}
         self.reader={'predicate':'same-group','set':'set','claims':{**self.claims,'accessor':'reader','epoch':2},'proof':{'sig':'reader'}}
-        self.doc={'grants':[self.owner],'frozen':[],'manifests':[],'finalizations':[],'policyUntil':9000,
+        self.doc={'grants':[self.owner],'frozen':[],'manifests':[{'document':{'manifest':{'epoch':1,'revisionId':'r','keyCommitment':'k'*64}}}],'finalizations':[],'policyUntil':9000,
             'groupItemGrants':{'rows':[self.reader],'frozen':[],'conflicts':[]},'wraps':{'owner':{'itemDigest':'d'*64}}}
         self.ids={'owner':'owner','bindings':{'owner':{'pub':'key','epub':'owner-e'},'reader':{'pub':'reader-k','epub':'reader-e'}}}
         self.projection={'predicate':'same-group','set':'set','members':['owner','reader'],
@@ -30,7 +30,8 @@ class GroupItemEpochPlanTests(TestCase):
         self.media=Mock(tenant='tenant',clock=lambda:100,native=[Mock()])
         self.media.native[0].matches_grant.return_value=True
         self.media._permit.return_value=(self.item,self.ids,None,self.doc)
-        self.media._selected_finalization.return_value={'epoch':1,'finalizationId':'parent'}
+        self.media._selected_finalization.return_value={'epoch':1,'revisionId':'r','finalizationId':'parent'}
+        self.media._fence.return_value='media-fence'
         self.media._latest.side_effect=lambda doc:{r['claims']['accessor']:r for r in doc['grants']}
         self.source=GroupItemSource(SimpleNamespace(media=self.media,store=SimpleNamespace(_transaction=transaction)))
         self.source._authority=Mock(side_effect=lambda *args:(self.view,(1,b'n'*32,b'doc'),self.doc,self.ids,(self.group,{},self.config)))
@@ -121,3 +122,27 @@ class GroupItemEpochPlanTests(TestCase):
             where['policyUntil']=9000
         self.doc['grants'].append({'claims':{**self.claims,'accessor':'old','until':50000,'grantRevision':9007199254740991},'proof':{}})
         with self.assertRaises(AdmissionRejected):self.plan()
+
+
+    def test_maintenance_preparation_does_not_require_read_status_or_release_keys(self):
+        self.media._permit.side_effect=AssertionError('read authority must not be requested')
+        self.doc['statuses']={}
+        plan=self.plan()
+        self.assertEqual(plan['keyCommitment'],'k'*64)
+        self.assertNotIn('wrap',plan);self.assertNotIn('payload',plan)
+        self.media._save.assert_not_called()
+        self.media._selected_finalization.assert_called_with('media',self.doc,100,historical=True,db=self.db)
+        original=plan['fence'];self.media._fence.return_value='changed'
+        self.assertNotEqual(self.plan()['fence'],original)
+
+    def test_maintenance_requires_current_owner_and_authentic_parent(self):
+        for case in ['tenant','owner','binding','manifest','wrap','object','expired']:
+            self.setUp();tenant='tenant';owner='owner'
+            if case=='tenant':tenant='other'
+            if case=='owner':owner='reader'
+            if case=='binding':del self.ids['bindings']['owner']
+            if case=='manifest':self.doc['manifests']=[]
+            if case=='wrap':self.doc['wraps']={}
+            if case=='object':self.owner['claims']['object']='other'
+            if case=='expired':self.owner['claims']['until']=100000
+            with self.assertRaises(AdmissionRejected):self.source._maintenance_parent(self.db,tenant,owner,'media',(1,b'n'*32,b'doc'),self.doc,self.ids,100)

@@ -1389,3 +1389,14 @@ cannot fall back below the latest combined epoch. Group journal construction can
 reuse the caller's already-owned PostgreSQL transaction after verifying its store
 and schema scope; it does not open a nested transaction. Owner repair and public
 group delivery installation remain separate work.
+
+
+Group epoch maintenance prepares metadata independently of read authorization.
+It requires the current tenant-bound owner, a live nonfrozen owner-signed direct
+grant, the item digest already bound in the protected owner wrap, and an
+authentic settled historical parent at the protected floor. Preparation and
+append bind the same key commitment and current joint authority. A missing or
+stale read status therefore does not prevent the owner from preparing a repair;
+no wrap bytes, read permit or keys are returned. Positive group changes still
+require the owner's explicit current group membership. A separate negative-only
+detach path is still required when the owner has left the group.
