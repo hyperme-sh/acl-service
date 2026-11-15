@@ -37,3 +37,6 @@
 !admission/statement_source.py
 !admission/test_media_native.py
 !admission/group_item_grants.py
+
+!admission/device-transfer.mjs
+!admission/device_transfer_source.py

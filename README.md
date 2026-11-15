@@ -1337,6 +1337,11 @@ access. The HTTP append/state routes remain uninstalled until current combined
 snapshot selection, status and item-wrap authorization are connected. Native and
 transaction contracts for this internal admission run only in CI.
 
+The read-only [SEA device-transfer authority](docs/device-transfer.md) supplies
+scope-bound current identity/history decisions for the shared browser SDK.
+Its browser adapter uses the supported `sociacl-ids/keyring` surface. Explicit
+subject bindings and expiring transfer eligibility are required; no private SEA
+keys or uploaded history are accepted by the authority service.
 
 The internal group-item read authority joins a current owner-signed item grant,
 independent current membership and group-key permit, native settled item history,
