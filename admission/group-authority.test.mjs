@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 import {p256} from '@noble/curves/nist.js';
 import {formatPrincipalKey,lengthPrefixed,objectRecordBytes,signWithKeyring,historyState,linkId} from 'sociacl-ids';
 import {membershipAssentBytes,objectSetBytes,groupCancelBytes,membershipSoul,objectSetSoul} from 'sociacl/group';
-import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority,groupCohortAuthority} from './group-authority.mjs';
+import {groupAuthority,groupObjectAuthority,groupPolicyAuthority,groupConsentAuthority,groupWithdrawalAuthority,groupCohortAuthority,groupMemberStateAuthority} from './group-authority.mjs';
 const now=1700000060;
 const policy=JSON.parse(readFileSync(new URL('./fixture.json',import.meta.url))).policy;
 const scalar=n=>{const bytes=new Uint8Array(32);bytes[31]=n;return bytes;};
@@ -195,10 +195,31 @@ test('group cohort bindings follow current signing and encryption keys after rot
  assert.notEqual(result.bindings[f.genesis].epub,f.binding.epub);
  assert.equal(result.cohort.members[0].stated,1);
  rotations[0]=f['oidc-rotate'];
+ const memberState=groupMemberStateAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{member:f.genesis,predicate:'same-group',set:group,rows});
+ assert.equal(memberState.memberPub,rotations[0].nextKey);
+ assert.equal(memberState.state.stated,1);
+ assert.equal('epub' in memberState,false);
  const object=group.replace('set_','media_'),record={object,owner:f.genesis,issuedAt:f.now};
  record.sig=take(signWithKeyring(scalar(2),objectRecordBytes(record),rotations[0].nextKey));
  const withdrawal=groupWithdrawalAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{object,predicate:'same-group',set:group,member:f.genesis,rows:[{kind:'object',soul:object,record},...rows]});
  assert.equal(withdrawal.memberPub,rotations[0].nextKey);
  assert.equal(withdrawal.draft.hamState,1);
  assert.throws(()=>groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows}),/invalid-group-history/);
+});
+
+test('independent member state exposes both parties without implying an assent',()=>{
+ const view=values=>groupMemberStateAuthority(accounts,contextFor,now,{...cohortInput(values),member});
+ assert.equal(view([]).state.stated,0);
+ assert.equal(view([]).state.memberAssent,null);
+ assert.equal(view([]).state.setAssent,null);
+ assert.equal(view([assent('set')]).state.stated,0);
+ assert.equal(view([assent('member'),assent('set')]).state.stated,1);
+ assert.equal(view([assent('member'),assent('set'),cancel()]).state.stated,0);
+ assert.equal(view([assent('member',0,2),assent('set')]).state.stated,0);
+ assert.equal(view([]).ownerPub,owner);
+ assert.equal(view([]).memberPub,member);
+ for(const value of [null,{...cohortInput(),member:outsider,extra:1},{...cohortInput(),member:pub(4)}])
+  assert.throws(()=>groupMemberStateAuthority(accounts,contextFor,now,value));
+ assert.throws(()=>view([edge]));
+ const forged=assent('member');forged.record.sig='forged';assert.throws(()=>view([forged]));
 });

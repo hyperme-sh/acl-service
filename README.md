@@ -1059,3 +1059,9 @@ implicitly and no epoch, key or media grant is created. Existing groups cannot
 be overwritten. These commands are not exposed through HTTP or activated by
 this change; later membership and delivery work must consume this independent
 group state rather than silently importing per-object preparation rows.
+
+`groupMemberStateGraph` resolves one member's admitted assent state and the
+current signing keys of both parties without requiring a media-object edge or
+an encryption key. It is preparation for membership changes, including removal
+after a signing-only rotation. It cannot authorize encryption-key delivery;
+`groupCohortGraph` retains that stricter current-encryption-key prerequisite.
