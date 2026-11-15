@@ -1147,3 +1147,12 @@ commitment, group document and complete authority checkpoint. Final delivery
 must revalidate it in the protected write transaction. Owner status is not
 implicit membership, and old epochs are never a fallback. This internal source
 boundary does not expose bytes or activate a delivery route.
+
+
+Protected group wrap publication reserves one immutable digest and length for
+an epoch/recipient before provider upload. Failed uploads retain their reservation;
+retry uses the same encrypted bytes. Publication commits only after rechecking
+current owner, member encryption binding and native group history. Reads select
+only the latest settled epoch's published wrap and revalidate the complete permit
+before returning bytes. Source document/revision capacity preserves room for
+withdrawals. This source module activates no public transport or credentials.
