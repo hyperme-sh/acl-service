@@ -160,3 +160,37 @@ class GroupKeySourceTests(TestCase):
         self.retain()
         with self.assertRaises(AdmissionRejected): self.source.view(*self.args)
         self.journal.write.assert_not_called()
+
+    def test_allocation_request_uses_current_owner_and_permanent_creation(self):
+        self.media.clock.return_value = 100
+        signer = Mock(return_value=b'signed-request')
+        self.assertEqual(self.source.prepare_allocation_request('tenant','owner','same-group','set_a',sign_request=signer), b'signed-request')
+        original = signer.call_args.args[0]
+        self.assertEqual(set(original), {'tenant','set','predicate','owner','policyDigest','creationDigest','issuedAt','expiresAt'})
+        self.assertEqual((original['issuedAt'],original['expiresAt']), (100,130))
+        self.commit()
+        self.origin._cohort.return_value['cohort']['members'] = []
+        self.source.prepare_allocation_request('tenant','owner','same-group','set_a',sign_request=signer)
+        self.assertEqual(signer.call_args.args[0], original)
+        self.journal.write.assert_not_called()
+        self.document['policyUntil'] = 110
+        self.retain()
+        self.source.prepare_allocation_request('tenant','owner','same-group','set_a',sign_request=signer)
+        self.assertEqual(signer.call_args.args[0]['expiresAt'],110)
+
+    def test_allocation_request_refuses_wrong_owner_invalid_signer_and_expiry(self):
+        self.media.clock.return_value = 100
+        signer = Mock(return_value=b'signed-request')
+        with self.assertRaises(AdmissionRejected):
+            self.source.prepare_allocation_request('tenant','other','same-group','set_a',sign_request=signer)
+        signer.assert_not_called()
+        for value in [None, '', b'', b'x'*4097]:
+            signer.return_value = value
+            with self.assertRaises(AdmissionRejected):
+                self.source.prepare_allocation_request('tenant','owner','same-group','set_a',sign_request=signer)
+        self.document['policyUntil'] = 100
+        self.retain();signer.reset_mock()
+        with self.assertRaises(AdmissionRejected):
+            self.source.prepare_allocation_request('tenant','owner','same-group','set_a',sign_request=signer)
+        signer.assert_not_called()
+        self.journal.write.assert_not_called()
