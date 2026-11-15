@@ -1021,3 +1021,8 @@ A newly applied member signature may be at most four seconds old at the fresh
 source fence. Its original `issuedAt` is preserved across second boundaries;
 all other draft fields must still match current preparation. Exact applied-row
 reconciliation remains available after that signing window expires.
+
+Member consent writes retain at most eight positive member assents per object
+across all group scopes for each enrolled member. Exact retries consume no
+capacity. Withdrawal remains available through its reserved capacity after the
+limit; changing scope or signing again does not reset the retained history.

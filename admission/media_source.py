@@ -215,6 +215,15 @@ class MediaSource:
                 raise AdmissionRejected('group consent expired')
             expected={**consent['draft'],'issuedAt':record['issuedAt'],'stated':record['stated'],'sig':record['sig']}
             if encoded(expected)!=encoded(record):raise AdmissionRejected('group consent changed')
+            # Bound one member's append-only footprint across every scope on
+            # this object. Retained history, not a caller-supplied counter, is
+            # authoritative. Exact retries returned above; withdrawals retain
+            # their separately reserved capacity even after this limit.
+            if record['stated']==1:
+                assents=sum(1 for rows in doc.get('groupScopes',{}).values() for value in rows
+                    if value.get('kind')=='membership' and value['record']['role']=='member'
+                    and value['record']['member']==member and value['record']['stated']==1)
+                if assents>=8:raise AdmissionRejected('member consent history exhausted')
             if doc['objectVersion']>=9007199254740991:raise AdmissionRejected('object version exhausted')
             doc['objectVersion']+=1
             doc['groupScopes'][key]=candidate

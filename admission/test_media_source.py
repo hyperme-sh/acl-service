@@ -95,6 +95,27 @@ class MediaSourceContracts(TestCase):
         self.assertEqual(check(withdrawal)['state'],'applied')
         self.assertEqual(self.source.read_view(OBJECT,100)['snapshot']['entries'],[])
 
+    def test_member_history_quota_preserves_retry_withdrawal_and_other_members(self):
+        row,context,_=self.member_write_fixture()
+        def append(value,member='reader'):
+            check=self.source.member_group_state(TENANT,member,OBJECT,100,'same-group','set_test',value)
+            return self.source.append_member_group(TENANT,member,OBJECT,100,check['fence'],'same-group','set_test',value)
+        for ham in range(2,10):
+            row={**row,'record':{**row['record'],'hamState':ham}}
+            context['draft']['hamState']=ham
+            self.assertTrue(append(row))
+        self.assertTrue(append(row))  # exact retry consumes nothing
+        ninth={**row,'record':{**row['record'],'hamState':10}}
+        context['draft']['hamState']=10
+        before=self.source.member_group_state(TENANT,'reader',OBJECT,100,'same-group','set_test',ninth)['fence']
+        with self.assertRaisesRegex(AdmissionRejected,'member consent history exhausted'):append(ninth)
+        self.assertEqual(self.source.member_group_state(TENANT,'reader',OBJECT,100,'same-group','set_test',ninth)['fence'],before)
+        context['draft']['hamState']=9
+        self.assertTrue(append({**row,'record':{**row['record'],'stated':0}}))
+        other={**row,'record':{**row['record'],'member':'owner','hamState':2}}
+        context['memberPub']='owner-key';context['draft']['member']='owner';context['draft']['hamState']=2
+        self.assertTrue(append(other,'owner'))
+
     def test_member_write_refuses_changed_context_before_committing(self):
         row,context,resolve=self.member_write_fixture()
         view=lambda:self.source.member_group_state(TENANT,'reader',OBJECT,100,'same-group','set_test',row)
