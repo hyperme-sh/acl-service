@@ -59,7 +59,12 @@ def create_app(
     media_allocation_bindings: Mapping | None = None,
     group_allocation_bindings: Mapping | None = None,
     group_wrap_bindings: Mapping | None = None,
+    contact_bindings: Mapping | None = None,
 ) -> FastAPI:
+    owns_contact_stores = contact_bindings is None
+    if owns_contact_stores:
+        from acl_service.infrastructure.contact_bindings import load_contact_bindings
+        contact_bindings = load_contact_bindings()
     if statement_bindings is None:
         from acl_service.infrastructure.statement_bindings import load_statement_bindings
         statement_bindings = load_statement_bindings()
@@ -118,6 +123,10 @@ def create_app(
         try:
             yield
         finally:
+            if owns_contact_stores:
+                sources = {id(binding.source): binding.source for binding in (contact_bindings or {}).values()}
+                for source in sources.values():
+                    source.store.close()
             if owns_allocation_clients:
                 clients = {id(binding.client): binding.client for binding in (media_allocation_bindings or {}).values()}
                 for client in clients.values():
@@ -186,6 +195,10 @@ def create_app(
 
     app.openapi = custom_openapi
 
+    from acl_service.interfaces.api.contact_routes import router as contact_router
+    app.state.contact_bindings = MappingProxyType(dict(contact_bindings)) if contact_bindings is not None else None
+    app.state.contact_slots = asyncio.Semaphore(2)
+    app.include_router(contact_router, prefix="/api/v1")
     app.state.signed_store_bindings = (MappingProxyType(dict(signed_store_bindings))
                                        if signed_store_bindings is not None else None)
     app.include_router(signed_store_router, prefix="/api/v1")
