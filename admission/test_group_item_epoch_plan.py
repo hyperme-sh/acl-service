@@ -18,7 +18,7 @@ class GroupItemEpochPlanTests(TestCase):
             'stated':1,'epoch':1,'grantRevision':1,'itemCiphertextDigest':'d'*64}
         self.owner={'claims':dict(self.claims),'proof':{'sig':'owner'}}
         self.reader={'predicate':'same-group','set':'set','claims':{**self.claims,'accessor':'reader','epoch':2},'proof':{'sig':'reader'}}
-        self.doc={'grants':[self.owner],'frozen':[],'manifests':[{'document':{'manifest':{'epoch':1,'revisionId':'r','keyCommitment':'k'*64}}}],'finalizations':[],'policyUntil':9000,
+        self.doc={'grants':[self.owner],'frozen':[],'manifests':[{'document':{'manifest':{'epoch':1,'revisionId':'r','keyCommitment':'k'*64,'settleWindowMs':3600000}}}],'finalizations':[],'policyUntil':9000,
             'groupItemGrants':{'rows':[self.reader],'frozen':[],'conflicts':[]},'wraps':{'owner':{'itemDigest':'d'*64}}}
         self.ids={'owner':'owner','bindings':{'owner':{'pub':'key','epub':'owner-e'},'reader':{'pub':'reader-k','epub':'reader-e'}}}
         self.projection={'predicate':'same-group','set':'set','members':['owner','reader'],
@@ -146,3 +146,22 @@ class GroupItemEpochPlanTests(TestCase):
             if case=='object':self.owner['claims']['object']='other'
             if case=='expired':self.owner['claims']['until']=100000
             with self.assertRaises(AdmissionRejected):self.source._maintenance_parent(self.db,tenant,owner,'media',(1,b'n'*32,b'doc'),self.doc,self.ids,100)
+
+
+    def test_owner_detach_prepares_only_direct_and_cancelled_group_rows(self):
+        self.projection['snapshot']['objectSet']['stated']=0
+        # Even copied membership cannot turn an owner-signed detached edge live.
+        self.source._authority.side_effect=lambda *args:(self.view,(1,b'n'*32,b'doc'),self.doc,self.ids,None)
+        self.media._permit.side_effect=AssertionError('no read authority in repair')
+        self.source.keys._load_current=Mock(side_effect=AssertionError('no independent group lookup'))
+        plan=self.plan()
+        self.assertEqual(plan['groupReaders'],[])
+        self.assertEqual(plan['snapshot']['objectSet']['stated'],0)
+        reader=next(entry for entry in plan['snapshot']['entries'] if entry['accessor']=='reader')
+        self.assertEqual(reader['stated'],0)
+        self.assertEqual(plan['grants'],[{**self.claims,'epoch':2,'grantRevision':2}])
+        self.assertEqual(plan['settleWindowMs'],3600000)
+        self.media._snapshot.return_value={'entries':[]}
+        self.assertEqual(self.source._read_snapshot(self.doc,self.ids,self.projection,100)['entries'][0]['stated'],0)
+        self.projection['snapshot']['objectSet']['stated']=1
+        with self.assertRaises(AdmissionRejected):self.plan()

@@ -54,7 +54,7 @@ class NativeMediaContracts(TestCase):
         source.journal.write.side_effect=save
         with self.store._transaction(write=True) as db:
             row,doc=self.source._load(db,self.object,self.now)
-            doc['policyUntil']=self.now+10800
+            doc['policyUntil']=self.now+14400
             self.source._save(db,self.object,row,doc)
         policy=self.f['groupPolicy'];predicate=policy['predicate'];set_id=policy['setId']
         args=(self.tenant,self.owner,self.object,self.now,predicate,set_id)
@@ -144,6 +144,38 @@ class NativeMediaContracts(TestCase):
             members.append(*margs,'member',withdrawal['fence'],self.f['combinedMemberWithdraw'])
             with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
             with self.assertRaises(AdmissionRejected):self.source.commit(permit)
+
+    def test_native_detach_repairs_direct_access_without_group_membership_lookup(self):
+        from unittest.mock import patch
+        grants,members,predicate,set_id=self.item_group_setup()
+        args=(self.tenant,self.owner,self.object,predicate,set_id)
+        view=grants.view(*args,self.owner);grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant'])
+        items=grants.items;plan=items.epoch_view(*args)
+        items.append_epoch(*args,self.now,plan['fence'],self.f['itemEpochCommand'])
+        self.now+=3600
+        with patch('group_source.GroupSource',return_value=items.keys.source):
+            self.mutate('wrap',{**self.f['wrap'],'epoch':2,'revisionId':self.f['itemEpochCommand']['document']['manifest']['revisionId']})
+            self.mutate('status',self.f['combinedOwnerStatus'])
+            self.source.commit(self.source.authorize(self.tenant,self.owner,self.object))
+            margs=(self.tenant,self.owner,self.now,predicate,set_id,self.owner)
+            view=members.view(*margs,'member',0);members.append(*margs,'member',view['fence'],self.f['combinedMemberWithdraw'])
+            with self.assertRaises(AdmissionRejected):items.epoch_view(*args)
+            with self.store._transaction(write=False) as db:
+                row,_=self.source._load(db,self.object,self.now)
+                fence=self.source._fence(db,self.object,row,self.now)
+            self.source.append_group(self.tenant,self.owner,self.object,self.now,fence,predicate,set_id,[self.f['groupEdges'][1]])
+            items.keys.source.journal.read.side_effect=AssertionError('detached repair must not enumerate group membership')
+            plan=items.epoch_view(*args);command=self.f['detachedCommand']
+            self.assertEqual(plan['groupReaders'],[]);self.assertEqual(plan['snapshot'],command['document']['snapshot'])
+            self.assertEqual(plan['grants'],[entry['claims'] for entry in command['grants']])
+            items.append_epoch(*args,self.now,plan['fence'],command)
+            with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+            self.now+=3600
+            self.mutate('wrap',{**self.f['wrap'],'epoch':3,'revisionId':command['document']['manifest']['revisionId']})
+            self.mutate('status',self.f['detachedStatus'])
+            permit=self.source.authorize(self.tenant,self.owner,self.object)
+            self.assertEqual(permit.epoch,3);self.assertTrue(self.source.commit(permit))
+            with self.assertRaises(AdmissionRejected):items.authorize_read(self.tenant,self.owner,self.object,predicate,set_id)
 
     def test_native_group_item_signed_fork_freezes_only_group_journal(self):
         grants,_,predicate,set_id=self.item_group_setup()

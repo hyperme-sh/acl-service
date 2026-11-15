@@ -949,9 +949,16 @@ class MediaSource:
         except ValueError:raise AdmissionRejected('group authority unavailable') from None
         items=GroupItemSource(GroupKeySource(groups))
         ids=self.identities(db,object,doc,at)
-        view,_,current_doc,ids,current=items._authority(db,self.tenant,ids['owner'],object,at)
-        if current is None:raise AdmissionRejected('current combined item binding required')
+        view,media_row,current_doc,ids,current=items._authority(db,self.tenant,ids['owner'],object,at)
         projection=view['projection']
+        if current is None:
+            if not projection or not projection.get('snapshot') or projection['snapshot']['objectSet']['stated']!=0:
+                raise AdmissionRejected('current combined item binding required')
+            records=[record for record in current_doc.get('groupItemEpochs',[]) if
+                (record['predicate'],record['set'])==(projection['predicate'],projection['set'])]
+            if not records:raise AdmissionRejected('detached item history required')
+            window=max(records,key=lambda record:record['epoch'])['settleWindowMs']
+            return items._read_snapshot(current_doc,ids,projection,at),window,self._fence(db,object,media_row,0)
         held,_,_,_=items.keys._load_current(db,self.tenant,at,projection['predicate'],projection['set'])
         group_fence=items.keys._fence(db,held,0,projection['predicate'],projection['set'])
         return items._read_snapshot(current_doc,ids,projection,at),current[2]['settleWindowMs'],group_fence

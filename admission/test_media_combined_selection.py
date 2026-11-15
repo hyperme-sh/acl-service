@@ -77,3 +77,16 @@ class CombinedSelectionTests(TestCase):
             with self.assertRaises(AdmissionRejected):MediaSource._combined_current(self.source,None,'media',self.doc,100)
             groups.side_effect=ValueError('unsupported source')
             with self.assertRaises(AdmissionRejected):MediaSource._combined_current(self.source,self.db,'media',self.doc,100)
+
+
+    def test_detached_current_snapshot_never_loads_independent_group_members(self):
+        with patch('group_source.GroupSource'),patch('group_key_source.GroupKeySource'),patch('group_item_source.GroupItemSource') as items:
+            item=items.return_value;projection={'predicate':'same-group','set':'set','snapshot':{'objectSet':{'stated':0}}}
+            item._authority.return_value=({'projection':projection},'row',self.doc,self.ids,None)
+            item._read_snapshot.return_value={'entries':[],'objectSet':{'stated':0}}
+            self.source._fence=Mock(return_value='media-only-fence')
+            result=MediaSource._combined_current(self.source,self.db,'media',self.doc,100)
+            self.assertEqual(result,({'entries':[],'objectSet':{'stated':0}},3600000,'media-only-fence'))
+            item.keys._load_current.assert_not_called()
+            self.doc['groupItemEpochs']=[]
+            with self.assertRaises(AdmissionRejected):MediaSource._combined_current(self.source,self.db,'media',self.doc,100)
