@@ -20,6 +20,7 @@ CASES=[
     ('member-view',dict(SCOPE,member='member',role='member',stated=1)),
     ('member-append',dict(SCOPE,member='member',role='member',at=100,fence='a'*64,row={})),
     ('member-state',dict(SCOPE,member='member',role='member',row={})),
+    ('catalog',{'page':0}),
 ]
 
 
@@ -99,3 +100,11 @@ async def test_invalid_command_fields_and_busy_capacity_refuse(setup):
         assert (await client.post(BASE+'create-view',json=CASES[0][1])).status_code==429
         s.app.state.private_wrap_tenant_slots[s.tenant].release()
         s.authority.group_operation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_catalog_rejects_invalid_pages(setup):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=setup.app),base_url='https://acl') as client:
+        for page in (-1,16,True,0.5,'0',None):
+            assert (await client.post(BASE+'catalog',json={'page':page})).status_code==400
+    setup.authority.group_operation.assert_not_awaited()

@@ -13,6 +13,7 @@ from acl_service.interfaces.api.signed_store_routes import _unique_fields, _inva
 
 router = APIRouter(prefix='/acl/sociacl/media/groups', tags=['SociACL'])
 FIELDS = {
+    'catalog': {'page'},
     'create-view': {'object','predicate','set'},
     'create': {'object','predicate','set','at','fence','config'},
     'create-state': {'object','predicate','set','config'},
@@ -25,6 +26,9 @@ FIELDS = {
 def _body(action, raw):
     body = json.loads(raw.decode('utf-8'), object_pairs_hook=_unique_fields, parse_constant=_invalid_constant)
     if type(body) is not dict or set(body) != FIELDS[action]: raise ValueError()
+    if action == 'catalog':
+        if type(body['page']) is not int or not 0 <= body['page'] < 16: raise ValueError()
+        return body
     if body['predicate'] not in ('same-group','named-circle'): raise ValueError()
     if type(body['set']) is not str or re.fullmatch(r'set_[\x21-\x7e]{1,508}',body['set']) is None: raise ValueError()
     for name in ('object','member'):

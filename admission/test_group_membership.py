@@ -133,3 +133,27 @@ class GroupMembershipContracts(TestCase):
                 'predicate':'same-group','set':'set_a','member':'member','rows':[]})
             self.assertEqual(runner.call_args.kwargs['trust_at']('ignored'),{})
             self.assertIsNone(runner.call_args.kwargs['grant_for']('ignored'))
+
+    def test_catalog_only_shows_owned_active_or_currently_invited_groups(self):
+        self.journal.scopes.return_value=[('same-group','set_a')]
+        state=self.current['state']
+        args=('tenant','member',100,0)
+        self.assertEqual(self.source.catalog(*args)['groups'],[])
+        state['setAssent']={'stated':1,'hamState':1,'cancels':[]}
+        invited=self.source.catalog(*args)
+        self.assertEqual(invited['principal'],'member')
+        self.assertEqual(invited['nextPage'],1)
+        self.assertEqual(invited['groups'],[{'predicate':'same-group','set':'set_a','owner':'owner','owned':False,'invited':True,'active':False}])
+        state['cancels']=['cancelled']
+        self.assertEqual(self.source.catalog(*args)['groups'],[])
+        state['stated']=1
+        self.assertTrue(self.source.catalog(*args)['groups'][0]['active'])
+        state['stated']=0;state['setAssent']=None
+        self.assertTrue(self.source.catalog('tenant','owner',100,15)['groups'][0]['owned'])
+        self.assertIsNone(self.source.catalog('tenant','owner',100,15)['nextPage'])
+        for page in (-1,16,True,0.1,'0'):
+            with self.assertRaises(AdmissionRejected):self.source.catalog('tenant','member',100,page)
+        with self.assertRaises(AdmissionRejected):self.source.catalog('other','member',100,0)
+        self.journal.read.return_value=None
+        with self.assertRaises(AdmissionRejected):self.source.catalog(*args)
+        self.journal.write.assert_not_called()

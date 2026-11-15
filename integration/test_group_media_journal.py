@@ -46,6 +46,8 @@ def test_restart_exact_cas_and_independent_group_scopes(group_source):
                 journal.write(db,'same-group','set_foreign',None,{})
             assert restarted.read(db,'same-group','set_foreign') is None
         with again._transaction(write=False) as db:
+            assert restarted.scopes(db,0)==[('named-circle','set_a'),('same-group','set_a')]
+            assert restarted.scopes(db,15)==[]
             assert restarted.read(db,'same-group','set_a')==first
             assert restarted.read(db,'named-circle','set_a')==other
         with again._transaction(write=True) as db:

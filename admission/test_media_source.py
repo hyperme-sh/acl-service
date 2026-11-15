@@ -43,7 +43,8 @@ class MediaSourceContracts(TestCase):
         with patch('group_source.GroupSource') as groups, patch('group_membership.GroupMembership') as members:
             group=groups.return_value;member=members.return_value
             scope={'predicate':'same-group','set':'set_test'}
-            cases=[('create-view',{**scope,'object':OBJECT},group.creation_view),
+            cases=[('catalog',{'page':0},member.catalog),
+                   ('create-view',{**scope,'object':OBJECT},group.creation_view),
                    ('create-state',{**scope,'object':OBJECT,'config':{}},group.creation_state),
                    ('create',{**scope,'object':OBJECT,'at':100,'fence':'f','config':{}},group.create),
                    ('member-view',{**scope,'member':'reader','role':'member','stated':1},member.view),

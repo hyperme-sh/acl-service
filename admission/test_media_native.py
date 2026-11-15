@@ -76,6 +76,8 @@ class NativeMediaContracts(TestCase):
         view=source.creation_view(*create_args)
         source.create(*create_args,view['fence'],config)
         members=GroupMembership(source)
+        source.journal.scopes.return_value=[(predicate,group)]
+        self.assertEqual(members.catalog(self.tenant,self.owner,self.now,0)['groups'][0]['active'],False)
         args=(self.tenant,self.owner,self.now,predicate,group,self.owner)
         with self.assertRaises(AdmissionRejected):members.view(*args,'member',1)
         invite=members.view(*args,'set',1)
@@ -84,6 +86,7 @@ class NativeMediaContracts(TestCase):
         self.assertEqual(join['draft']['hamState'],2)
         members.append(*args,'member',join['fence'],self.f['groupMemberRows'][0])
         self.assertEqual(members.state(*args,'member',self.f['groupMemberRows'][0])['state'],'applied')
+        self.assertTrue(members.catalog(self.tenant,self.owner,self.now,0)['groups'][0]['active'])
         withdraw=members.view(*args,'member',0)
         members.append(*args,'member',withdraw['fence'],self.f['groupMemberRows'][1])
         with self.store._transaction(write=False) as db:
@@ -92,6 +95,7 @@ class NativeMediaContracts(TestCase):
             self.assertEqual(state['state']['stated'],0)
         # Reconciliation records the old command without restoring membership.
         self.assertEqual(members.state(*args,'member',self.f['groupMemberRows'][0])['state'],'applied')
+        self.assertFalse(members.catalog(self.tenant,self.owner,self.now,0)['groups'][0]['active'])
         self.assertEqual(doc['epochs'],[])
         self.assertEqual(doc['wraps'],[])
 

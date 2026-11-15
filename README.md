@@ -1086,3 +1086,16 @@ existing request, tenant and source worker limits and return private/no-store
 responses. They perform no installation: missing PostgreSQL group tables refuse
 operation, and existing SQLite-backed media flows remain unchanged. No group
 key delivery or media authorization is enabled by these routes.
+
+`POST /api/v1/acl/sociacl/media/groups/catalog` takes only `{page}` (0–15)
+under the existing fixed reader binding and media read/write scopes. Each page
+examines at most four independent group documents and verifies their checkpoints,
+current identity history and membership policy in one source transaction. It
+returns only groups owned by this principal, active memberships, or current
+set-owner invitations acknowledging all retained cancellations. Each result has
+`predicate`, `set`, `owner`, `owned`, `invited`, and `active`; the response also
+contains `at`, the fixed `principal`, and `nextPage`. The sixteen-page envelope
+is fixed even for empty pages. Candidates can shift between requests, so clients
+refresh and deduplicate rather than treating pagination as a stable snapshot.
+No keys, wraps, storage locations or unrelated group details are returned.
+An accepted membership or a catalog entry does not authorize media delivery.

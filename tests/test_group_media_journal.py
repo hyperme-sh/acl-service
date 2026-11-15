@@ -55,4 +55,19 @@ def test_matching_schema_names_do_not_authorize_a_foreign_transaction():
         with pytest.raises(ValueError, match='scope changed'):
             journal.read(db, 'same-group', 'set_a')
         with pytest.raises(ValueError, match='scope changed'):
+            journal.scopes(db,0)
+        with pytest.raises(ValueError, match='scope changed'):
             journal.write(db, 'same-group', 'set_a', None, {})
+
+
+def test_catalog_pages_are_bounded_before_sql():
+    from unittest.mock import Mock
+    journal = object.__new__(GroupMediaJournal)
+    journal._db = Mock()
+    db = Mock()
+    for page in (-1,16,True,0.5,'0',None):
+        with pytest.raises(ValueError,match='invalid group page'):journal.scopes(db,page)
+    db.execute.assert_not_called()
+    db.execute.return_value.fetchall.return_value=[]
+    assert journal.scopes(db,15)==[]
+    assert db.execute.call_args.args[1]==(60,)

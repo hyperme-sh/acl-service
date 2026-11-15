@@ -65,6 +65,28 @@ class GroupMembership:
         return {key: state[key] for key in ('predicate', 'set', 'member', 'setOwner')} | {
             'role': role, 'stated': stated, 'hamState': ham, 'issuedAt': at, 'cancels': cancels}
 
+    def catalog(self, tenant, writer, at, page, cancel=lambda: None):
+        """Current own groups and invitations; never a media delivery grant."""
+        self.media._guard(at, cancel)
+        if tenant != self.media.tenant or type(page) is not int or not 0 <= page < 16:
+            raise AdmissionRejected('invalid group catalog scope')
+        groups = []
+        with self.store._transaction(write=False, before_commit=lambda: self.media._guard(at, cancel)) as db:
+            for predicate, set_id in self.journal.scopes(db, page):
+                self.media._guard(at, cancel)
+                _, _, current = self._load(db, tenant, writer, at, predicate, set_id, writer, 'member')
+                state = current['state']
+                invitation = state['setAssent']
+                invited = bool(invitation and invitation['stated'] == 1 and
+                    all(value in invitation['cancels'] for value in state['cancels']))
+                owned = state['setOwner'] == writer
+                if not owned and not invited and state['stated'] != 1:
+                    continue
+                groups.append({'predicate': predicate, 'set': set_id, 'owner': state['setOwner'],
+                    'owned': owned, 'invited': invited, 'active': state['stated'] == 1})
+        return {'at': at, 'groups': groups, 'nextPage': page + 1 if page < 15 else None,
+                'principal': writer}
+
     def view(self, tenant, writer, at, predicate, set_id, member, role, stated, cancel=lambda: None):
         self.media._guard(at, cancel)
         with self.store._transaction(write=False, before_commit=lambda: self.media._guard(at, cancel)) as db:

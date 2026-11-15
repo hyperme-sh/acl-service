@@ -67,6 +67,13 @@ class GroupMediaJournal:
         if getattr(db, 'origin', None) is not self.store or db.history != self.store.history_schema or db.checkpoint != self.store.checkpoint_schema:
             raise ValueError('group journal transaction scope changed')
 
+    def scopes(self, db, page):
+        """Bounded candidates only; callers authorize every returned document."""
+        self._db(db)
+        if type(page) is not int or not 0 <= page < 16:
+            raise ValueError('invalid group page')
+        return db.execute('SELECT predicate,set_id FROM (SELECT predicate,set_id FROM group_media_sources UNION SELECT predicate,set_id FROM freshness.group_media_checkpoints) AS candidates ORDER BY predicate,set_id LIMIT 4 OFFSET ?', (page * 4,)).fetchall()
+
     def read(self, db, predicate, set_id):
         self._db(db)
         _scope(predicate, set_id)
