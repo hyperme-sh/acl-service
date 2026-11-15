@@ -49,6 +49,10 @@ const storage={async lookup(){return saved??null;},async commit(input){
 await sender.send(transport);await receiver.receive(transport,authority,storage);await sender.finish(transport);
 assert.deepEqual(exportKeyring(imported,await authority.keyringState(identity)),bytes);closeKeyring(imported);
 assert(sent.every(body=>!('keyring'in body)&&!('history'in body)));
+const calls=sent.length;
+await assert.rejects(authority.keyringState({...identity,priv:'must-not-send'}));
+await assert.rejects(authority.current({...sender.binding,keyring:'must-not-send'}));
+assert.equal(sent.length,calls);
 changed=true;await assert.rejects(authority.current(sender.binding));
 unavailable=true;await assert.rejects(authority.validateKeyring(bytes,identity));unavailable=false;
 const expired=await authority.keyringState(identity);now+=6000;assert.throws(expired);

@@ -6,8 +6,18 @@ const stable = value => JSON.stringify(value, function(_,v) {
   return v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])) : v;
 });
 
+function publicIdentity(value) {
+  if (!value || Object.keys(value).sort().join() !== 'epub,principal,pub,rotationSeq') refused();
+  const {principal,pub,epub,rotationSeq}=value;
+  if (![principal,pub,epub].every(v=>typeof v==='string' && /^[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}$/.test(v))
+      || !Number.isSafeInteger(rotationSeq) || rotationSeq<0 || rotationSeq>1024) refused();
+  return {principal,pub,epub,rotationSeq};
+}
+
 /** Requests carry public identities only. This adapter never sends keyring bytes. */
 export function createAuthority({scope, request, now = Date.now}) {
+  if (!scope || Object.keys(scope).sort().join() !== 'application,audience,destinationOrigin,sourceOrigin,tenant'
+      || !Object.values(scope).every(v=>typeof v==='string' && v.length>0 && v.length<=512)) refused();
   scope = structuredClone(scope);
   const checkpoints = new Map();
   let closed = false;
@@ -27,6 +37,7 @@ export function createAuthority({scope, request, now = Date.now}) {
     } catch { return refused(); }
   }
   async function keyringState(identity) {
+    identity=publicIdentity(identity);
     const value = await read('state', {scope, identity}, identity, null);
     try {
       const {history, trust} = value;
@@ -58,7 +69,10 @@ export function createAuthority({scope, request, now = Date.now}) {
     },
     async current(binding) {
       try {
-        if (!same(binding.scope, scope) || binding.expiresAt <= now()) refused();
+        if (!binding || Object.keys(binding).sort().join() !== 'expiresAt,identity,scope,session,transcript') refused();
+        binding={...binding,identity:publicIdentity(binding.identity)};
+        if (!same(binding.scope, scope) || !Number.isSafeInteger(binding.expiresAt) || binding.expiresAt <= now()
+            || ![binding.session,binding.transcript].every(v=>typeof v==='string' && /^[A-Za-z0-9_-]{43}$/.test(v))) refused();
         const key = binding.transcript, previous = checkpoints.get(key);
         if (!previous && checkpoints.size >= 16) refused();
         const body = {binding, ...(previous ? {expectedRevision:previous} : {})};
