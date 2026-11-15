@@ -1452,6 +1452,15 @@ class MediaSource:
                 tenant,owner,object,cancel)
         return await self._work(run)
 
+    async def group_item_epoch_view(self,tenant,owner,object,predicate,set_id):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_item_source import GroupItemSource
+        def run(cancel):
+            return GroupItemSource(GroupKeySource(GroupSource(self))).epoch_view(
+                tenant,owner,object,predicate,set_id,cancel)
+        return await self._work(run)
+
     async def _group_item_grant_work(self,action,*args):
         from group_source import GroupSource
         from group_key_source import GroupKeySource

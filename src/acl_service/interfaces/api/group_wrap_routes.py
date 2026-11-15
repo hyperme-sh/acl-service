@@ -22,6 +22,8 @@ async def execute(action,binding,body):
     if action=='item-authority-view':
         return await binding.authority.group_item_authority_view(binding.tenant,binding.reader,body['object'])
     args=(binding.tenant,binding.reader,body['predicate'],body['set'])
+    if action=='item-epoch-view':
+        return await binding.authority.group_item_epoch_view(args[0],args[1],body['object'],args[2],args[3])
     if action=='item-grant-state':
         return await binding.authority.group_item_grant_state(args[0],args[1],body['object'],args[2],args[3],body['payload'])
     if action=='item-grant-view':
@@ -63,14 +65,14 @@ def parse_body(data,action):
                 or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
         return body
     expected={'predicate','set'}
-    if action in ('item-view','item-grant-view','item-grant-append','item-grant-state'):expected.add('object')
+    if action in ('item-view','item-epoch-view','item-grant-view','item-grant-append','item-grant-state'):expected.add('object')
     if action=='item-grant-view':expected|={'reader','withdraw'}
     if action=='item-grant-append':expected|={'at','fence','payload'}
     if action=='item-grant-state':expected.add('payload')
     if action=='wrap-publish':expected|={'at','fence','metadata','payload'}
     if (type(body) is not dict or set(body)!=expected or body['predicate'] not in ('same-group','named-circle')
             or type(body['set']) is not str or re.fullmatch(r'set_p_[0-9a-f]{128}_[0-9a-f]{32}',body['set']) is None):raise ValueError()
-    if action in ('item-view','item-grant-view','item-grant-append','item-grant-state') and (type(body['object']) is not str
+    if action in ('item-view','item-epoch-view','item-grant-view','item-grant-append','item-grant-state') and (type(body['object']) is not str
             or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
     if action=='item-grant-state' and type(body['payload']) is not dict:raise ValueError()
     if action=='item-grant-view' and (type(body['reader']) is not str or not 1<=len(body['reader'])<=1024 or type(body['withdraw']) is not bool):raise ValueError()
@@ -151,3 +153,8 @@ async def item_grant_append(request:Request,tenant:UUID=Depends(require_matched_
 @router.post('/item-grant-state')
 async def item_grant_state(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('item-grant-state',request,tenant,user)
+
+
+@router.post('/item-epoch-view')
+async def item_epoch_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-epoch-view',request,tenant,user)

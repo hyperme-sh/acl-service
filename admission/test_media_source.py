@@ -62,6 +62,14 @@ class MediaSourceContracts(TestCase):
             with self.assertRaises(AdmissionRejected):asyncio.run(self.source.group_operation('unknown',TENANT,'owner',scope))
             with self.assertRaises(AdmissionRejected):asyncio.run(self.source.group_operation('create',TENANT,'owner',{'padding':'x'*18433}))
 
+    def test_group_item_epoch_bridge_preserves_authenticated_arguments(self):
+        with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource') as items:
+            items.return_value.epoch_view.return_value={'at':100,'snapshot':{}}
+            self.assertEqual(asyncio.run(self.source.group_item_epoch_view(TENANT,'owner',OBJECT,'same-group','set_test')),{'at':100,'snapshot':{}})
+            args=items.return_value.epoch_view.call_args.args
+            self.assertEqual(args[:-1],(TENANT,'owner',OBJECT,'same-group','set_test'))
+            self.assertTrue(callable(args[-1]))
+
     def test_group_item_grant_bridge_keeps_fixed_arguments_and_bounded_worker(self):
         with patch('group_source.GroupSource'), patch('group_key_source.GroupKeySource'), patch('group_item_source.GroupItemSource'), patch('group_item_grants.GroupItemGrants') as grants:
             source=grants.return_value;source.view.return_value={'at':100};source.append.return_value=True;source.state.return_value={'state':'applied'}
