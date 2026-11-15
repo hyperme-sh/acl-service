@@ -70,15 +70,16 @@ class MediaBindingUnits(TestCase):
         binding=m.parse_settings(encode())[0]
         store=Mock();source=Mock()
         modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
-                 for name in ('history_admission','statement_source','media_source')}
+                 for name in ('history_admission','statement_source','media_source','group_source','group_membership')}
         modules['media_source'].MediaSource=source
         modules['acl_service.infrastructure.sqlite_history_store']=SimpleNamespace(SqliteHistoryStore=store)
         with patch.dict(sys.modules,modules):
             self.assertIs(m._source(binding),source.return_value)
         store.assert_called_once_with(binding.history,freshness_path=binding.freshness,require_authority_checkpoint=True)
         source.assert_called_once_with(store.return_value,TENANT)
-        with patch.dict(sys.modules,{'history_admission':SimpleNamespace(__file__='/tmp/other.py')}):
-            with self.assertRaises(ValueError):m._source(binding)
+        for name in ('history_admission','group_source','group_membership'):
+            with patch.dict(sys.modules,{**modules,name:SimpleNamespace(__file__='/tmp/other.py')}):
+                with self.assertRaises(ValueError):m._source(binding)
 
     def test_failed_fixed_module_import_does_not_poison_retry(self):
         binding=m.parse_settings(encode())[0]
@@ -218,7 +219,7 @@ class MediaBindingUnits(TestCase):
         with patch.object(m,'_private_file',side_effect=lambda _:io.BytesIO()),patch.object(m.os.path,'samefile',return_value=True):
             with self.assertRaises(ValueError):m._provisioned(binding)
         modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
-                 for name in ('history_admission','statement_source','media_source')}
+                 for name in ('history_admission','statement_source','media_source','group_source','group_membership')}
         factory=Mock();modules['media_source'].MediaSource=factory
         with patch.dict(sys.modules,modules):
             self.assertIs(m._source(binding),factory.return_value)
