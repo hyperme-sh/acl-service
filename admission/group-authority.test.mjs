@@ -157,7 +157,7 @@ const cohort=(value=cohortInput(),identities=accounts)=>groupCohortAuthority(ide
 test('group cohort is independent of media and excludes implicit owner membership',()=>{
  const result=cohort();assert.deepEqual(result.cohort.members,[{accessor:member,stated:1,hamState:1}]);
  assert.deepEqual(Object.keys(result.bindings).sort(),[owner,member].sort());assert.ok(!result.bindings[outsider]);
- assert.equal(result.bindings[member].pub,member);assert.equal(result.bindings[member].epub,pub(12));
+ assert.equal(result.bindings[member].head,0);assert.equal(result.bindings[member].pub,member);assert.equal(result.bindings[member].epub,pub(12));
  assert.deepEqual(cohort(cohortInput([])).cohort.members,[]);
  for(const values of [[assent('member')],[assent('set')],[assent('member'),assent('set'),cancel()],
   [assent('member',0,2),assent('set')]])assert.equal(cohort(cohortInput(values)).cohort.members[0].stated,0);
@@ -191,7 +191,7 @@ test('group cohort bindings follow current signing and encryption keys after rot
   return {kind:'membership',soul:membershipSoul(f.genesis,'same-group',group,f.genesis),record};
  });
  const result=groupCohortAuthority(new Map([[f.genesis,account]]),()=>context,f.now,{predicate:'same-group',set:group,rows});
- assert.deepEqual(result.bindings[f.genesis],{pub:rotations[0].nextKey,epub:rotations[0].nextEpub});
+ assert.deepEqual(result.bindings[f.genesis],{pub:rotations[0].nextKey,epub:rotations[0].nextEpub,head:rotations[0].seq});
  assert.notEqual(result.bindings[f.genesis].epub,f.binding.epub);
  assert.equal(result.cohort.members[0].stated,1);
  rotations[0]=f['oidc-rotate'];

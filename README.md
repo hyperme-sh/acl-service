@@ -1099,3 +1099,15 @@ is fixed even for empty pages. Candidates can shift between requests, so clients
 refresh and deduplicate rather than treating pagination as a stable snapshot.
 No keys, wraps, storage locations or unrelated group details are returned.
 An accepted membership or a catalog entry does not authorize media delivery.
+
+`GroupKeySource` prepares and retains independent owner-signed group key epochs.
+It builds each snapshot from the protected current cohort and current signing,
+encryption and identity-head bindings, with no implicit owner membership. The
+current owner-signed group policy must still verify. A fresh group-specific
+fence binds the source document and identity authority to the server evaluation.
+Each append is the exact next epoch and finalization in the protected chain;
+server first-seen time is retained and exact retries never restart settlement.
+The journal preserves room for membership withdrawals. Exact-command state reads
+support lost-response recovery without producing replacement signatures.
+These internal methods do not grant media access or publish keys. HTTP wiring,
+recipient-wrap storage and delivery checks are separate consumers.
