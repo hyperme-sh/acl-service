@@ -19,6 +19,8 @@ router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 
 
 async def execute(action,binding,body):
+    if action=='item-authority-view':
+        return await binding.authority.group_item_authority_view(binding.tenant,binding.reader,body['object'])
     args=(binding.tenant,binding.reader,body['predicate'],body['set'])
     if action=='item-view':
         return await binding.authority.group_item_view(args[0],args[1],body['object'],args[2],args[3])
@@ -48,6 +50,10 @@ async def connected(request,action,binding,body):
 
 def parse_body(data,action):
     body=json.loads(data,object_pairs_hook=_unique_fields,parse_constant=_invalid_constant)
+    if action=='item-authority-view':
+        if (type(body) is not dict or set(body)!={'object'} or type(body['object']) is not str
+                or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
+        return body
     expected={'predicate','set'}
     if action=='item-view':expected.add('object')
     if action=='wrap-publish':expected|={'at','fence','metadata','payload'}
@@ -100,6 +106,11 @@ async def view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:
 @router.post('/item-view')
 async def item_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('item-view',request,tenant,user)
+
+
+@router.post('/item-authority-view')
+async def item_authority_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-authority-view',request,tenant,user)
 
 
 @router.post('/wrap-publish')

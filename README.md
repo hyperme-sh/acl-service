@@ -22,7 +22,13 @@ does not bypass that requirement. Detached and superseded groups disclose no
 membership. Missing selected groups or invalid current group policy refuse;
 there is no fallback to copied members. Its fence covers the media source and
 the selected group. It does not change retained rows, admit a binding, or grant
-delivery, and has no HTTP route yet.
+delivery. `POST /api/v1/acl/sociacl/media/groups/item-authority-view`
+exposes this preparation for a configured authenticated subject with
+`acl:media:write`. Its only request field is `{object}`: the source selects the
+current group, and the caller cannot supply a member, owner, set or evaluation
+time. It uses the group-wrap route's private response headers, 2 KiB request
+limit, rate/capacity bounds and disconnect cancellation. Missing explicit
+current membership refuses before group members are returned.
 
 `SOCIACL_MEDIA_BINDINGS_FILE` enables private wrap delivery only for explicit
 authenticated tenant/subject pairs. Its private JSON file has `version: 1` and
