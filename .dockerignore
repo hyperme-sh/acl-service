@@ -42,3 +42,5 @@
 !admission/device_transfer_source.py
 
 !admission/group_owner_wrap_source.py
+!admission/credential_source.py
+!admission/credential-graph.mjs

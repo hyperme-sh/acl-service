@@ -61,7 +61,12 @@ def create_app(
     group_wrap_bindings: Mapping | None = None,
     contact_bindings: Mapping | None = None,
     device_transfer_bindings: Mapping | None = None,
+    credential_bindings: Mapping | None = None,
 ) -> FastAPI:
+    owns_credential_stores = credential_bindings is None
+    if owns_credential_stores:
+        from acl_service.infrastructure.credential_bindings import load_credential_bindings
+        credential_bindings = load_credential_bindings()
     owns_device_transfer_stores = device_transfer_bindings is None
     if owns_device_transfer_stores:
         from acl_service.infrastructure.device_transfer_bindings import load_device_transfer_bindings
@@ -128,6 +133,9 @@ def create_app(
         try:
             yield
         finally:
+            if owns_credential_stores:
+                sources = {id(b.source): b.source for b in (credential_bindings or {}).values()}
+                for source in sources.values(): source.store.close()
             if owns_device_transfer_stores:
                 sources = {id(b.source): b.source for b in (device_transfer_bindings or {}).values()}
                 for source in sources.values(): source.store.close()
@@ -205,6 +213,10 @@ def create_app(
 
     from acl_service.interfaces.api.contact_routes import router as contact_router
     app.state.contact_bindings = MappingProxyType(dict(contact_bindings)) if contact_bindings is not None else None
+    from acl_service.interfaces.api.credential_routes import router as credential_router
+    app.state.credential_bindings = MappingProxyType(dict(credential_bindings)) if credential_bindings is not None else None
+    app.state.credential_slots = asyncio.Semaphore(2)
+    app.include_router(credential_router, prefix="/api/v1")
     from acl_service.interfaces.api.device_transfer_routes import router as device_transfer_router
     app.state.device_transfer_bindings = MappingProxyType(dict(device_transfer_bindings)) if device_transfer_bindings is not None else None
     app.state.device_transfer_slots = asyncio.Semaphore(2)

@@ -1,0 +1,66 @@
+"""Private credential lookup in a service-selected authority domain."""
+import asyncio
+import json
+import threading
+import subprocess
+from uuid import UUID
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
+from auth_service.schemas import AuthMeResponse
+from acl_service.deps import get_current_user, require_matched_tenant
+from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
+from acl_service.interfaces.api.contact_routes import connected_result
+from acl_service.interfaces.api.private_wrap_routes import PRIVATE, refused
+from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
+from acl_service.nightly import check_scope
+
+router = APIRouter(prefix='/acl/sociacl/credential-source', tags=['SociACL'])
+
+
+@router.post('/read')
+async def credential(request: Request,
+    tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
+    check_scope(tenant, user.sub)
+    if 'acl:identity:credential-source' not in user.scopes: raise refused(403, 'Credential refused')
+    bindings = request.app.state.credential_bindings
+    if bindings is None: raise refused(503, 'Credential unavailable')
+    binding = bindings.get((tenant, user.sub))
+    if binding is None: raise refused(403, 'Credential refused')
+    if not request.app.state.rate_limiter.allow(tenant, user.sub): raise refused(429, 'Credential rate exceeded')
+    slots = request.app.state.credential_slots
+    if slots.locked(): raise refused(429, 'Credential busy')
+    await slots.acquire()
+    stopped, work = threading.Event(), None
+    def guard():
+        if stopped.is_set(): raise HistoryConflict('credential request expired')
+        check_scope(tenant, user.sub)
+    try:
+        async with asyncio.timeout(12):
+            if (request.headers.get('content-type','').split(';')[0].strip().lower() != 'application/json'
+                    or request.headers.get('content-encoding','identity') != 'identity'):
+                raise refused(415, 'Expected uncompressed JSON')
+            data = bytearray()
+            async for chunk in request.stream():
+                if len(data) + len(chunk) > 4096: raise refused(413, 'Credential request too large')
+                data.extend(chunk)
+            try:
+                body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields, parse_constant=_invalid_constant)
+                if type(body) is not dict or set(body) != {'credential', 'evaluatedAt'} or type(body['credential']) is not dict or type(body['evaluatedAt']) is not int:
+                    raise ValueError('invalid credential request')
+            except (ValueError, TypeError, RecursionError): raise refused(400, 'Invalid credential request') from None
+            if not getattr(binding.source, 'production_ready', False):
+                raise refused(503, 'Credential unavailable')
+            work = asyncio.create_task(asyncio.to_thread(binding.source.read, body['credential'], body['evaluatedAt'], guard))
+            result = await connected_result(request, work, stopped)
+            return JSONResponse(result, headers=PRIVATE)
+    except AdmissionRejected: raise refused(403, 'Credential refused') from None
+    except HistoryConflict: raise refused(409, 'Credential changed') from None
+    except (TimeoutError, OSError, RuntimeError, ValueError, subprocess.SubprocessError): raise refused(503, 'Credential unavailable') from None
+    finally:
+        stopped.set()
+        if work is not None and not work.done():
+            def finished(task):
+                if not task.cancelled(): task.exception()
+                slots.release()
+            work.add_done_callback(finished)
+        else: slots.release()
