@@ -535,10 +535,10 @@ PostgreSQL 17 and applies the pinned database migrations. A missing Docker
 daemon or a failed migration fails the run. `tests/` is the CI entry point.
 `core/acl-service/tests` is retained history.
 
-`bash scripts/check-package.sh --fixtures` installs the verified dependency
-wheels in `tests_artifacts/` and runs the same consumer checks without Git
-credentials. `bash scripts/check-postgres.sh` installs the package and runs
-`integration/` against a disposable PostgreSQL 16 container.
+PR package checks install the actual locked public dependencies anonymously.
+The archived dependency wheels are retained for historical verification only;
+tests load the DB migration files separately, outside the runtime image.
+The integration suite runs in scheduled nightly CI.
 `bash scripts/check-image.sh acl-service:local` compares image bytes with
 `src/acl_service` and exercises the HTTP routes in a read-only container with
 networking disabled.

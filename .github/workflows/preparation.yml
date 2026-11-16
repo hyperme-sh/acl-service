@@ -41,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           expected=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
-          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$PWD/.venv" UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/acl-python" RELEASE_CANDIDATE_DIR="$RELEASE_CANDIDATE_DIR" PREPARATION_EVIDENCE_DIR="$PREPARATION_EVIDENCE_DIR" bash scripts/check-package.sh --fixtures
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$PWD/.venv" UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/acl-python" RELEASE_CANDIDATE_DIR="$RELEASE_CANDIDATE_DIR" PREPARATION_EVIDENCE_DIR="$PREPARATION_EVIDENCE_DIR" bash scripts/check-package.sh
           (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$expected")
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:

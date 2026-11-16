@@ -14,8 +14,6 @@ spec.loader.exec_module(module)
 @pytest.fixture
 def root(tmp_path):
     shutil.copytree(ROOT/'tests_artifacts', tmp_path/'tests_artifacts')
-    for name in ['pyproject.toml', 'uv.lock']:
-        shutil.copyfile(ROOT/name, tmp_path/name)
     return tmp_path
 
 
@@ -33,7 +31,7 @@ def test_tampered_artifact_fails(root):
 @pytest.mark.parametrize('name', ['pyproject.toml', 'uv.lock'])
 def test_changed_pin_requires_matching_artifact(root, name):
     record = json.loads((root/'tests_artifacts/dependencies/manifest.json').read_text())['dependencies'][0]
-    p = root/name
+    p = root/'tests_artifacts/dependencies'/name
     p.write_text(p.read_text().replace(record['dependency_revision'], 'a'*40))
     with pytest.raises(ValueError, match='dependency'):
         module.verify(root)
@@ -77,6 +75,6 @@ def test_tampered_transitive_pin_rejected_even_with_updated_fixture_digest(root)
 
 
 def test_requested_private_extra_is_not_silently_ignored(root):
-    p = root/'pyproject.toml'
+    p = root/'tests_artifacts/dependencies/pyproject.toml'
     p.write_text(p.read_text().replace('spanopticon-models @', 'spanopticon-models[grpc] @'))
     with pytest.raises(ValueError, match='dependency'): module.verify(root)

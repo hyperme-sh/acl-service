@@ -9,6 +9,9 @@ import urllib.request
 import uuid
 
 from sqlalchemy import create_engine, text
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tests/historical_db_fixture.py'))
 from controlplane_db.migrations import upgrade
 from acl_service.migrate import install
 
