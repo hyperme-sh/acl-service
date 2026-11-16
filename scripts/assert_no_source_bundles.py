@@ -8,6 +8,8 @@ import tarfile
 def prohibited(name):
     path=PurePosixPath(name)
     parts=path.parts
+    if path.is_absolute() or ".." in parts:
+        return True
     roots=(('usr','share','doc'),('usr','share','acl-service'))
     bundles={'sources','debian-sources','base-sources','source-bundles','source-archives'}
     return (parts[:2]==('usr','src') or

@@ -37,3 +37,8 @@ def test_empty_base_source_directory_is_not_a_bundle(tmp_path):
         for name,data in [('manifest.json',json.dumps([{'Layers':['base.tar']}]).encode()),('base.tar',stream.getvalue())]:
             info=tarfile.TarInfo(name);info.size=len(data);outer.addfile(info,io.BytesIO(data))
     assert audit.verify(image)==1
+
+
+@pytest.mark.parametrize('name',['/usr/src/library.c','tmp/../usr/src/library.c','usr/share/doc/example/debian-sources/source.tar.xz'])
+def test_unsafe_or_source_paths_are_rejected(name):
+    assert audit.prohibited(name)
