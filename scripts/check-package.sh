@@ -44,15 +44,10 @@ if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
 fi
 uv run --frozen pytest -q tests_tools
 uv export --frozen --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
-python3 scripts/export_selected_overrides.py pyproject.toml "$scratch/overrides.txt"
-install_options=(--constraint "$scratch/requirements.txt")
-if [[ -s "$scratch/overrides.txt" ]]; then
-  install_options+=(--overrides "$scratch/overrides.txt")
-fi
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
 uv pip uninstall --python "$scratch/venv/bin/python" spanopticon-models auth-service controlplane-core controlplane-api controlplane-tenancy controlplane-identity controlplane-db controlplane-events operator-ban-store
-uv pip install --python "$scratch/venv/bin/python" "${install_options[@]}" "$scratch"/dist/*.whl
+bash scripts/install-qualified.sh "$scratch/venv/bin/python" "$scratch"/dist/*.whl
 cp -R tests_artifacts "$scratch/"
 cp -R tests "$scratch/"
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests --junitxml="$scratch/wheel.xml")
