@@ -582,5 +582,21 @@
     "start": 89,
     "end": 89,
     "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "98147b2406fc1eac02665a704322ad8967495be9.txt",
+    "sha256": "bb90983eb4e478e5738c0f9c1b4a0ff6d4b7dc21e689b18a196a27b90c1adddc",
+    "rule": "generic-api-key",
+    "start": 19,
+    "end": 19,
+    "reason": "SHA256 of installed Auth runtime file in license provenance inventory"
+  },
+  {
+    "file": "98147b2406fc1eac02665a704322ad8967495be9.txt",
+    "sha256": "bb90983eb4e478e5738c0f9c1b4a0ff6d4b7dc21e689b18a196a27b90c1adddc",
+    "rule": "generic-api-key",
+    "start": 29,
+    "end": 29,
+    "reason": "SHA256 of installed Auth runtime file in license provenance inventory"
   }
 ]
