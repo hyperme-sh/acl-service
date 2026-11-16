@@ -22,6 +22,7 @@ def prepare(output, supplements, distributions=None):
         supplements_by_name[key] = (source.parent, record)
     rows = []
     used = set()
+    missing = []
     for dist in sorted(distributions if distributions is not None else importlib.metadata.distributions(), key=lambda d: d.metadata['Name'].lower()):
         name = dist.metadata['Name']
         key = name_key(name)
@@ -75,12 +76,15 @@ def prepare(output, supplements, distributions=None):
                 texts['upstream/' + filename] = {'file': target, 'sha256': digest}
             supplemental_source = record
         if not texts:
-            raise ValueError('No license text for installed distribution: ' + name)
+            missing.append(name)
+            continue
         rows.append({'name': name, 'version': dist.version,
                      'license_expression': dist.metadata.get('License-Expression'),
                      'license_metadata': dist.metadata.get('License'),
                      'license_classifiers': [v for v in dist.metadata.get_all('Classifier', []) if v.startswith('License ::')],
                      'texts': texts, 'supplement': supplemental_source})
+    if missing:
+        raise ValueError('No license text for installed distributions: ' + ', '.join(missing))
     if set(supplements_by_name) - used:
         raise ValueError('Unused notice supplement; refresh the dependency review')
     (output / 'index.json').write_text(json.dumps(rows, indent=2, sort_keys=True) + '\n')
