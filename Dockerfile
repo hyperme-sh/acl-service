@@ -44,7 +44,7 @@ WORKDIR /build
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY scripts/install-image-runtime.py /tmp/install-image-runtime.py
-# The token is mounted only for dependency installation, never copied into a layer.
+# Frozen runtime dependencies are installed without private credentials.
 RUN python /tmp/install-image-runtime.py
 
 FROM python:3.13-slim-bookworm AS runtime

@@ -57,6 +57,7 @@ jobs:
         if: always()
         run: rm -rf -- "$RELEASE_CANDIDATE_DIR"
   image:
+    if: github.repository == 'hyperme-sh/acl-service'
     needs: package
     permissions:
       contents: read
