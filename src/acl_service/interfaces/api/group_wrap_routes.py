@@ -22,7 +22,7 @@ router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 # Item byte routes use private-media allocations and current joint authority.
 item_byte_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
-# Prepared only: the application does not mount this owner maintenance router.
+# Owner maintenance is separate from recipient byte delivery.
 owner_wrap_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 ITEM_BYTES={'item-wrap-publish','item-wrap-read','item-owner-wrap-read'}
 ITEM_ACTIONS={'item-owner-wrap-read','item-view','item-epoch-view','item-epoch-append','item-epoch-state',
