@@ -165,9 +165,9 @@ class AdmissionTests(unittest.TestCase):
         self.enroll()
         original = self.store.observe_head
 
-        def race(principal, head, *, authority_revision):
+        def race(principal, head, *, authority_revision, before_commit=None):
             self.enroll_peer()
-            original(principal, head, authority_revision=authority_revision)
+            original(principal, head, authority_revision=authority_revision, before_commit=before_commit)
 
         self.store.observe_head = race
         with self.assertRaises(HistoryConflict):

@@ -58,3 +58,5 @@
 !notices/**
 
 !scripts/review_runtime_legal.py
+
+!admission/signed_store_source.py

@@ -17,7 +17,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --no-audit
         working-directory: admission
-      - run: PYTHONPATH=../src python3 -m unittest -v test_credential_source test_device_transfer_source test_admission test_history_freshness test_statement_source test_statement_graph test_delegation_source test_contact_source
+      - run: PYTHONPATH=../src python3 -m unittest -v test_signed_store_source test_credential_source test_device_transfer_source test_admission test_history_freshness test_statement_source test_statement_graph test_delegation_source test_contact_source
         working-directory: admission
       - name: Statement transaction unit coverage
         working-directory: admission
@@ -26,6 +26,11 @@ jobs:
           "$RUNNER_TEMP/statement-coverage/bin/pip" install coverage==7.6.1
           PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=statement_source -m unittest test_statement_source
           "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report -m
+      - name: Signed recovery source unit coverage
+        working-directory: admission
+        run: |
+          PYTHONPATH=../src "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage run --branch --source=signed_store_source -m unittest test_signed_store_source
+          "$RUNNER_TEMP/statement-coverage/bin/python" -m coverage report --fail-under=95 -m
       - name: Credential source unit coverage
         working-directory: admission
         run: |
