@@ -4,6 +4,7 @@ Authentication is substituted at the ASGI dependency; native signatures,
 protected policy parsing, storage, checkpoints and restart reads are real.
 """
 from contextlib import asynccontextmanager
+import asyncio
 import json
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -131,7 +132,14 @@ async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_
 
     try:
         async with restart() as (client, _):
-            await lost(client, 'current')
+            async def competing_write():
+                try:
+                    return (await client.post('operations', json=operations['current'])).status_code
+                except httpx.ReadError:
+                    return 200
+            results = sorted(await asyncio.gather(competing_write(), competing_write()))
+            assert results[0] == 200 and results[1] in (403, 409)
+
         async with restart() as (client, source):
             await expect(client, 1, 'current', None)
             policy['activePrincipals'] = []
