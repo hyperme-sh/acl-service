@@ -10,6 +10,42 @@ class GroupItemSource:
     def __init__(self, keys):
         self.keys,self.media,self.store=keys,keys.media,keys.store
 
+    def reader_catalog(self,tenant,reader,page,cancel=lambda:None):
+        """List only IDs whose current joint read permit succeeds, before paging."""
+        from group_item_grants import grant_key
+        at=int(self.media.clock());guard=lambda:self.media._guard(at,cancel);guard()
+        if tenant!=self.media.tenant or type(reader) is not str or type(page) is not int or not 0<=page<16:
+            raise AdmissionRejected('invalid group item reader catalog')
+        entries=[]
+        with self.store._transaction(write=False,before_commit=guard) as db:
+            candidates='freshness.media_active' if getattr(self.store,'active_media_index',False) else '(SELECT object FROM media_sources UNION SELECT object FROM freshness.media_checkpoints) AS candidates'
+            rows=db.execute(f'SELECT object FROM {candidates} ORDER BY object LIMIT 65').fetchall()
+            if len(rows)>64:raise AdmissionRejected('media catalog capacity')
+            for (object,) in rows:
+                guard()
+                row=db.execute('SELECT revision,nonce,document FROM media_sources WHERE object=?',(object,)).fetchone()
+                if row is None:raise AdmissionRejected('media source unavailable')
+                self.media._checkpoint(db,object,row);doc=json.loads(row[2])
+                if 'deletion' in doc:continue
+                wraps=doc.get('groupItemWraps',{})
+                if type(wraps) is not dict or len(wraps)>8:raise AdmissionRejected('group item scope capacity')
+                for token in sorted(wraps):
+                    scope=json.loads(token)
+                    if (type(scope) is not list or len(scope)!=2 or scope[0] not in ('same-group','named-circle') or
+                            type(scope[1]) is not str or encoded(scope).decode('ascii')!=token):
+                        raise AdmissionRejected('invalid group item scope')
+                    predicate,set_id=scope
+                    if grant_key(predicate,set_id,reader) not in doc.get('groupItemStatuses',{}):continue
+                    guard()
+                    try:
+                        _,ids,_,_=self._read_permit(db,tenant,reader,object,predicate,set_id,at)
+                    except AdmissionRejected:
+                        continue
+                    if ids['owner']!=reader:
+                        entries.append({'object':object,'predicate':predicate,'set':set_id})
+                    break
+            return {'at':at,'entries':entries[page*4:(page+1)*4],'nextPage':page+1 if page<15 else None}
+
     def authority_view(self,tenant,owner,object,cancel=lambda:None):
         """Join retained item edges with current independent membership, read-only."""
         at=int(self.media.clock())

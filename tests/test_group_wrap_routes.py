@@ -178,6 +178,10 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
         maintenance.assert_awaited_once_with(s.authority,s.binding.store,str(s.tenant),'fixed-reader',scope['object'],scope['predicate'],scope['set'])
         s.user.scopes=['acl:media:read']
         assert (await client.post('/api/v1'+PATH+'item-owner-wrap-read',json=scope)).status_code==403
+        s.authority.group_item_reader_catalog=AsyncMock(return_value={'at':100,'entries':[],'nextPage':1})
+        result=await client.post('/api/v1'+PATH+'item-reader-catalog',json={'page':0})
+        assert result.status_code==200 and result.json()['entries']==[]
+        s.authority.group_item_reader_catalog.assert_awaited_once_with(str(s.tenant),'fixed-reader',0)
         s.user.scopes=['acl:media:write'];app.state.private_wrap_bindings=None
         assert (await client.post('/api/v1'+PATH+'item-owner-wrap-read',json=scope)).status_code==503
     s.authority.group_item_authority_view.assert_awaited_once_with(str(s.tenant),'fixed-reader','media_owner_item')
@@ -409,3 +413,27 @@ async def test_owner_maintenance_route_is_write_scoped(setup,monkeypatch):
         read.side_effect=None;s.app.state.private_wrap_bindings=None
         assert (await client.post(PATH+'item-owner-wrap-read',json=body)).status_code==503
     s.publish.assert_not_awaited();s.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_item_catalog_is_private_subject_bound_and_read_scoped(setup):
+    s=setup
+    result={'at':100,'entries':[{'object':'media_item',**RECORD}],'nextPage':1}
+    s.authority.group_item_reader_catalog=AsyncMock(return_value=result)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        assert (await client.post(PATH+'item-reader-catalog',json={'page':0})).status_code==503
+        s.app.state.private_wrap_bindings={(s.tenant,s.user.sub):s.binding};s.user.scopes=['acl:media:read']
+        s.app.state.private_wrap_slots=asyncio.Semaphore(2)
+        s.app.state.private_wrap_body_slots={(s.tenant,s.user.sub):asyncio.Semaphore(1)}
+        s.app.state.private_wrap_tenant_slots={s.tenant:asyncio.Semaphore(1)}
+        response=await client.post(PATH+'item-reader-catalog',json={'page':0})
+        assert response.status_code==200 and response.json()==result
+        assert response.headers['cache-control']=='private, no-store'
+        s.authority.group_item_reader_catalog.assert_awaited_once_with(str(s.tenant),'fixed-reader',0)
+        for body in ({'page':True},{'page':-1},{'page':16},{'page':0,'reader':'other'},{'page':0,'tenant':'other'}):
+            assert (await client.post(PATH+'item-reader-catalog',json=body)).status_code==400
+        s.user.scopes=['acl:media:write']
+        assert (await client.post(PATH+'item-reader-catalog',json={'page':0})).status_code==403
+        s.user.scopes=['acl:media:read'];s.authority.group_item_reader_catalog.side_effect=HistoryConflict('private checkpoint')
+        response=await client.post(PATH+'item-reader-catalog',json={'page':0})
+        assert response.status_code==409 and 'private checkpoint' not in response.text

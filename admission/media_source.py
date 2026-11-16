@@ -1524,6 +1524,9 @@ class MediaSource:
         payload=json.loads(encoded(payload))
         return await self._group_item_read_work('append_epoch',tenant,owner,object,predicate,set_id,at,fence,payload)
 
+    async def group_item_reader_catalog(self,tenant,reader,page):
+        return await self._group_item_read_work('reader_catalog',tenant,reader,page)
+
     async def group_item_publication_view(self,tenant,owner,object,predicate,set_id,reader):
         return await self._group_item_read_work('publication_view',tenant,owner,object,predicate,set_id,reader)
 

@@ -1447,3 +1447,14 @@ The installed `owner_wrap_router` exposes `item-owner-wrap-read`. It requires th
 accepts only object and group scope, and reads through the item allocation. The
 coordinator verifies the returned bytes and rechecks the owner permit after storage.
 Normal reader routes are unchanged.
+
+
+### Group-only Granted catalog
+
+The authenticated `item-reader-catalog` route uses the subject-bound private-media
+source and read scope. It scans at most 64 checkpoint-verified objects, requires a
+current joint group/item read permit before disclosing each ID and scope, and
+filters before four-entry pagination. Deleted, revoked, expired or incompletely
+delivered items are hidden. Missing primary data or checkpoint conflicts fail
+closed. Catalog entries do not authorize later reads; each key read rechecks the
+current item and group grants, statuses, membership, epochs and checkpoints.

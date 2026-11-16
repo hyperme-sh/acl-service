@@ -24,7 +24,7 @@ owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 item_byte_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 # Owner maintenance is separate from recipient byte delivery.
 owner_wrap_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
-ITEM_BYTES={'item-wrap-publish','item-wrap-read','item-owner-wrap-read'}
+ITEM_BYTES={'item-reader-catalog','item-wrap-publish','item-wrap-read','item-owner-wrap-read'}
 ITEM_ACTIONS={'item-owner-wrap-read','item-view','item-epoch-view','item-epoch-append','item-epoch-state',
     'item-grant-view','item-grant-append','item-grant-state','item-status-view','item-status-append','item-status-state','item-wrap-view','item-wrap-publish','item-wrap-read'}
 APPEND_ACTIONS={'item-grant-append','item-epoch-append','item-status-append'}
@@ -34,6 +34,8 @@ READER_ACTIONS={'item-grant-view','item-status-view','item-status-append','item-
 
 
 async def execute(action,binding,body):
+    if action=='item-reader-catalog':
+        return await binding.authority.group_item_reader_catalog(binding.tenant,binding.reader,body['page'])
     if action=='item-owner-wrap-read':
         result=asdict(await deliver_owner_wrap(binding.authority,binding.store,binding.tenant,binding.reader,
             body['object'],body['predicate'],body['set']))
@@ -105,6 +107,9 @@ async def connected(request,action,binding,body):
 
 def parse_body(data,action):
     body=json.loads(data,object_pairs_hook=_unique_fields,parse_constant=_invalid_constant)
+    if action=='item-reader-catalog':
+        if type(body) is not dict or set(body)!={'page'} or type(body['page']) is not int or not 0<=body['page']<16:raise ValueError()
+        return body
     if action=='item-authority-view':
         if (type(body) is not dict or set(body)!={'object'} or type(body['object']) is not str
                 or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
@@ -140,7 +145,7 @@ async def operation(action,request,tenant,user):
     bindings=getattr(request.app.state,prefix+'_bindings')
     if bindings is None:raise refused(503,'Group wraps unavailable')
     binding=bindings.get((tenant,user.sub))
-    scope='acl:media:read' if action in ('wrap-read','item-wrap-read') else 'acl:media:write'
+    scope='acl:media:read' if action in ('wrap-read','item-wrap-read','item-reader-catalog') else 'acl:media:write'
     if binding is None or binding.tenant!=str(tenant) or binding.store.tenant!=str(tenant) or scope not in user.scopes:
         raise refused(403,'Group wrap access refused')
     if not request.app.state.rate_limiter.allow(tenant,user.sub):raise refused(429,'Rate limit exceeded')
@@ -251,3 +256,8 @@ async def item_wrap_read(request:Request,tenant:UUID=Depends(require_matched_ten
 @owner_wrap_router.post('/item-owner-wrap-read')
 async def item_owner_wrap_read(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('item-owner-wrap-read',request,tenant,user)
+
+
+@item_byte_router.post('/item-reader-catalog')
+async def item_reader_catalog(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-reader-catalog',request,tenant,user)
