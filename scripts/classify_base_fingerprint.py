@@ -29,10 +29,33 @@ def known_asset(row, layers, assets):
     return False
 
 
+def known_notice_hash(row, layers, supplement):
+    """Recognize only exact reviewed Auth file hashes in its generated index."""
+    path = Path(row['File']).resolve()
+    try:
+        relative = path.relative_to(layers.resolve())
+    except ValueError:
+        return False
+    if (len(relative.parts) != 7 or not relative.parts[0].isdigit()
+            or relative.parts[1:] != ('usr','share','acl-service','notices','python','index.json')
+            or row['RuleID'] != 'generic-api-key' or row['StartLine'] != row['EndLine']):
+        return False
+    rows = json.loads(path.read_text())
+    records = [item for item in rows if item['name'] == 'auth-service']
+    if len(records) != 1 or records[0].get('supplement') != supplement:
+        return False
+    line = path.read_text().splitlines()[row['StartLine'] - 1].strip().rstrip(',')
+    for name, digest in supplement['runtime_sha256'].items():
+        if line == json.dumps(name) + ': ' + json.dumps(digest) and row.get('Secret') == digest:
+            return True
+    return False
+
+
 if __name__ == '__main__':
     rows = json.loads(Path(sys.argv[1]).read_text())
     assets = json.loads(Path('.github/workflows/reviewed-image-assets.json').read_text())
-    source = [r for r in rows if known_asset(r, Path(sys.argv[2]), assets)]
+    supplement = json.loads(Path('.github/workflows/third-party-notices/auth-service/source.json').read_text())
+    source = [r for r in rows if known_asset(r, Path(sys.argv[2]), assets) or known_notice_hash(r, Path(sys.argv[2]), supplement)]
     unexpected = [r for r in rows if not known(r, Path(sys.argv[2])) and r not in source]
     fingerprint_count = sum(known(r, Path(sys.argv[2])) for r in rows)
     accepted = len(source)

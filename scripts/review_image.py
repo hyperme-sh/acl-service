@@ -13,8 +13,8 @@ if __name__=='__main__':
     result['legal_paths']=sorted(str(p.relative_to(layers)) for p in layers.rglob('*') if p.is_file() and ('/usr/share/doc/' in '/'+str(p.relative_to(layers)) or '/usr/share/common-licenses/' in '/'+str(p.relative_to(layers)) or '/usr/share/acl-service/' in '/'+str(p.relative_to(layers))))
     from assert_no_source_bundles import prohibited
     result['source_bundle_paths']=sorted(str(p.relative_to(layers)) for p in layers.rglob('*') if p.is_file() and prohibited(p.relative_to(layers).relative_to(p.relative_to(layers).parts[0]).as_posix()))
-    result['source_bundle_present']=any(p.endswith('/sources/index.json') for p in result['legal_paths'])
-    result['debian_source_bundle_present']=any(p.endswith('/debian-sources/index.json') for p in result['legal_paths'])
+    result['source_bundle_present']=bool(result['source_bundle_paths'])
+    result['debian_source_bundle_present']=any('/debian-sources/' in p for p in result['source_bundle_paths'])
     from container_audit import check_member
     findings=[]
     for path in layers.rglob('*'):
