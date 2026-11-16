@@ -40,11 +40,11 @@ class HistoryStore(Protocol):
         """Commit an admitted record only against its verified predecessor snapshot."""
         ...
 
-    def observe_head(self, principal: str, head: int, *, authority_revision: int) -> None:
+    def observe_head(self, principal: str, head: int, *, authority_revision: int, before_commit: Callable[[], None] | None = None) -> None:
         """Commit the shared recovery/wrap floor only for the verified authority snapshot."""
         ...
 
-    def read_ciphertext(self, principal: str, kind: StoreKind, *, authority_revision: int | None = None) -> tuple[int, bytes]:
+    def read_ciphertext(self, principal: str, kind: StoreKind, *, authority_revision: int | None = None, before_commit: Callable[[], None] | None = None) -> tuple[int, bytes]:
         """Return one committed generation and payload, rejecting a supplied stale authority revision."""
         ...
 

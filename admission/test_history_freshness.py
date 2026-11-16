@@ -96,3 +96,13 @@ class HistoryFreshnessTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_floor_callback_refusal_rolls_back_the_observed_head(self):
+        original=self.store._observe_floor
+        def changed(db,principal,head):
+            original(db,principal,head)
+            self.now+=1
+        self.store._observe_floor=changed
+        with self.assertRaises(AdmissionRejected):self.adapter.observe_store_head('synthetic')
+        with self.store._transaction(write=False) as db:
+            self.assertIsNone(db.execute("SELECT head FROM history_head_floors WHERE principal='synthetic'").fetchone())

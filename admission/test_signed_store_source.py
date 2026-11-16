@@ -52,3 +52,11 @@ class SignedStoreTests(unittest.TestCase):
         with self.assertRaises(AdmissionRejected):SignedStoreSource(self.store,lambda _:self.policy)
         self.verifier.side_effect=AdmissionRejected('untrusted')
         with self.assertRaises(AdmissionRejected):self.source.read_store_row('owner','recovery','current')
+
+    def test_policy_change_at_floor_boundary_is_checked_inside_operation(self):
+        def observe(*args,**kwargs):
+            self.policy['activePrincipals']=[]
+            kwargs['before_commit']()
+            self.fail('floor must not advance')
+        self.store.observe_head=observe
+        with self.assertRaises(HistoryConflict):self.source.read_store_row('owner','recovery','current')

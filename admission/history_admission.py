@@ -98,7 +98,8 @@ class HistoryAdmission:
             entries=[_record(row) for row in snapshot.entries], peers=_peer_inputs(principal, accounts),
         ))
         self._require_evaluation(at)
-        self.store.observe_head(principal, result["sequence"], authority_revision=revision)
+        self.store.observe_head(principal, result["sequence"], authority_revision=revision,
+                                before_commit=lambda: self._require_evaluation(at))
         self._require_evaluation(at)
         return result, revision, at
 
@@ -109,7 +110,8 @@ class HistoryAdmission:
         if kind not in ("recovery", "wraps") or not target or len(target) > 512:
             raise AdmissionRejected("invalid ciphertext target")
         head, revision, at = self._observed_snapshot(principal)
-        generation, payload = self.store.read_ciphertext(principal, kind, authority_revision=revision)
+        generation, payload = self.store.read_ciphertext(principal, kind, authority_revision=revision,
+                                                        before_commit=lambda: self._require_evaluation(at))
         rows = json.loads(payload) if payload else {}
         self._require_evaluation(at)
         return {"generation": generation, "head": {k: head[k] for k in ("sequence", "currentKey", "currentEpub")},
@@ -118,7 +120,8 @@ class HistoryAdmission:
     def apply_store_operation(self, principal: str, kind: str, operation: dict):
         """Apply a signed ciphertext mutation once. Conflicts require a fresh signed operation."""
         head, revision, at = self._observed_snapshot(principal)
-        generation, payload = self.store.read_ciphertext(principal, kind)
+        generation, payload = self.store.read_ciphertext(principal, kind, authority_revision=revision,
+                                                        before_commit=lambda: self._require_evaluation(at))
         message = dict(principal=principal, kind=kind, head=head, generation=generation,
                        rows=json.loads(payload) if payload else {}, operation=operation)
         verified = subprocess.run(

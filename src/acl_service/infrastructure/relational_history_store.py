@@ -55,10 +55,11 @@ class RelationalHistoryStore:
             )
             return HistorySnapshot(principal, account[0], tuple(row[0] for row in entries))
 
-    def observe_head(self, principal: str, head: int, *, authority_revision: int) -> None:
-        with self._transaction(write=True) as db:
+    def observe_head(self, principal: str, head: int, *, authority_revision: int, before_commit: Callable[[], None] | None = None) -> None:
+        with self._transaction(write=True, before_commit=before_commit) as db:
             if authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed")
+            if before_commit is not None: before_commit()
             self._observe_floor(db, principal, head)
 
     @staticmethod
@@ -104,10 +105,10 @@ class RelationalHistoryStore:
                 raise StoreRejected()
         return generation, payload
 
-    def read_ciphertext(self, principal: str, kind: StoreKind, *, authority_revision: int | None = None) -> tuple[int, bytes]:
+    def read_ciphertext(self, principal: str, kind: StoreKind, *, authority_revision: int | None = None, before_commit: Callable[[], None] | None = None) -> tuple[int, bytes]:
         if kind not in ("recovery", "wraps"):
             raise StoreRejected()
-        with self._transaction(write=False, ciphertext=True) as db:
+        with self._transaction(write=False, ciphertext=True, before_commit=before_commit) as db:
             if authority_revision is not None and authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed before ciphertext read")
             return self._ciphertext_snapshot(db, principal, kind)
