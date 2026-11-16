@@ -1420,10 +1420,10 @@ not encrypted bytes or keys. CI checks application installation, fixed-subject
 owner binding, strict bounded JSON, private responses, capacity and cancellation.
 Epoch bodies are capped at 270336 bytes and signed status commands at 8192 bytes.
 
-The separate `item_byte_router` prepares `item-wrap-publish` and `item-wrap-read`
-but is not installed by the application. Its commands use the configured
+The application installs `item_byte_router` for `item-wrap-publish` and
+`item-wrap-read` under `/api/v1/acl/sociacl/media/groups`. Its commands use the configured
 private media binding and shared private-media capacity limits, never the group
 key store. Publication is owner-bound and read delivery is fixed to the
 credential's reader. Current joint authorization and item allocation checks
-remain in the domain/source coordinators. CI mounts the prepared router only
-inside contracts; default application routing exposes neither byte operation.
+remain in the domain/source coordinators. CI exercises both paths through the
+assembled application. Missing private-media runtime bindings refuse requests.
