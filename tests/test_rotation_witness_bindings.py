@@ -84,7 +84,10 @@ def test_source_import_and_constructor_cleanup(monkeypatch):
 
 @pytest.mark.parametrize('failure',[False,True])
 def test_private_module_loader_rolls_back_failed_import(monkeypatch,failure):
-    for name in ('history_admission','statement_source','rotation_witness_source'):monkeypatch.delitem(bindings.sys.modules,name,raising=False)
+    for name in ('history_admission','statement_source','rotation_witness_source'):
+        # Track absence too, so modules inserted by the loader cannot escape this test.
+        monkeypatch.setitem(bindings.sys.modules,name,None)
+        del bindings.sys.modules[name]
     def execute(module):
         if failure:raise ImportError('unavailable')
     monkeypatch.setattr(bindings.importlib.util,'spec_from_file_location',lambda name,path:SimpleNamespace(origin=str(path),loader=SimpleNamespace(exec_module=execute)))
