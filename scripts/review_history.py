@@ -21,6 +21,18 @@ def review(root, scan_directory):
     refs['HEAD'] = git(root, 'rev-parse', 'HEAD').decode().strip()
     scan_directory.mkdir(parents=True, exist_ok=False)
     objects = git(root, 'rev-list', '--objects', *sorted(set(refs.values()))).decode().splitlines()
+    # rev-list --objects supplies only one name per object. Inspect every
+    # reachable commit tree to retain all path/blob pairs across renames/copies.
+    names_by_object = {}
+    commits = git(root, 'rev-list', *sorted(set(refs.values()))).decode().splitlines()
+    for commit in commits:
+        for entry in git(root, 'ls-tree', '-r', '-z', commit).split(b'\0'):
+            if not entry:
+                continue
+            metadata, name = entry.split(b'\t', 1)
+            _, kind, oid = metadata.decode().split()
+            if kind == 'blob':
+                names_by_object.setdefault(oid, set()).add(name.decode('utf-8', 'surrogateescape'))
     findings = []
     scanned = 0
     for row in objects:
@@ -32,10 +44,12 @@ def review(root, scan_directory):
         scanned += 1
         # Object IDs prevent untrusted historical paths from controlling writes.
         (scan_directory / (oid + '.txt')).write_bytes(data)
-        try:
-            check_member(name.removeprefix('src/'), data)
-        except ValueError:
-            findings.append({'object': oid, 'path': name, 'kind': 'hosted-code'})
+        names = sorted(names_by_object.get(oid, {name}))
+        for historical_name in names:
+            try:
+                check_member(historical_name.removeprefix('src/'), data)
+            except ValueError:
+                findings.append({'object': oid, 'path': historical_name, 'kind': 'hosted-code'})
         if kind == 'blob' and zipfile.is_zipfile(io.BytesIO(data)):
             with zipfile.ZipFile(io.BytesIO(data)) as archive:
                 members = archive.infolist()
@@ -52,7 +66,7 @@ def review(root, scan_directory):
                     try:
                         check_member(member.filename, content)
                     except ValueError:
-                        findings.append({'object': oid, 'path': name, 'member': member.filename, 'kind': 'hosted-code'})
+                        findings.extend({'object': oid, 'path': historical_name, 'member': member.filename, 'kind': 'hosted-code'} for historical_name in names)
     return {'schema_version': 1, 'refs': refs, 'scanned_objects': scanned,
             'history_findings': findings, 'source_publication_ready': False,
             'scope': 'HEAD plus fetched origin branches and tags; includes archived wheel members',

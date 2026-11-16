@@ -42,3 +42,20 @@ def test_shallow_history_is_refused(monkeypatch, tmp_path):
     monkeypatch.setattr(history, 'git', lambda *args: b'true\n')
     with pytest.raises(ValueError, match='non-shallow'):
         history.review(tmp_path, tmp_path / 'scan')
+
+
+def test_identical_blob_at_neutral_and_hosted_paths_is_not_hidden(tmp_path):
+    root = tmp_path / 'repo'
+    root.mkdir()
+    git(root, 'init', '-q')
+    (root / 'a.txt').write_text('same bytes')
+    target = root / 'api/usecases/billing_service.py'
+    target.parent.mkdir(parents=True)
+    target.write_text('same bytes')
+    git(root, 'add', '.')
+    git(root, 'commit', '-qm', 'same object at two paths')
+    target.unlink()
+    git(root, 'add', '-A')
+    git(root, 'commit', '-qm', 'remove hosted path')
+    result = history.review(root, tmp_path / 'scan')
+    assert any(row['path'] == 'api/usecases/billing_service.py' for row in result['history_findings'])
