@@ -423,6 +423,9 @@ async def test_group_item_catalog_is_private_subject_bound_and_read_scoped(setup
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
         assert (await client.post(PATH+'item-reader-catalog',json={'page':0})).status_code==503
         s.app.state.private_wrap_bindings={(s.tenant,s.user.sub):s.binding};s.user.scopes=['acl:media:read']
+        s.app.state.private_wrap_slots=asyncio.Semaphore(2)
+        s.app.state.private_wrap_body_slots={(s.tenant,s.user.sub):asyncio.Semaphore(1)}
+        s.app.state.private_wrap_tenant_slots={s.tenant:asyncio.Semaphore(1)}
         response=await client.post(PATH+'item-reader-catalog',json={'page':0})
         assert response.status_code==200 and response.json()==result
         assert response.headers['cache-control']=='private, no-store'
