@@ -75,7 +75,7 @@ def test_unavailable_inventory_is_scoped_to_exact_endpoints():
     url = 'https://api.github.com/orgs/hyperme-sh/packages/container/acl-service%2Fruntime/versions?page=1'
     assert registry.unavailable(HTTPError(url, 404, 'missing', {}, None))
     assert not registry.unavailable(HTTPError(url, 500, 'server', {}, None))
-    assert not registry.unavailable(HTTPError(url.replace('user-service', 'other'), 404, 'missing', {}, None))
+    assert not registry.unavailable(HTTPError(url.replace('acl-service', 'other'), 404, 'missing', {}, None))
     assert not registry.unavailable(HTTPError(url.replace('api.github.com', 'other.invalid'), 404, 'missing', {}, None))
 
 
