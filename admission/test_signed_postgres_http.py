@@ -12,6 +12,8 @@ import httpx
 import pytest
 from asgi_lifespan import LifespanManager
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ProgrammingError
 
 from acl_service import deps
 from acl_service.app import create_app
@@ -25,7 +27,8 @@ from signed_store_source import SignedStoreSource
 
 
 @pytest.mark.asyncio
-async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_sync_url, monkeypatch):
+@pytest.mark.parametrize("restricted_role", [False, True])
+async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_sync_url, monkeypatch, restricted_role):
     base = Path(__file__).parent
     identity = json.loads((base / 'fixture.json').read_bytes())
     operations = json.loads((base / 'store-fixture.json').read_bytes())
@@ -35,6 +38,34 @@ async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_
                 tenant=str(uuid4()), source=str(uuid4()))
     tenant = UUID(spec['tenant'])
     provision_empty_media_source(migrated_sync_url, **spec)
+    runtime_url = migrated_sync_url
+    role = 'acl_recovery_' + token
+    if restricted_role:
+        password = uuid4().hex
+        engine = create_engine(migrated_sync_url)
+        try:
+            with engine.begin() as connection:
+                # Identifiers and password are generated lowercase hex, never input.
+                connection.exec_driver_sql(f"CREATE ROLE {role} LOGIN PASSWORD '{password}' NOSUPERUSER NOCREATEDB NOCREATEROLE")
+                for field in ('history_schema', 'checkpoint_schema'):
+                    schema = spec[field]
+                    connection.exec_driver_sql(f'GRANT USAGE ON SCHEMA "{schema}" TO {role}')
+                    connection.exec_driver_sql(f'GRANT SELECT ON ALL TABLES IN SCHEMA "{schema}" TO {role}')
+                    connection.exec_driver_sql(f'GRANT UPDATE ON "{schema}".source_marker TO {role}')
+                history, checkpoint = spec['history_schema'], spec['checkpoint_schema']
+                for schema, table in ((history, 'history_ciphertext'), (history, 'history_head_floors'),
+                                      (checkpoint, 'ciphertext_heads')):
+                    connection.exec_driver_sql(f'GRANT INSERT, UPDATE ON "{schema}".{table} TO {role}')
+                connection.exec_driver_sql(f'GRANT UPDATE ON "{checkpoint}".authority_checkpoint TO {role}')
+        finally:
+            engine.dispose()
+        runtime_url = make_url(migrated_sync_url).set(username=role, password=password).render_as_string(hide_password=False)
+        engine = create_engine(runtime_url)
+        try:
+            with engine.begin() as connection, pytest.raises(ProgrammingError):
+                connection.exec_driver_sql(f'CREATE TABLE "{spec["history_schema"]}".forbidden (id INTEGER)')
+        finally:
+            engine.dispose()
     trust = {key: identity[key] for key in ('policy', 'jwks', 'pinnedIss')}
     policy = dict(version=1, **{'from':now-1}, until=now+60,
                   trust=trust, activePrincipals=[principal])
@@ -44,7 +75,7 @@ async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_
         path.chmod(0o600)
         return str(path)
     policy_path = private('policy.json', policy)
-    postgres_path = private('postgres.json', dict(version=1, databaseUrl=migrated_sync_url,
+    postgres_path = private('postgres.json', dict(version=1, databaseUrl=runtime_url,
         historySchema=spec['history_schema'], checkpointSchema=spec['checkpoint_schema'],
         tenant=spec['tenant'], source=spec['source']))
     bindings_path = private('bindings.json', dict(version=1, bindings=[dict(
@@ -113,8 +144,12 @@ async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_
             await lost(client, 'pending')
         async with restart() as (client, source):
             await expect(client, 2, 'current', 'pending')
-            for name in ('wallet', 'rotate-v4-wallet'):
-                admission(source.store).admit(principal, json.dumps(identity[name]).encode())
+            authority = PostgresHistoryStore(migrated_sync_url, **spec)
+            try:
+                for name in ('wallet', 'rotate-v4-wallet'):
+                    admission(authority).admit(principal, json.dumps(identity[name]).encode())
+            finally:
+                authority.close()
             await lost(client, 'commit')
         async with restart() as (client, _):
             await expect(client, 3, 'pending', None)
@@ -127,5 +162,7 @@ async def test_protected_recovery_restart_and_policy_refusal(tmp_path, migrated_
             with engine.begin() as connection:
                 for field in ('history_schema', 'checkpoint_schema'):
                     connection.execute(text(f'DROP SCHEMA IF EXISTS "{spec[field]}" CASCADE'))
+                if restricted_role:
+                    connection.exec_driver_sql(f'DROP ROLE {role}')
         finally:
             engine.dispose()
