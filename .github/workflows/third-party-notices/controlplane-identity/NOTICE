@@ -1,0 +1,7 @@
+Hypermesh Controlplane Identity
+Copyright 2026 Fyber Labs
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+Third-party dependencies retain their own licenses and notices.
+History, notice and container tooling is adapted from hyperme-sh/controlplane-db,
+hyperme-sh/controlplane-api and hyperme-sh/product-template (Apache-2.0).

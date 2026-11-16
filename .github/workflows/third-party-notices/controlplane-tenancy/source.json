@@ -1,0 +1,9 @@
+{
+  "distribution": "controlplane-tenancy",
+  "version": "0.14.0",
+  "repository": "https://github.com/hyperme-sh/controlplane-tenancy",
+  "commit": "f252909af772b2c820555af36de456d46f17cfcb",
+  "files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+}

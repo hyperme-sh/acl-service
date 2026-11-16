@@ -1,0 +1,15 @@
+{
+  "distribution": "jsonalias",
+  "version": "0.1.1",
+  "repository": "https://github.com/kevinheavey/jsonalias",
+  "commit": "2a98db9c4024b1914f198f088f2aaa15a8cd7423",
+  "runtime_commit": "f725a73f58e4d72068193f3e2db98175920d2781",
+  "relationship": "0.1.2 adds LICENSE and package metadata; runtime files are unchanged from 0.1.1 and must match installed bytes",
+  "files": {
+    "LICENSE": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1"
+  },
+  "runtime_sha256": {
+    "jsonalias/__init__.py": "35a9a4b543e6f08ad0f8f7f91d0ed53cbd7e0f7925a4aeab5cf52b2e6cfa6db1",
+    "jsonalias/py.typed": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
