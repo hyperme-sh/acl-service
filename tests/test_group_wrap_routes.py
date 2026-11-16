@@ -378,9 +378,8 @@ async def test_group_item_bytes_use_private_media_binding_and_fixed_reader(setup
 @pytest.mark.asyncio
 async def test_owner_maintenance_route_is_write_scoped(setup,monkeypatch):
     from acl_service.domain.group_owner_wrap import DeliveredOwnerWrap,OwnerWrapRejected
-    from acl_service.app import create_app
     s=setup
-    assert any(getattr(route,'path','').endswith('/item-owner-wrap-read') for route in create_app().routes)
+    # Application mounting is exercised by the assembled HTTP contract above.
     assert not any(getattr(route,'path','').endswith('/item-owner-wrap-read') for route in s.app.routes)
     s.app.include_router(routes.owner_wrap_router)
     binding=SimpleNamespace(tenant=str(s.tenant),reader='fixed-owner',authority=object(),store=SimpleNamespace(tenant=str(s.tenant)))
