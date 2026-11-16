@@ -1,0 +1,10 @@
+{
+  "distribution": "controlplane-identity",
+  "version": "0.15.0",
+  "repository": "https://github.com/hyperme-sh/controlplane-identity",
+  "commit": "14355f230e15a5acf3b1283e87d5f65aceff35ba",
+  "files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "NOTICE": "7dfd221572c3469eab616e1cefb852257658842c8fa4ad73d6501740c1c430a0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "distribution": "spanopticon-models",
+  "version": "0.2.0",
+  "repository": "https://github.com/hyperme-sh/controlplane-models",
+  "commit": "9a9bbb20c2e0cd41febf3233ce7a48fe17a84b04",
+  "files": {
+    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  }
+}

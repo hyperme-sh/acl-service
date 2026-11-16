@@ -6,6 +6,11 @@ owner LICENSE and NOTICE against the maintained files.
 The runtime preserves installed Python legal texts and an index under
 `/usr/share/acl-service/notices/python`. Exact upstream supplements fill missing
 legal texts and incorporated GPL terms; they do not contain source archives.
+The older Auth dependency has no LICENSE at its locked revision. Its supplement
+records the later license-bearing owner revision: all original runtime lines
+remain present, with 13 added lines in `token_validation.py` and other runtime
+files identical. Installed bytes are hash-bound; historical publication remains
+uncleared.
 Missing installed texts or changed supplemental versions/hashes fail the build.
 Node package legal texts remain beside their installed modules, indexed by
 `/opt/acl-admission/npm-notices.json`. The Node 24.15.0 upstream LICENSE is
