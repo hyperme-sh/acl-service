@@ -13,7 +13,7 @@ export SOCIACL_FIRST_CONTACT_SCHEMA="$schema_checkout/src/controlplane_db/migrat
 unset PYTHONPATH UV_NO_SYNC
 uv sync --frozen --no-editable
 if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
-  uv pip install --python .venv/bin/python --no-deps --reinstall "$RELEASE_CANDIDATE_DIR"/*.whl
+  uv pip install --python "${UV_PROJECT_ENVIRONMENT:-$PWD/.venv}/bin/python" --no-deps --reinstall "$RELEASE_CANDIDATE_DIR"/*.whl
 fi
 # Isolated Python must import the installed distribution, never checkout source.
 uv run --no-sync python -I -c 'import acl_service; assert "/site-packages/" in acl_service.__file__, acl_service.__file__'

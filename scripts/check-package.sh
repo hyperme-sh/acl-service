@@ -40,14 +40,14 @@ check_lock() {
 sync_environment() {
   uv sync --frozen --python 3.13 "${sync_options[@]}"
   if (( ${#fixture_wheels[@]} )); then
-    uv pip install --no-config --python .venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
+    uv pip install --no-config --python "${UV_PROJECT_ENVIRONMENT:-$PWD/.venv}/bin/python" --no-deps --reinstall "${fixture_wheels[@]}"
   fi
-  .venv/bin/python scripts/verify_preparation_environment.py "$PWD"
+  "${UV_PROJECT_ENVIRONMENT:-$PWD/.venv}/bin/python" scripts/verify_preparation_environment.py "$PWD"
 }
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
-  # This is a disposable copy of the immutable Actions artifact, never an upload source.
+  # This is a disposable copy of the job-local candidate, never an upload source.
   mkdir -p "$scratch/dist"
   cp "$RELEASE_CANDIDATE_DIR"/*.whl "$RELEASE_CANDIDATE_DIR"/*.tar.gz "$scratch/dist/"
 else
@@ -80,13 +80,18 @@ if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
 fi
 uv run --frozen "${run_options[@]}" pytest -q tests_tools
 uv export --frozen "${export_options[@]}" --no-emit-project --format requirements-txt --output-file "$scratch/requirements.txt" >/dev/null
+python3 scripts/export_selected_overrides.py pyproject.toml "$scratch/overrides.txt"
+install_options=(--constraint "$scratch/requirements.txt")
+if [[ -s "$scratch/overrides.txt" ]]; then
+  install_options+=(--overrides "$scratch/overrides.txt")
+fi
 uv venv --python 3.13 "$scratch/venv"
 uv pip sync --python "$scratch/venv/bin/python" "$scratch/requirements.txt"
 if (( ${#fixture_wheels[@]} )); then
   bash scripts/install-qualified.sh "$scratch/venv/bin/python" "$scratch"/dist/*.whl
 else
 uv pip uninstall --python "$scratch/venv/bin/python" spanopticon-models auth-service controlplane-core controlplane-api controlplane-tenancy controlplane-identity controlplane-db controlplane-events operator-ban-store
-uv pip install --python "$scratch/venv/bin/python" --constraint "$scratch/requirements.txt" "$scratch"/dist/*.whl
+uv pip install --python "$scratch/venv/bin/python" "${install_options[@]}" "$scratch"/dist/*.whl
 fi
 cp -R tests "$scratch/"
 (cd "$scratch" && "$scratch/venv/bin/python" -I -m pytest -c /dev/null -o asyncio_mode=auto -o asyncio_default_fixture_loop_scope=function tests --junitxml="$scratch/wheel.xml")

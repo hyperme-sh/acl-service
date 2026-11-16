@@ -57,8 +57,9 @@ The user is the sole developer. Never add or enable GitHub required reviewers, b
 The read-only preparation lane may use exact dependency-wheel fixtures without
 credentials. Build and validate temporary candidates in the same job and retain
 post-validation digest checks. Package and snapshot uploads are retired; the
-qualified container archive remains available for runtime preparation. No tags
-or publication during preparation.
+qualified container is distributed through GHCR. PR preparation does not publish;
+automatic current-main publication advances the moving TEST channel. Manual
+version tags and releases still require explicit authorization.
 
 ## Private CI runner policy
 
