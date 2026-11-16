@@ -59,7 +59,7 @@ async def wallet_rotation(request: Request,
                 proof = authorizer['siwe']
                 if type(proof) is not dict or set(proof) != {'message','signature'}: raise ValueError()
                 json.dumps(body, allow_nan=False)
-            except (ValueError, TypeError, RecursionError): raise refused(400, 'Invalid transfer request') from None
+            except (ValueError, TypeError, RecursionError): raise refused(400, 'Invalid rotation request') from None
             if body['principal'] != binding.principal:
                 raise refused(403, 'Rotation refused')
             work = asyncio.create_task(asyncio.to_thread(binding.source.attest_wallet_rotation, binding.principal, body, cancel=guard))
