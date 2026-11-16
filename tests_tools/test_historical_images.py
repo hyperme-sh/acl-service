@@ -131,3 +131,25 @@ def test_inventory_sends_standard_authorization_headers(monkeypatch, tmp_path):
     monkeypatch.setattr(registry.urllib.request, 'build_opener', lambda *args: Opener())
     registry.main(tmp_path / 'output')
     assert len(requests) == 3
+
+
+def test_historical_review_reports_deleted_source_and_hosted_content(tmp_path):
+    import io, subprocess, tarfile
+    image=tmp_path/'image.tar'
+    files={'usr/share/acl-service/sources/archive.tar.gz':b'not an archive',
+           'opt/venv/lib/python3.13/site-packages/api/usecases/billing_service.py':b'hosted fixture'}
+    def add(archive,name,data):
+        item=tarfile.TarInfo(name);item.size=len(data);archive.addfile(item,io.BytesIO(data))
+    with tarfile.open(image,'w') as outer:
+        add(outer,'manifest.json',json.dumps([{'Config':'config.json','Layers':['old.tar','new.tar']}]).encode())
+        add(outer,'config.json',b'{"config":{"User":"10001:10001"}}')
+        for name,rows in [('old.tar',files),('new.tar',{'usr/share/acl-service/.wh.sources':b''})]:
+            data=io.BytesIO()
+            with tarfile.open(fileobj=data,mode='w') as layer:
+                for path,content in rows.items():add(layer,path,content)
+            add(outer,name,data.getvalue())
+    output=subprocess.check_output([sys.executable,str(ROOT/'scripts/review_image.py'),str(image),str(tmp_path/'layers'),'sha256:'+'a'*64],text=True)
+    report=json.loads(output.split('HISTORICAL_IMAGE_REVIEW=',1)[1])
+    assert report['source_bundle_paths']==['0/usr/share/acl-service/sources/archive.tar.gz']
+    assert report['hosted_content_paths']==['0/opt/venv/lib/python3.13/site-packages/api/usecases/billing_service.py']
+    assert report['publication_cleared'] is False

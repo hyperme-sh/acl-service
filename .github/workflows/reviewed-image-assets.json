@@ -4,7 +4,7 @@
     "wheel_sha256": "d8a47c11c81fb12d51b1feb42427ff4f0e13cb599e48931021b2cba98b6849a6",
     "member": "pydeck-0.9.3.data/data/share/jupyter/nbextensions/pydeck/index.js.map",
     "member_sha256": "1ef6c893f0577fdbe521570ecd9a94526cc982cdf46b6d85c9e5236d792811ba",
-    "path": "app/.venv/share/jupyter/nbextensions/pydeck/index.js.map",
+    "path": "opt/venv/share/jupyter/nbextensions/pydeck/index.js.map",
     "rule": "generic-api-key",
     "start": 6,
     "end": 6,
