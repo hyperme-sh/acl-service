@@ -127,6 +127,18 @@ class HistoryFreshnessTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.adapter.admit('synthetic', b'{}', before_commit=False)
 
+    def test_caller_conflict_is_terminal_not_a_rotation_retry(self):
+        from acl_service.domain.history_store import HistoryConflict
+        calls = []
+        def guard():
+            calls.append(True)
+            if len(calls) == 3: raise HistoryConflict('owner admission lost')
+        self.adapter._verify = lambda *args, **kwargs: b''
+        with self.assertRaisesRegex(HistoryConflict, 'owner admission lost'):
+            self.adapter.admit('synthetic', b'{"kind":"rotate","seq":1}', before_commit=guard)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(self.store.read('synthetic').entries, ())
+
 
 if __name__ == "__main__":
     unittest.main()

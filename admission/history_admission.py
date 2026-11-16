@@ -152,14 +152,22 @@ class HistoryAdmission:
         if before_commit is not None and not callable(before_commit):
             raise ValueError("callable admission guard required")
         candidate = _record(record)
+        guard_failed = False
+        def guarded():
+            nonlocal guard_failed
+            try: before_commit()
+            except BaseException:
+                guard_failed = True
+                raise
+        commit_guard = guarded if before_commit is not None else None
         while True:
-            if before_commit is not None: before_commit()
+            if commit_guard is not None: commit_guard()
             try:
-                return self._admit_once(principal, record, candidate, before_commit=before_commit)
+                return self._admit_once(principal, record, candidate, before_commit=commit_guard)
             except HistoryConflict:
                 # A verified sibling may have won the race. Re-evaluate that
                 # rotation from the new committed snapshot before deciding.
-                if candidate.get("kind") != "rotate":
+                if guard_failed or candidate.get("kind") != "rotate":
                     raise
 
     def _admit_once(self, principal, record, candidate, *, before_commit=None):
