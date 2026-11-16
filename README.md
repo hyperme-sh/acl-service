@@ -1442,3 +1442,9 @@ This supports preparing replacement direct-recipient wraps before an atomic grou
 item epoch update. A browser must retain those opaque wraps before submitting that
 update and reconcile their publication afterward; command acceptance alone does
 not complete key delivery.
+
+The prepared `owner_wrap_router` exposes `item-owner-wrap-read` only when explicitly
+mounted. It requires the subject-bound private-media binding and `acl:media:write`,
+accepts only object and group scope, and reads through the item allocation. The
+coordinator verifies the returned bytes and rechecks the owner permit after storage.
+The application does not mount this router. Normal reader routes are unchanged.

@@ -1500,6 +1500,22 @@ class MediaSource:
             return getattr(source,action)(*args,cancel=cancel)
         return await self._work(run)
 
+    async def _group_owner_wrap_work(self,action,*args):
+        from group_source import GroupSource
+        from group_key_source import GroupKeySource
+        from group_item_source import GroupItemSource
+        from group_owner_wrap_source import GroupOwnerWrapSource
+        def run(cancel):
+            source=GroupOwnerWrapSource(GroupItemSource(GroupKeySource(GroupSource(self))))
+            return getattr(source,action)(*args,cancel=cancel)
+        return await self._work(run)
+
+    async def authorize_group_owner_wrap(self,tenant,owner,object,predicate,set_id):
+        return await self._group_owner_wrap_work('authorize',tenant,owner,object,predicate,set_id)
+
+    async def commit_group_owner_wrap(self,permit):
+        return await self._group_owner_wrap_work('commit',permit)
+
     async def group_item_epoch_state(self,tenant,owner,object,predicate,set_id,payload):
         payload=json.loads(encoded(payload))
         return await self._group_item_read_work('epoch_state',tenant,owner,object,predicate,set_id,payload)
