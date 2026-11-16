@@ -12,7 +12,8 @@ CONTROL = '/api/v1/acl/internal/nightly-run'
 
 
 async def verified_claims(token=Depends(bearer_access_token)):
-    claims = await get_access_token_claims(token)
+    from auth_service import deps as native_auth
+    claims = await native_auth.get_access_token_claims(token)
     try:
         require_original_run(claims)
     except (ValueError, InvalidTokenError):

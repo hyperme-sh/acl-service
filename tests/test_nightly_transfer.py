@@ -57,3 +57,17 @@ async def test_foreign_origin_never_reaches_native_source(monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://api.test.hyperme.sh') as client:
         assert (await client.post(PATH,json=body,headers={'X-Nightly-Run-Grant':'d'*64})).status_code==409
     source.read.assert_not_called();assert calls==['admit']
+
+
+@pytest.mark.asyncio
+async def test_direct_optional_auth_refuses_introspected_original_run(monkeypatch):
+    from starlette.requests import Request
+    from fastapi import HTTPException
+    from acl_service.deps import optional_authenticated_user
+    from auth_service import deps
+    async def introspected(token):
+        return {'sub':SUB,'nightly_run':{k:BINDING[k] for k in ('run','generation')}}
+    monkeypatch.setattr(deps,'get_access_token_claims',introspected)
+    with pytest.raises(HTTPException) as caught:
+        await optional_authenticated_user(Request({'type':'http','headers':[(b'authorization',b'Bearer native-token')]}))
+    assert caught.value.status_code==403
