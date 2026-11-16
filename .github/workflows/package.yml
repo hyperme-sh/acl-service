@@ -47,7 +47,7 @@ jobs:
           bash scripts/anonymous-command.sh uv build --no-sources --out-dir "$candidate"
       - name: Qualify exact package and owned storage contracts
         run: |
-          bash scripts/anonymous-command.sh env RELEASE_CANDIDATE_DIR="$RELEASE_CANDIDATE_DIR" bash -euo pipefail <<'CHECK'
+          bash scripts/anonymous-command.sh env GITHUB_ACTIONS="$GITHUB_ACTIONS" RELEASE_CANDIDATE_DIR="$RELEASE_CANDIDATE_DIR" bash -euo pipefail <<'CHECK'
           expected=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
           bash scripts/check-package.sh
           bash scripts/check-postgres.sh

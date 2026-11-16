@@ -31,3 +31,4 @@ def test_runtime_transport_is_qualified_ghcr_with_no_actions_archives():
     assert 'scripts/check-runtime-startup.py' in workflow
     assert '"$current" != "$GITHUB_SHA"' in workflow
     assert 'workflow_dispatch:' not in workflow
+    assert 'env GITHUB_ACTIONS="$GITHUB_ACTIONS" RELEASE_CANDIDATE_DIR=' in workflow
