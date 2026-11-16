@@ -290,3 +290,36 @@ def test_first_owner_refuses_orphan_storage_rows_and_primary_rollback(source):
         with pytest.raises(StoreRejected):
             store.enroll_first_media_owner('replacement',b'genesis',before_commit=lambda:None)
     finally:engine.dispose()
+
+
+def test_credential_source_whole_domain_restart_and_rollback(source, monkeypatch):
+    import json
+    from pathlib import Path
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'admission'))
+    from credential_source import CredentialSource
+    store, spec, url = source
+    store.enroll('one', b'{}')
+    store.enroll('two', b'{}')
+    credential = {'kind':'wallet','address':'test'}
+    def verify(accounts, selected, at, policy):
+        assert set(accounts) == {'one','two'}
+        return {'heads':{owner:0 for owner in accounts},
+                'snapshot':{'completeThrough':at,'credential':selected,'links':[],
+                            'revocations':[],'history':{}}}
+    def adapter(s):
+        return CredentialSource(s,spec['tenant'],spec['source'],
+            policy_at=lambda _:{'trust':{}},clock=lambda:100,verifier=verify)
+    result = adapter(store).read(credential,100)
+    again = PostgresHistoryStore(url, **spec)
+    try:
+        assert adapter(again).read(credential,100) == result
+        engine = create_engine(url)
+        try:
+            with engine.begin() as db:
+                db.execute(text(f'DELETE FROM "{spec["history_schema"]}".history_accounts WHERE principal=:principal'), {'principal':'two'})
+            with pytest.raises(StoreRejected):
+                adapter(again).read(credential,100)
+        finally:
+            engine.dispose()
+    finally:
+        again.close()
