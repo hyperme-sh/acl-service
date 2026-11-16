@@ -6,18 +6,23 @@ from acl_service.infrastructure.postgres_history_store import _Connection, scope
 from uuid import UUID
 
 
-def provision_empty_media_source(url, *, history_schema, checkpoint_schema, tenant, source):
+def provision_empty_media_source(url, *, history_schema, checkpoint_schema, tenant, source,
+                                 before_commit=None):
     """Create a new empty source, without identities, grants, keys or policy.
 
     The operator must separately admit the verified existing owner through the
     native history admission contract. This operation refuses either existing
     schema, even if empty. Runtime roles should have no schema CREATE privilege.
+    An optional operator guard runs before DDL and immediately before commit;
+    any refusal rolls back both schemas and their markers together.
     """
     history, checkpoint = scope_name(history_schema), scope_name(checkpoint_schema)
     if history == checkpoint:
         raise ValueError('independent schemas required')
     if any(str(UUID(value)) != value or not UUID(value).int for value in (tenant, source)):
         raise ValueError('canonical source and tenant required')
+    if before_commit is not None and not callable(before_commit):
+        raise ValueError('callable provisioning guard required')
     engine = create_engine(url, connect_args={'connect_timeout': 3})
     try:
         if engine.dialect.name != 'postgresql':
@@ -25,6 +30,8 @@ def provision_empty_media_source(url, *, history_schema, checkpoint_schema, tena
         with engine.begin() as connection:
             connection.exec_driver_sql("SET LOCAL lock_timeout = '1000ms'")
             connection.exec_driver_sql("SET LOCAL statement_timeout = '3000ms'")
+            if before_commit is not None:
+                before_commit()
             # No IF NOT EXISTS: a prior or partial scope is never overwritten.
             for schema in (history, checkpoint):
                 connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
@@ -50,5 +57,7 @@ def provision_empty_media_source(url, *, history_schema, checkpoint_schema, tena
                 db.execute(sql)
             db.execute('INSERT INTO statement_tenant VALUES(1,?)', (tenant,))
             db.execute('INSERT INTO freshness.authority_checkpoint VALUES(1,?)', (authority_digest(db),))
+            if before_commit is not None:
+                before_commit()
     finally:
         engine.dispose()

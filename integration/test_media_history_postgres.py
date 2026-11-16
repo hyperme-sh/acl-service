@@ -59,6 +59,40 @@ def test_absence_only_provision_and_source_binding(source):
     assert store.read_authority() == (0, {})
 
 
+@pytest.mark.parametrize('refuse_at', [1, 2])
+def test_provisioning_guard_rolls_back_both_scopes(migrated_sync_url, refuse_at):
+    token=uuid4().hex
+    spec=dict(history_schema='acl_h_'+token,checkpoint_schema='acl_c_'+token,
+              tenant=str(uuid4()),source=str(uuid4()))
+    calls=0
+    def guard():
+        nonlocal calls
+        calls+=1
+        if calls==refuse_at:
+            raise ValueError('operator ownership lost')
+    engine=create_engine(migrated_sync_url)
+    try:
+        with pytest.raises(ValueError,match='operator ownership lost'):
+            provision_empty_media_source(migrated_sync_url,**spec,before_commit=guard)
+        assert calls==refuse_at
+        with engine.connect() as connection:
+            names=connection.execute(text('SELECT nspname FROM pg_namespace WHERE nspname IN (:history,:checkpoint)'),
+                dict(history=spec['history_schema'],checkpoint=spec['checkpoint_schema'])).fetchall()
+            assert names==[]
+        # The same declared scope can be provisioned after a rolled-back attempt.
+        accepted=[]
+        provision_empty_media_source(migrated_sync_url,**spec,before_commit=lambda:accepted.append(True))
+        assert accepted==[True,True]
+        store=PostgresHistoryStore(migrated_sync_url,**spec)
+        try:assert store.read_authority()==(0,{})
+        finally:store.close()
+    finally:
+        with engine.begin() as connection:
+            for name in ('history_schema','checkpoint_schema'):
+                connection.execute(text(f'DROP SCHEMA IF EXISTS "{spec[name]}" CASCADE'))
+        engine.dispose()
+
+
 def test_missing_scope_is_not_recreated(source):
     store, spec, url = source
     engine = create_engine(url)
