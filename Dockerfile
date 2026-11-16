@@ -9,6 +9,13 @@ RUN revision=$(cat /tmp/sociacl-native.rev) \
     && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "$revision" \
     && cargo build --release -p sociacl-c --locked
+# Preserve legal texts from dependencies already fetched for this native build.
+RUN mkdir -p /native-notices/cargo /native-notices/owner \
+    && find /usr/local/cargo/registry/src -type f \( -iname '*license*' -o -iname '*licence*' -o -iname '*notice*' -o -iname 'copying*' \) -exec cp --parents '{}' /native-notices/cargo/ \; \
+    && find /source -maxdepth 2 -type f \( -iname '*license*' -o -iname '*notice*' -o -iname 'copying*' \) -exec cp --parents '{}' /native-notices/owner/ \; \
+    && cp Cargo.lock /native-notices/Cargo.lock \
+    && test -n "$(find /native-notices/owner -type f -print -quit)"
+
 
 FROM python:3.13-slim-bookworm AS epoch-contract
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -41,11 +48,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /usr/local/bin/uv
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md LICENSE NOTICE ./
 COPY src ./src
 COPY scripts/install-image-runtime.py /tmp/install-image-runtime.py
 # Frozen runtime dependencies are installed without private credentials.
 RUN python /tmp/install-image-runtime.py
+COPY scripts/prepare_notices.py /tmp/prepare_notices.py
+COPY .github/workflows/third-party-notices /tmp/notice-supplements
+RUN /build/.venv/bin/python /tmp/prepare_notices.py /notices/python /tmp/notice-supplements
 
 FROM python:3.13-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 \
@@ -55,6 +65,9 @@ RUN node --version
 COPY --from=verifier /opt/acl-admission /opt/acl-admission
 COPY --from=epoch-verifier /source/target/release/libsociacl.so /opt/acl-admission/libsociacl.so
 COPY --from=build /build/.venv /opt/venv
+COPY --from=build /notices /usr/share/acl-service/notices
+COPY --from=epoch-verifier /native-notices /usr/share/acl-service/notices/native
+COPY LICENSE NOTICE /usr/share/acl-service/
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1

@@ -44,3 +44,11 @@
 !admission/group_owner_wrap_source.py
 !admission/credential_source.py
 !admission/credential-graph.mjs
+
+!LICENSE
+!NOTICE
+!scripts/prepare_notices.py
+!.github/
+!.github/workflows/
+!.github/workflows/third-party-notices/
+!.github/workflows/third-party-notices/**
