@@ -136,3 +136,9 @@ jobs:
           test "$(docker image inspect "$QUALIFIED_DIGEST" --format '{{.Id}}')" = "$EXPECTED_IMAGE_ID"
           bash scripts/anonymous-command.sh bash scripts/check-image.sh "$EXPECTED_IMAGE_ID"
           bash scripts/anonymous-command.sh python3 scripts/check-runtime-startup.py "$EXPECTED_IMAGE_ID"
+  retained-images:
+    needs: runtime-replay
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/historical-images.yml
