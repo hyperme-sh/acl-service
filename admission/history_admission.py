@@ -148,18 +148,21 @@ class HistoryAdmission:
             raise AdmissionRejected("enrollment grant changed or expired")
         self.store.enroll(principal, genesis)
 
-    def admit(self, principal: str, record: bytes):
+    def admit(self, principal: str, record: bytes, *, before_commit=None):
+        if before_commit is not None and not callable(before_commit):
+            raise ValueError("callable admission guard required")
         candidate = _record(record)
         while True:
+            if before_commit is not None: before_commit()
             try:
-                return self._admit_once(principal, record, candidate)
+                return self._admit_once(principal, record, candidate, before_commit=before_commit)
             except HistoryConflict:
                 # A verified sibling may have won the race. Re-evaluate that
                 # rotation from the new committed snapshot before deciding.
                 if candidate.get("kind") != "rotate":
                     raise
 
-    def _admit_once(self, principal, record, candidate):
+    def _admit_once(self, principal, record, candidate, *, before_commit=None):
         snapshot = self.store.read(principal)
         if snapshot is None or snapshot.principal != principal:
             raise AdmissionRejected("no enrolled history")
@@ -171,6 +174,7 @@ class HistoryAdmission:
                     and row["authorizer"].get("kind") == "wallet")
 
         fence = {}
+        if before_commit is not None: fence["before_commit"] = before_commit
         peers = None
         if wallet_rotation(candidate) or any(map(wallet_rotation, rows)):
             revision, accounts = self.store.read_authority()

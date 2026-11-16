@@ -24,12 +24,16 @@ class RelationalHistoryStore:
                                [(principal, kind, hashlib.sha256(b"").digest()) for kind in ("recovery", "wraps")])
 
     def append(self, principal: str, expected_revision: int, entry: bytes, *,
-               authority_revision: int | None = None, verified_rotation: int | None = None) -> None:
+               authority_revision: int | None = None, verified_rotation: int | None = None,
+               before_commit: Callable[[], None] | None = None) -> None:
         if type(expected_revision) is not int or expected_revision < 0:
             raise ValueError("invalid revision")
         if not isinstance(entry, bytes) or not entry:
             raise ValueError("missing history entry")
-        with self._transaction(write=True) as db:
+        if before_commit is not None and not callable(before_commit):
+            raise ValueError("callable admission guard required")
+        with self._transaction(write=True, before_commit=before_commit) as db:
+            if before_commit is not None: before_commit()
             if authority_revision is not None and authority_revision != self._authority_revision(db):
                 raise HistoryConflict("authority changed")
             row = db.execute(

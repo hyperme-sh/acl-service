@@ -358,3 +358,26 @@ def test_credential_source_whole_domain_restart_and_rollback(source, monkeypatch
             engine.dispose()
     finally:
         again.close()
+
+
+@pytest.mark.parametrize('refuse_at', [1, 2])
+def test_history_append_guard_rolls_back_entry_floor_and_checkpoint(source, refuse_at):
+    store, spec, url = source
+    store.enroll('owner', b'genesis')
+    before = store.read_authority()
+    calls = []
+    def guard():
+        calls.append(True)
+        if len(calls) == refuse_at:
+            raise RuntimeError('original admission closed')
+    with pytest.raises(RuntimeError, match='original admission closed'):
+        store.append('owner', 0, b'entry', authority_revision=before[0],
+                     verified_rotation=1, before_commit=guard)
+    assert len(calls) == refuse_at
+    again = PostgresHistoryStore(url, **spec)
+    try:
+        assert again.read_authority() == before
+        with again._transaction(write=False) as db:
+            assert db.execute('SELECT head FROM history_head_floors').fetchall() == []
+    finally:
+        again.close()
