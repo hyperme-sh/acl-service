@@ -25,7 +25,7 @@ def setup(monkeypatch):
                               group_wrap_view=AsyncMock(return_value={'fence':'a'*64}),
                               group_item_view=AsyncMock(return_value={'fence':'b'*64,'expiresAt':102}))
     binding=SimpleNamespace(tenant=str(tenant),reader='fixed-reader',authority=authority,store=SimpleNamespace(tenant=str(tenant)))
-    app=FastAPI();app.include_router(routes.router)
+    app=FastAPI();app.include_router(routes.router);app.include_router(routes.owner_router)
     app.state.group_wrap_bindings={(tenant,user.sub):binding}
     app.state.group_wrap_slots=asyncio.Semaphore(2)
     app.state.group_wrap_body_slots={(tenant,user.sub):asyncio.Semaphore(1)}
@@ -139,6 +139,23 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
         assert (await client.post('/api/v1'+PATH+'item-authority-view',json={'object':'media_owner_item'})).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-grant-view',json={**RECORD,'object':'media_owner_item','reader':'reader','withdraw':False})).status_code==200
         assert (await client.post('/api/v1'+PATH+'item-grant-append',json={**RECORD,'object':'media_owner_item','at':100,'fence':'a'*64,'payload':{}})).status_code==200
+        scope={**RECORD,'object':'media_owner_item'}
+        for action,method,body,response in [
+            ('item-epoch-append','append_group_item_epoch',{**scope,'at':100,'fence':'a'*64,'payload':{}},True),
+            ('item-epoch-state','group_item_epoch_state',{**scope,'payload':{}},{'state':'applied'}),
+            ('item-status-view','group_item_status_view',{**scope,'reader':'recipient'},{'status':{}}),
+            ('item-status-append','append_group_item_status',{**scope,'reader':'recipient','at':100,'fence':'a'*64,'payload':{}},True),
+            ('item-status-state','group_item_status_state',{**scope,'reader':'recipient','payload':{}},{'state':'applied'}),
+            ('item-wrap-view','group_item_publication_view',{**scope,'reader':'recipient'},{'metadata':{}}),
+        ]:
+            call=AsyncMock(return_value=response);setattr(s.authority,method,call)
+            result=await client.post('/api/v1'+PATH+action,json=body)
+            assert result.status_code==200 and result.headers['cache-control']=='private, no-store'
+            call.assert_awaited_once()
+            assert call.call_args.args[:3]==(str(s.tenant),'fixed-reader',scope['object'])
+            app.state.group_wrap_bindings=None
+            assert (await client.post('/api/v1'+PATH+action,json=body)).status_code==503
+            app.state.group_wrap_bindings={(s.tenant,s.user.sub):s.binding}
     s.authority.group_item_authority_view.assert_awaited_once_with(str(s.tenant),'fixed-reader','media_owner_item')
     s.authority.group_wrap_view.assert_awaited_once()
     s.authority.group_item_view.assert_awaited_once()
@@ -223,16 +240,16 @@ async def test_item_epoch_plan_is_subject_bound_and_read_only(setup):
 
 
 @pytest.mark.asyncio
-async def test_prepared_owner_routes_require_explicit_installation(setup):
-    s=setup
+async def test_owner_routes_refuse_missing_runtime_bindings(setup):
+    s=setup;s.app.state.group_wrap_bindings=None
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
         for action in ('item-epoch-append','item-epoch-state','item-status-view','item-status-append','item-status-state','item-wrap-view'):
-            assert (await client.post(PATH+action,json={})).status_code==404
+            assert (await client.post(PATH+action,json={})).status_code==503
 
 
 @pytest.mark.asyncio
-async def test_prepared_owner_commands_bind_the_session_owner_in_ci(setup):
-    s=setup;s.app.include_router(routes.owner_router)
+async def test_owner_commands_bind_the_session_owner_in_ci(setup):
+    s=setup
     scope={**RECORD,'object':'media_owner_item'}
     operations=[
         ('item-epoch-append','append_group_item_epoch',{**scope,'at':100,'fence':'a'*64,'payload':{}},True,{'accepted':True}),

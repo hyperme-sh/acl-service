@@ -16,7 +16,7 @@ from acl_service.interfaces.api.private_wrap_routes import PRIVATE, capacity, re
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
 
 router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
-# Prepared for explicit installation; the application does not mount this router.
+# Owner commands share the authenticated group binding and admission limits.
 owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 ITEM_ACTIONS={'item-view','item-epoch-view','item-epoch-append','item-epoch-state',
     'item-grant-view','item-grant-append','item-grant-state','item-status-view','item-status-append','item-status-state','item-wrap-view'}
