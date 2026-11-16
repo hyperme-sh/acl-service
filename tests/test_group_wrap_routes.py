@@ -220,3 +220,55 @@ async def test_item_epoch_plan_is_subject_bound_and_read_only(setup):
         s.authority.group_item_epoch_view.side_effect=AdmissionRejected('private details')
         result=await client.post(PATH+'item-epoch-view',json=body)
         assert result.status_code==403 and 'private details' not in result.text
+
+
+@pytest.mark.asyncio
+async def test_prepared_owner_routes_require_explicit_installation(setup):
+    s=setup
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        for action in ('item-epoch-append','item-epoch-state','item-status-view','item-status-append','item-status-state','item-wrap-view'):
+            assert (await client.post(PATH+action,json={})).status_code==404
+
+
+@pytest.mark.asyncio
+async def test_prepared_owner_commands_bind_the_session_owner_in_ci(setup):
+    s=setup;s.app.include_router(routes.owner_router)
+    scope={**RECORD,'object':'media_owner_item'}
+    operations=[
+        ('item-epoch-append','append_group_item_epoch',{**scope,'at':100,'fence':'a'*64,'payload':{}},True,{'accepted':True}),
+        ('item-epoch-state','group_item_epoch_state',{**scope,'payload':{}},{'state':'applied'},{'state':'applied'}),
+        ('item-status-view','group_item_status_view',{**scope,'reader':'recipient'},{'status':{}},{'status':{}}),
+        ('item-status-append','append_group_item_status',{**scope,'reader':'recipient','at':100,'fence':'a'*64,'payload':{}},True,{'accepted':True}),
+        ('item-status-state','group_item_status_state',{**scope,'reader':'recipient','payload':{}},{'state':'applied'},{'state':'applied'}),
+        ('item-wrap-view','group_item_publication_view',{**scope,'reader':'recipient'},{'metadata':{}},{'metadata':{}}),
+    ]
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        for action,method,body,response,expected in operations:
+            call=AsyncMock(return_value=response);setattr(s.authority,method,call)
+            result=await client.post(PATH+action,json=body)
+            assert result.status_code==200 and result.json()==expected
+            assert result.headers['cache-control']=='private, no-store'
+            args=(str(s.tenant),'fixed-reader',scope['object'],scope['predicate'],scope['set'])
+            if 'reader' in body:args+=('recipient',)
+            if action.endswith('append'):args+=(100,'a'*64,{})
+            elif action.endswith('state'):args+=({},)
+            call.assert_awaited_once_with(*args)
+            patches=[{'owner':'spoofed'},{'object':[]},{'set':'bad'}]
+            if 'payload' in body:patches.append({'payload':[]})
+            if 'reader' in body:patches.extend([{'reader':''},{'reader':[]}])
+            if 'at' in body:patches.extend([{'at':True},{'fence':'bad'}])
+            for patch in patches:assert (await client.post(PATH+action,json={**body,**patch})).status_code==400
+            s.user.scopes=['acl:media:read']
+            assert (await client.post(PATH+action,json=body)).status_code==403
+            s.user.scopes=['acl:media:write'];call.side_effect=AdmissionRejected('secret detail')
+            refused=await client.post(PATH+action,json=body)
+            assert refused.status_code==403 and 'secret detail' not in refused.text
+            call.side_effect=HistoryConflict('secret detail')
+            assert (await client.post(PATH+action,json=body)).status_code==409
+            call.side_effect=None
+            if action.endswith('append'):
+                call.return_value=1
+                assert (await client.post(PATH+action,json=body)).status_code==403
+            limit=270336 if action.startswith('item-epoch-') else 8192 if action.endswith(('append','state')) else 2048
+            assert (await client.post(PATH+action,content=b'x'*(limit+1),headers={'content-type':'application/json'})).status_code==413
+        s.publish.assert_not_awaited();s.read.assert_not_awaited()

@@ -1500,6 +1500,14 @@ class MediaSource:
             return getattr(source,action)(*args,cancel=cancel)
         return await self._work(run)
 
+    async def group_item_epoch_state(self,tenant,owner,object,predicate,set_id,payload):
+        payload=json.loads(encoded(payload))
+        return await self._group_item_read_work('epoch_state',tenant,owner,object,predicate,set_id,payload)
+
+    async def append_group_item_epoch(self,tenant,owner,object,predicate,set_id,at,fence,payload):
+        payload=json.loads(encoded(payload))
+        return await self._group_item_read_work('append_epoch',tenant,owner,object,predicate,set_id,at,fence,payload)
+
     async def group_item_publication_view(self,tenant,owner,object,predicate,set_id,reader):
         return await self._group_item_read_work('publication_view',tenant,owner,object,predicate,set_id,reader)
 

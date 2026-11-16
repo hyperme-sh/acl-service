@@ -16,6 +16,14 @@ from acl_service.interfaces.api.private_wrap_routes import PRIVATE, capacity, re
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
 
 router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
+# Prepared for explicit installation; the application does not mount this router.
+owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
+ITEM_ACTIONS={'item-view','item-epoch-view','item-epoch-append','item-epoch-state',
+    'item-grant-view','item-grant-append','item-grant-state','item-status-view','item-status-append','item-status-state','item-wrap-view'}
+APPEND_ACTIONS={'item-grant-append','item-epoch-append','item-status-append'}
+STATE_ACTIONS={'item-grant-state','item-epoch-state','item-status-state'}
+READER_ACTIONS={'item-grant-view','item-status-view','item-status-append','item-status-state','item-wrap-view'}
+
 
 
 async def execute(action,binding,body):
@@ -24,6 +32,22 @@ async def execute(action,binding,body):
     args=(binding.tenant,binding.reader,body['predicate'],body['set'])
     if action=='item-epoch-view':
         return await binding.authority.group_item_epoch_view(args[0],args[1],body['object'],args[2],args[3])
+    if action=='item-epoch-state':
+        return await binding.authority.group_item_epoch_state(args[0],args[1],body['object'],args[2],args[3],body['payload'])
+    if action=='item-epoch-append':
+        result=await binding.authority.append_group_item_epoch(args[0],args[1],body['object'],args[2],args[3],body['at'],body['fence'],body['payload'])
+        if result is not True:raise AdmissionRejected('group item epoch refused')
+        return {'accepted':True}
+    if action=='item-status-view':
+        return await binding.authority.group_item_status_view(args[0],args[1],body['object'],args[2],args[3],body['reader'])
+    if action=='item-status-state':
+        return await binding.authority.group_item_status_state(args[0],args[1],body['object'],args[2],args[3],body['reader'],body['payload'])
+    if action=='item-status-append':
+        result=await binding.authority.append_group_item_status(args[0],args[1],body['object'],args[2],args[3],body['reader'],body['at'],body['fence'],body['payload'])
+        if result is not True:raise AdmissionRejected('group item status refused')
+        return {'accepted':True}
+    if action=='item-wrap-view':
+        return await binding.authority.group_item_publication_view(args[0],args[1],body['object'],args[2],args[3],body['reader'])
     if action=='item-grant-state':
         return await binding.authority.group_item_grant_state(args[0],args[1],body['object'],args[2],args[3],body['payload'])
     if action=='item-grant-view':
@@ -65,18 +89,20 @@ def parse_body(data,action):
                 or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
         return body
     expected={'predicate','set'}
-    if action in ('item-view','item-epoch-view','item-grant-view','item-grant-append','item-grant-state'):expected.add('object')
-    if action=='item-grant-view':expected|={'reader','withdraw'}
-    if action=='item-grant-append':expected|={'at','fence','payload'}
-    if action=='item-grant-state':expected.add('payload')
+    if action in ITEM_ACTIONS:expected.add('object')
+    if action in READER_ACTIONS:expected.add('reader')
+    if action=='item-grant-view':expected.add('withdraw')
+    if action in APPEND_ACTIONS:expected|={'at','fence','payload'}
+    if action in STATE_ACTIONS:expected.add('payload')
     if action=='wrap-publish':expected|={'at','fence','metadata','payload'}
     if (type(body) is not dict or set(body)!=expected or body['predicate'] not in ('same-group','named-circle')
             or type(body['set']) is not str or re.fullmatch(r'set_p_[0-9a-f]{128}_[0-9a-f]{32}',body['set']) is None):raise ValueError()
-    if action in ('item-view','item-epoch-view','item-grant-view','item-grant-append','item-grant-state') and (type(body['object']) is not str
+    if action in ITEM_ACTIONS and (type(body['object']) is not str
             or re.fullmatch(r'[\x21-\x7e]{1,512}',body['object']) is None):raise ValueError()
-    if action=='item-grant-state' and type(body['payload']) is not dict:raise ValueError()
-    if action=='item-grant-view' and (type(body['reader']) is not str or not 1<=len(body['reader'])<=1024 or type(body['withdraw']) is not bool):raise ValueError()
-    if action=='item-grant-append' and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991 or
+    if action in STATE_ACTIONS and type(body['payload']) is not dict:raise ValueError()
+    if action in READER_ACTIONS and (type(body['reader']) is not str or not 1<=len(body['reader'])<=1024):raise ValueError()
+    if action=='item-grant-view' and type(body['withdraw']) is not bool:raise ValueError()
+    if action in APPEND_ACTIONS and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991 or
             type(body['fence']) is not str or re.fullmatch('[0-9a-f]{64}',body['fence']) is None or type(body['payload']) is not dict):raise ValueError()
     if action=='wrap-publish':
         if (type(body['at']) is not int or not 0<=body['at']<=9007199254740991
@@ -100,7 +126,7 @@ async def operation(action,request,tenant,user):
             or request.headers.get('content-encoding','identity')!='identity'):raise refused(415,'Expected uncompressed JSON')
     try:
         async with asyncio.timeout(5), capacity(request.app.state.group_wrap_body_slots[(tenant,user.sub)]):
-            data=bytearray();limit=92160 if action=='wrap-publish' else 8192 if action in ('item-grant-append','item-grant-state') else 2048
+            data=bytearray();limit=270336 if action in ('item-epoch-append','item-epoch-state') else 92160 if action=='wrap-publish' else 8192 if action in APPEND_ACTIONS|STATE_ACTIONS else 2048
             async with asyncio.timeout(1):
                 async for chunk in request.stream():
                     if len(data)+len(chunk)>limit:raise refused(413,'Request too large')
@@ -158,3 +184,33 @@ async def item_grant_state(request:Request,tenant:UUID=Depends(require_matched_t
 @router.post('/item-epoch-view')
 async def item_epoch_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('item-epoch-view',request,tenant,user)
+
+
+@owner_router.post('/item-epoch-append')
+async def item_epoch_append(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-epoch-append',request,tenant,user)
+
+
+@owner_router.post('/item-epoch-state')
+async def item_epoch_state(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-epoch-state',request,tenant,user)
+
+
+@owner_router.post('/item-status-view')
+async def item_status_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-status-view',request,tenant,user)
+
+
+@owner_router.post('/item-status-append')
+async def item_status_append(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-status-append',request,tenant,user)
+
+
+@owner_router.post('/item-status-state')
+async def item_status_state(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-status-state',request,tenant,user)
+
+
+@owner_router.post('/item-wrap-view')
+async def item_wrap_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-wrap-view',request,tenant,user)
