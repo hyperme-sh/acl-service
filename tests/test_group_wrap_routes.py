@@ -25,7 +25,8 @@ def setup(monkeypatch):
                               group_wrap_view=AsyncMock(return_value={'fence':'a'*64}),
                               group_item_view=AsyncMock(return_value={'fence':'b'*64,'expiresAt':102}))
     binding=SimpleNamespace(tenant=str(tenant),reader='fixed-reader',authority=authority,store=SimpleNamespace(tenant=str(tenant)))
-    app=FastAPI();app.include_router(routes.router);app.include_router(routes.owner_router)
+    app=FastAPI();app.include_router(routes.router);app.include_router(routes.owner_router);app.include_router(routes.item_byte_router)
+    app.state.private_wrap_bindings=None
     app.state.group_wrap_bindings={(tenant,user.sub):binding}
     app.state.group_wrap_slots=asyncio.Semaphore(2)
     app.state.group_wrap_body_slots={(tenant,user.sub):asyncio.Semaphore(1)}
@@ -127,7 +128,7 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
     monkeypatch.setattr(module,'AclServiceDbMiddleware',NoDatabase)
     s=setup
     app=module.create_app(signed_store_bindings={},statement_bindings={},delegation_bindings={},
-        private_wrap_bindings={},media_allocation_bindings={},group_allocation_bindings={},
+        private_wrap_bindings={(s.tenant,s.user.sub):s.binding},media_allocation_bindings={},group_allocation_bindings={},
         group_wrap_bindings={(s.tenant,s.user.sub):s.binding})
     app.state.rate_limiter=s.app.state.rate_limiter
     app.dependency_overrides[get_current_user]=lambda:s.user
@@ -156,6 +157,19 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
             app.state.group_wrap_bindings=None
             assert (await client.post('/api/v1'+PATH+action,json=body)).status_code==503
             app.state.group_wrap_bindings={(s.tenant,s.user.sub):s.binding}
+        from acl_service.domain.group_item_delivery import DeliveredGroupItemWrap
+        publish=AsyncMock(return_value='d'*64)
+        read=AsyncMock(return_value=DeliveredGroupItemWrap(b'opaque',scope['object'],scope['predicate'],scope['set'],2,'a'*64,'b'*64,3,'c'*64,'e'*64,102))
+        monkeypatch.setattr(routes,'publish_group_item_wrap',publish);monkeypatch.setattr(routes,'deliver_group_item_wrap',read)
+        body={**scope,'reader':'anchor','at':100,'fence':'a'*64,'metadata':{'digest':'d'*64},'payload':base64.b64encode(b'opaque').decode()}
+        result=await client.post('/api/v1'+PATH+'item-wrap-publish',json=body)
+        assert result.status_code==200 and result.json()=={'digest':'d'*64}
+        publish.assert_awaited_once_with(s.authority,s.binding.store,str(s.tenant),'fixed-reader',scope['object'],scope['predicate'],scope['set'],
+            'anchor',100,'a'*64,body['metadata'],b'opaque')
+        result=await client.post('/api/v1'+PATH+'item-wrap-read',json=scope)
+        assert result.status_code==200 and result.json()['payload']==body['payload']
+        assert result.headers['cache-control']=='private, no-store'
+        read.assert_awaited_once_with(s.authority,s.binding.store,str(s.tenant),'fixed-reader',scope['object'],scope['predicate'],scope['set'])
     s.authority.group_item_authority_view.assert_awaited_once_with(str(s.tenant),'fixed-reader','media_owner_item')
     s.authority.group_wrap_view.assert_awaited_once()
     s.authority.group_item_view.assert_awaited_once()
@@ -292,16 +306,16 @@ async def test_owner_commands_bind_the_session_owner_in_ci(setup):
 
 
 @pytest.mark.asyncio
-async def test_group_item_byte_routes_remain_uninstalled(setup):
+async def test_group_item_byte_routes_require_runtime_configuration(setup):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=setup.app),base_url='https://acl') as client:
         for action in ('item-wrap-publish','item-wrap-read'):
-            assert (await client.post(PATH+action,json={})).status_code==404
+            assert (await client.post(PATH+action,json={})).status_code==503
 
 
 @pytest.mark.asyncio
 async def test_group_item_bytes_use_private_media_binding_and_fixed_reader(setup,monkeypatch):
     from acl_service.domain.group_item_delivery import DeliveredGroupItemWrap,GroupItemDeliveryRejected
-    s=setup;s.app.include_router(routes.item_byte_router)
+    s=setup
     binding=SimpleNamespace(tenant=str(s.tenant),reader='media-reader',authority=object(),store=SimpleNamespace(tenant=str(s.tenant)))
     s.app.state.private_wrap_bindings={(s.tenant,s.user.sub):binding}
     s.app.state.private_wrap_slots=asyncio.Semaphore(2)

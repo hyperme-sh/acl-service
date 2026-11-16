@@ -19,7 +19,7 @@ from acl_service.interfaces.api.signed_store_routes import _unique_fields, _inva
 router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 # Owner commands share the authenticated group binding and admission limits.
 owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
-# Prepared byte routes are not installed by the application.
+# Item byte routes use private-media allocations and current joint authority.
 item_byte_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 ITEM_BYTES={'item-wrap-publish','item-wrap-read'}
 ITEM_ACTIONS={'item-view','item-epoch-view','item-epoch-append','item-epoch-state',
