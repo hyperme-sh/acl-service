@@ -8,7 +8,7 @@ each entry has `tenant`, `subject`, `principal`, `postgresFile`, `policyFile`,
 key is an unencrypted PEM P-256 private key; never place it in request data.
 The PostgreSQL source must already have its independent checkpoint. The policy
 file uses the signed-store policy shape and is reloaded for each guarded request.
-The signing key must match the installed witness policy held under a shared
+The signing key must match the installed witness policy held under its signing
 lock through signing and source commit. A source cannot select conflicting
 policy files or signer keys across subjects. Startup creates no policy, source,
 identity or grant. The endpoint accepts the fully signed public wallet-rotation
