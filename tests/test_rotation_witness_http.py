@@ -68,9 +68,10 @@ async def test_bounds_refusals_capacity_and_guard():
     with pytest.raises(HistoryConflict):source.attest_wallet_rotation.call_args.kwargs['cancel']()
 
 
-def test_rotation_router_is_not_installed():
+def test_rotation_router_is_disabled_without_bindings():
     from acl_service.app import create_app
-    assert not any(getattr(route,'path','')=='/api/v1/acl/sociacl/rotation/wallet' for route in create_app().routes)
+    app=create_app()
+    assert app.state.rotation_witness_bindings is None
 
 
 @pytest.mark.asyncio

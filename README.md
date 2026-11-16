@@ -1,5 +1,20 @@
 # acl-service
 
+`SOCIACL_ROTATION_BINDINGS_FILE` enables `POST /api/v1/acl/sociacl/rotation/wallet`
+only for configured tenant/subject pairs with `acl:identity:rotate`. Without the
+private file, signing is unavailable. Version 1 contains a `bindings` array;
+each entry has `tenant`, `subject`, `principal`, `postgresFile`, `policyFile`,
+`kid` and `signingKeyFile`. Paths are absolute private regular files. The signing
+key is an unencrypted PEM P-256 private key; never place it in request data.
+The PostgreSQL source must already have its independent checkpoint. The policy
+file uses the signed-store policy shape and is reloaded for each guarded request.
+The signing key must match the installed witness policy held under its signing
+lock through signing and source commit. A source cannot select conflicting
+policy files or signer keys across subjects. Startup creates no policy, source,
+identity or grant. The endpoint accepts the fully signed public wallet-rotation
+request and returns only its timestamp attestation. It does not append the
+rotation, change a recovery copy, or grant a browser session.
+
 `POST /api/v1/acl/sociacl/media/groups/item-view` accepts exactly
 `{object, predicate, set}` under an existing `SOCIACL_GROUP_WRAP_FILE` subject
 binding and `acl:media:write`. The owner comes from that authenticated binding.
