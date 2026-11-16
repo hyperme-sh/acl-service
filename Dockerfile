@@ -45,8 +45,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 COPY scripts/install-image-runtime.py /tmp/install-image-runtime.py
 # The token is mounted only for dependency installation, never copied into a layer.
-RUN --mount=type=secret,id=dependency_read_token,required=true \
-    python /tmp/install-image-runtime.py
+RUN python /tmp/install-image-runtime.py
 
 FROM python:3.13-slim-bookworm AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 \

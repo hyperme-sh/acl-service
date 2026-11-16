@@ -15,6 +15,7 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
+          enable-cache: false
       - name: Read exact reviewed Core allocation wire source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -30,7 +31,7 @@ jobs:
           cmp core-allocation-wire/src/api/domain/group_allocation_grant.py src/acl_service/allocation_protocol/group_allocation_grant.py
           cmp core-allocation-wire/src/api/domain/group_allocation_request.py src/acl_service/allocation_protocol/group_allocation_request.py
       - name: Build candidate before running repository validators
-        run: uv build --out-dir "$RUNNER_TEMP/acl-candidate"
+        run: bash scripts/anonymous-command.sh uv build --out-dir "$RUNNER_TEMP/acl-candidate"
       - name: Export the exact candidate contract for source reconciliation
         run: python3 scripts/export_release_contract.py "$RUNNER_TEMP"/acl-candidate/*.whl --output "$RUNNER_TEMP/acl-candidate-contract"
       - name: Check exact candidate without replacing it
@@ -40,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           expected=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
-          bash scripts/check-package.sh --fixtures
+          bash scripts/anonymous-command.sh env UV_PROJECT_ENVIRONMENT="$PWD/.venv" UV_PYTHON_INSTALL_DIR="$RUNNER_TEMP/acl-python" RELEASE_CANDIDATE_DIR="$RELEASE_CANDIDATE_DIR" PREPARATION_EVIDENCE_DIR="$PREPARATION_EVIDENCE_DIR" bash scripts/check-package.sh --fixtures
           (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$expected")
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -124,3 +125,19 @@ jobs:
         run: |
           .venv/bin/python -m coverage run --branch --source=acl_service.infrastructure.postgres_history_store,acl_service.infrastructure.postgres_media_provision,acl_service.infrastructure.group_allocation_journal -m pytest -q integration tests/test_postgres_history_units.py tests/test_group_allocation_journal.py --ignore=integration/nightly
           .venv/bin/python -m coverage report --fail-under=85 -m
+      - name: Remove job-local preparation output
+        if: always()
+        run: rm -rf -- .venv "$RUNNER_TEMP/acl-python" "$RUNNER_TEMP/acl-candidate" "$RUNNER_TEMP/acl-candidate-contract" "$RUNNER_TEMP/acl-prepared-evidence"
+  runtime-public:
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Qualify public runtime without dependency credentials
+        run: |
+          image="acl-service:preparation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
+          bash scripts/anonymous-command.sh docker build -t "$image" .
+          bash scripts/anonymous-command.sh bash scripts/check-image.sh "$image"

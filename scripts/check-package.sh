@@ -40,14 +40,14 @@ check_lock() {
 sync_environment() {
   uv sync --frozen --python 3.13 "${sync_options[@]}"
   if (( ${#fixture_wheels[@]} )); then
-    uv pip install --no-config --python .venv/bin/python --no-deps --reinstall "${fixture_wheels[@]}"
+    uv pip install --no-config --python "${UV_PROJECT_ENVIRONMENT:-$PWD/.venv}/bin/python" --no-deps --reinstall "${fixture_wheels[@]}"
   fi
-  .venv/bin/python scripts/verify_preparation_environment.py "$PWD"
+  "${UV_PROJECT_ENVIRONMENT:-$PWD/.venv}/bin/python" scripts/verify_preparation_environment.py "$PWD"
 }
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 if [[ -n "${RELEASE_CANDIDATE_DIR:-}" ]]; then
-  # This is a disposable copy of the immutable Actions artifact, never an upload source.
+  # This is a disposable copy of the job-local candidate, never an upload source.
   mkdir -p "$scratch/dist"
   cp "$RELEASE_CANDIDATE_DIR"/*.whl "$RELEASE_CANDIDATE_DIR"/*.tar.gz "$scratch/dist/"
 else

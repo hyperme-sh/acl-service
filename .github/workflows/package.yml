@@ -2,142 +2,16 @@ name: Standalone package
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: acl-moving-test
+  cancel-in-progress: false
 jobs:
-  image:
-    outputs:
-      artifact-id: ${{ steps.runtime-upload.outputs.artifact-id }}
-      image-id: ${{ steps.runtime-build.outputs.image-id }}
-      archive-sha256: ${{ steps.runtime-build.outputs.archive-sha256 }}
-      producer-attempt: ${{ steps.runtime-build.outputs.producer-attempt }}
-    needs: package
-    if: github.ref == 'refs/heads/main'
-    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 15
-    environment: controlplane-libs-read
-    steps:
-      - name: Mint repository-scoped dependency token
-        id: dependency-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
-        with:
-          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
-          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
-          owner: hyperme-sh
-          permission-contents: read
-          repositories: |
-            auth-service
-            controlplane-api
-            controlplane-core
-            controlplane-db
-            controlplane-events
-            controlplane-identity
-            controlplane-models
-            controlplane-tenancy
-            user-service
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Build and verify the standalone runtime
-        id: runtime-build
-        env:
-          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="acl-service-check:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          trap 'docker image rm "$image" >/dev/null 2>&1 || true' EXIT
-          docker build --secret id=dependency_read_token,env=DEPENDENCY_READ_TOKEN \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
-            --label org.opencontainers.image.source=https://github.com/hyperme-sh/acl-service \
-            -t "$image" .
-          unset DEPENDENCY_READ_TOKEN
-          image_id=$(docker image inspect --format '{{.Id}}' "$image")
-          echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
-          echo "producer-attempt=$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
-          bash scripts/check-image.sh "$image_id"
-          runtime_dir=$(mktemp -d "$RUNNER_TEMP/acl-tested-runtime.XXXXXX")
-          echo "RUNTIME_ARTIFACT_DIR=$runtime_dir" >> "$GITHUB_ENV"
-          docker image save --output "$runtime_dir/runtime.docker.tar" "$image_id"
-          python3 scripts/record_runtime_artifact.py "$runtime_dir/runtime.docker.tar" \
-            --image-id "$image_id" --revision "$GITHUB_SHA" \
-            --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" \
-            --output "$runtime_dir/runtime-provenance.json"
-          archive_sha256=$(sha256sum "$runtime_dir/runtime.docker.tar")
-          echo "archive-sha256=${archive_sha256%% *}" >> "$GITHUB_OUTPUT"
-      - name: Retain qualified local runtime for deployment preparation
-        id: runtime-upload
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: tested-runtime
-          path: ${{ env.RUNTIME_ARTIFACT_DIR }}/*
-          if-no-files-found: error
-          retention-days: 30
-          compression-level: 0
-  runtime-replay:
-    needs: image
-    if: github.ref == 'refs/heads/main'
-    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Prepare isolated download directory
-        run: echo "RUNTIME_REPLAY_DIR=$(mktemp -d "$RUNNER_TEMP/acl-runtime-replay.XXXXXX")" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          artifact-ids: ${{ needs.image.outputs.artifact-id }}
-          path: ${{ env.RUNTIME_REPLAY_DIR }}
-          merge-multiple: true
-      - name: Verify and replay the retained runtime without dependency credentials
-        env:
-          EXPECTED_IMAGE_ID: ${{ needs.image.outputs.image-id }}
-          EXPECTED_ARCHIVE_SHA256: ${{ needs.image.outputs.archive-sha256 }}
-          EXPECTED_PRODUCER_ATTEMPT: ${{ needs.image.outputs.producer-attempt }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/record_runtime_artifact.py "$RUNTIME_REPLAY_DIR/runtime.docker.tar" \
-            --verify-receipt "$RUNTIME_REPLAY_DIR/runtime-provenance.json" \
-            --image-id "$EXPECTED_IMAGE_ID" --revision "$GITHUB_SHA" \
-            --archive-sha256 "$EXPECTED_ARCHIVE_SHA256" \
-            --run-id "$GITHUB_RUN_ID" --attempt "$EXPECTED_PRODUCER_ATTEMPT"
-          existed=false
-          if docker image inspect "$EXPECTED_IMAGE_ID" >/dev/null 2>&1; then existed=true; fi
-          cleanup() {
-            if [ "$existed" = false ]; then docker image rm "$EXPECTED_IMAGE_ID" >/dev/null 2>&1 || true; fi
-            rm -rf "$RUNTIME_REPLAY_DIR"
-          }
-          trap cleanup EXIT
-          docker image load --input "$RUNTIME_REPLAY_DIR/runtime.docker.tar"
-          bash scripts/check-image.sh "$EXPECTED_IMAGE_ID"
-          python3 scripts/check-runtime-startup.py "$EXPECTED_IMAGE_ID"
   source:
-    if: github.ref == 'refs/heads/main'
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 15
-    environment: controlplane-libs-read
+    timeout-minutes: 25
     steps:
-      - name: Mint repository-scoped dependency token
-        id: dependency-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
-        with:
-          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
-          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
-          owner: hyperme-sh
-          permission-contents: read
-          repositories: |
-            auth-service
-            controlplane-api
-            controlplane-core
-            controlplane-db
-            controlplane-events
-            controlplane-identity
-            controlplane-models
-            controlplane-tenancy
-            user-service
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -145,63 +19,19 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
-      - name: Validate source tests
-        env:
-          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
-        shell: bash
+          enable-cache: false
+      - name: Validate public source without inherited credentials
         run: |
-          set -euo pipefail
-          test -n "$DEPENDENCY_READ_TOKEN" || { echo 'Private dependency read access is required'; exit 1; }
-          header=$(printf 'x-access-token:%s' "$DEPENDENCY_READ_TOKEN" | base64 -w0)
-          echo "::add-mask::$header"
-          export GIT_CONFIG_COUNT=9
-          export GIT_CONFIG_KEY_0=http.https://github.com/hyperme-sh/controlplane-api.git.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_1=http.https://github.com/hyperme-sh/controlplane-tenancy.git.extraheader
-          export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_2=http.https://github.com/hyperme-sh/controlplane-identity.git.extraheader
-          export GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_3=http.https://github.com/hyperme-sh/controlplane-db.git.extraheader
-          export GIT_CONFIG_VALUE_3="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_4=http.https://github.com/hyperme-sh/controlplane-events.git.extraheader
-          export GIT_CONFIG_VALUE_4="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_5=http.https://github.com/hyperme-sh/user-service.git.extraheader
-          export GIT_CONFIG_VALUE_5="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_6=http.https://github.com/hyperme-sh/controlplane-core.git.extraheader
-          export GIT_CONFIG_VALUE_6="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_7=http.https://github.com/hyperme-sh/auth-service.git.extraheader
-          export GIT_CONFIG_VALUE_7="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_8=http.https://github.com/hyperme-sh/controlplane-models.git.extraheader
-          export GIT_CONFIG_VALUE_8="AUTHORIZATION: basic $header"
-          unset DEPENDENCY_READ_TOKEN
+          bash scripts/anonymous-command.sh bash -euo pipefail <<'CHECK'
           uv lock --check
           uv sync --frozen
           uv run --frozen pytest
+          CHECK
   package:
-    needs: [source]
-    if: github.ref == 'refs/heads/main'
+    needs: source
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
-    timeout-minutes: 15
-    environment: controlplane-libs-read
+    timeout-minutes: 35
     steps:
-      - name: Mint repository-scoped dependency token
-        id: dependency-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
-        with:
-          app-id: ${{ vars.CONTROLPLANE_LIBS_APP_ID }}
-          private-key: ${{ secrets.CONTROLPLANE_LIBS_APP_PRIVATE_KEY }}
-          owner: hyperme-sh
-          permission-contents: read
-          repositories: |
-            auth-service
-            controlplane-api
-            controlplane-core
-            controlplane-db
-            controlplane-events
-            controlplane-identity
-            controlplane-models
-            controlplane-tenancy
-            user-service
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -209,44 +39,99 @@ jobs:
         with:
           version: '0.11.26'
           python-version: '3.13'
-      - name: Build candidate before executing package checks
-        shell: bash
+          enable-cache: false
+      - name: Prepare job-local candidate
         run: |
-          set -euo pipefail
-          candidate_dir=$(mktemp -d "$RUNNER_TEMP/release-candidate.XXXXXX")
-          echo "RELEASE_CANDIDATE_DIR=$candidate_dir" >> "$GITHUB_ENV"
-          uv build --no-sources --out-dir "$candidate_dir"
-      - name: Validate ACL service package
-        env:
-          DEPENDENCY_READ_TOKEN: ${{ steps.dependency-token.outputs.token }}
-        shell: bash
+          candidate=$(mktemp -d "$RUNNER_TEMP/acl-candidate.XXXXXX")
+          echo "RELEASE_CANDIDATE_DIR=$candidate" >> "$GITHUB_ENV"
+          bash scripts/anonymous-command.sh uv build --no-sources --out-dir "$candidate"
+      - name: Qualify exact package and owned storage contracts
         run: |
-          set -euo pipefail
-          test -n "$DEPENDENCY_READ_TOKEN" || { echo 'Private dependency read access is required'; exit 1; }
-          header=$(printf 'x-access-token:%s' "$DEPENDENCY_READ_TOKEN" | base64 -w0)
-          echo "::add-mask::$header"
-          export GIT_CONFIG_COUNT=9
-          export GIT_CONFIG_KEY_0=http.https://github.com/hyperme-sh/controlplane-api.git.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_1=http.https://github.com/hyperme-sh/controlplane-tenancy.git.extraheader
-          export GIT_CONFIG_VALUE_1="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_2=http.https://github.com/hyperme-sh/controlplane-identity.git.extraheader
-          export GIT_CONFIG_VALUE_2="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_3=http.https://github.com/hyperme-sh/controlplane-db.git.extraheader
-          export GIT_CONFIG_VALUE_3="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_4=http.https://github.com/hyperme-sh/controlplane-events.git.extraheader
-          export GIT_CONFIG_VALUE_4="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_5=http.https://github.com/hyperme-sh/user-service.git.extraheader
-          export GIT_CONFIG_VALUE_5="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_6=http.https://github.com/hyperme-sh/controlplane-core.git.extraheader
-          export GIT_CONFIG_VALUE_6="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_7=http.https://github.com/hyperme-sh/auth-service.git.extraheader
-          export GIT_CONFIG_VALUE_7="AUTHORIZATION: basic $header"
-          export GIT_CONFIG_KEY_8=http.https://github.com/hyperme-sh/controlplane-models.git.extraheader
-          export GIT_CONFIG_VALUE_8="AUTHORIZATION: basic $header"
-          unset DEPENDENCY_READ_TOKEN
-          # Keep expected digests in this shell, not a test-writable manifest.
-          candidate_hashes=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
+          bash scripts/anonymous-command.sh env RELEASE_CANDIDATE_DIR="$RELEASE_CANDIDATE_DIR" bash -euo pipefail <<'CHECK'
+          expected=$(cd "$RELEASE_CANDIDATE_DIR" && sha256sum -- *.whl *.tar.gz)
           bash scripts/check-package.sh
           bash scripts/check-postgres.sh
-          (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$candidate_hashes")
+          (cd "$RELEASE_CANDIDATE_DIR" && sha256sum --check <<< "$expected")
+          CHECK
+      - name: Remove job-local candidate
+        if: always()
+        run: rm -rf -- "$RELEASE_CANDIDATE_DIR"
+  image:
+    needs: package
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-id: ${{ steps.publish.outputs.image-id }}
+      digest: ${{ steps.publish.outputs.digest }}
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build and qualify public runtime
+        run: |
+          image="ghcr.io/hyperme-sh/acl-service/runtime:preparation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          echo "QUALIFIED_IMAGE=$image" >> "$GITHUB_ENV"
+          bash scripts/anonymous-command.sh docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" --label org.opencontainers.image.source=https://github.com/hyperme-sh/acl-service -t "$image" .
+          bash scripts/anonymous-command.sh bash scripts/check-image.sh "$image"
+      - name: Publish qualified current main to moving TEST
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          if [[ "$current" != "$GITHUB_SHA" ]]; then
+            echo 'Superseded main; skip moving TEST publication'
+            exit 0
+          fi
+          export DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/acl-registry.XXXXXX")
+          output=$(mktemp "$RUNNER_TEMP/acl-published.XXXXXX")
+          trap 'rm -rf -- "$DOCKER_CONFIG" "$output"' EXIT
+          printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          unset GH_TOKEN
+          image_id=$(docker image inspect "$QUALIFIED_IMAGE" --format '{{.Id}}')
+          python3 scripts/publish_container.py --revision "$GITHUB_SHA" --image-id "$image_id" --channel test --publish > "$output"
+          cat "$output"
+          python3 - "$output" "$GITHUB_OUTPUT" <<'OUTPUT'
+          import json, re, sys
+          rows = [json.loads(line) for line in open(sys.argv[1]) if line.startswith('{"published":')]
+          row, = rows
+          digest, = row['registry_digests']
+          assert re.fullmatch(r'ghcr.io/hyperme-sh/acl-service/runtime@sha256:[a-f0-9]{64}', digest)
+          with open(sys.argv[2], 'a') as target:
+              target.write('image-id=' + row['image_id'] + '\ndigest=' + digest + '\n')
+          OUTPUT
+      - name: Remove qualified local image
+        if: always()
+        run: docker image rm "$QUALIFIED_IMAGE" >/dev/null 2>&1 || true
+  runtime-replay:
+    needs: image
+    if: needs.image.outputs.digest != ''
+    permissions:
+      contents: read
+      packages: read
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Pull and replay exact qualified GHCR bytes
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          QUALIFIED_DIGEST: ${{ needs.image.outputs.digest }}
+          EXPECTED_IMAGE_ID: ${{ needs.image.outputs.image-id }}
+        run: |
+          set -euo pipefail
+          [[ "$QUALIFIED_DIGEST" =~ ^ghcr.io/hyperme-sh/acl-service/runtime@sha256:[a-f0-9]{64}$ ]]
+          export DOCKER_CONFIG=$(mktemp -d "$RUNNER_TEMP/acl-replay.XXXXXX")
+          trap 'docker image rm "$QUALIFIED_DIGEST" >/dev/null 2>&1 || true; rm -rf -- "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          unset GHCR_TOKEN
+          docker pull "$QUALIFIED_DIGEST"
+          test "$(docker image inspect "$QUALIFIED_DIGEST" --format '{{.Id}}')" = "$EXPECTED_IMAGE_ID"
+          bash scripts/anonymous-command.sh bash scripts/check-image.sh "$EXPECTED_IMAGE_ID"
+          bash scripts/anonymous-command.sh python3 scripts/check-runtime-startup.py "$EXPECTED_IMAGE_ID"
