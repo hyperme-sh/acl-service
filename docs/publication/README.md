@@ -31,6 +31,8 @@ LFS bytes and external archives are outside this scan. Secret matches require
 exact-object/line classification; unexpected matches fail CI without printing
 secret contents. A clean automated scan is not general publication clearance.
 
-Retained-image review remains a separate follow-up. No source bundles, settings
+The [retained-image review](retained-image-review.md) records four initial
+images and their hosted-content findings. ACL #197 owns neutral dependency
+cleanup; retained images remain uncleared. No source bundles, settings
 or visibility changes, history rewrites, dependency upgrades or manual releases
 are introduced. GHCR TEST remains moving and integration/e2e stays nightly.
