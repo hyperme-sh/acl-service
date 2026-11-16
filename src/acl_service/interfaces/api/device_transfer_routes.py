@@ -13,6 +13,7 @@ from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.interfaces.api.contact_routes import connected_result
 from acl_service.interfaces.api.private_wrap_routes import PRIVATE, refused
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
+from acl_service.nightly import check_scope
 
 router = APIRouter(prefix='/acl/sociacl/device-transfer', tags=['SociACL'])
 
@@ -21,6 +22,7 @@ router = APIRouter(prefix='/acl/sociacl/device-transfer', tags=['SociACL'])
 async def device_transfer(action: str, request: Request,
     tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
     if action not in ('state','current'): raise refused(404, 'Unknown transfer operation')
+    check_scope(tenant, user.sub)
     if 'acl:identity:transfer' not in user.scopes: raise refused(403, 'Transfer refused')
     bindings = request.app.state.device_transfer_bindings
     if bindings is None: raise refused(503, 'Transfer unavailable')
@@ -33,6 +35,7 @@ async def device_transfer(action: str, request: Request,
     stopped, work = threading.Event(), None
     def guard():
         if stopped.is_set(): raise HistoryConflict('transfer request expired')
+        check_scope(tenant, user.sub)
     try:
         async with asyncio.timeout(12):
             if (request.headers.get('content-type','').split(';')[0].strip().lower() != 'application/json'
@@ -48,6 +51,7 @@ async def device_transfer(action: str, request: Request,
             except (ValueError, TypeError, RecursionError): raise refused(400, 'Invalid transfer request') from None
             if scope['tenant'] != str(tenant) or identity['principal'] != binding.principal:
                 raise refused(403, 'Transfer refused')
+            check_scope(tenant, user.sub, scope)
             work = asyncio.create_task(asyncio.to_thread(binding.source.read, binding.principal, scope, identity, transfer, revision, guard))
             result = await connected_result(request, work, stopped)
             return JSONResponse(result, headers=PRIVATE)

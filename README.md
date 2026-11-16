@@ -1458,3 +1458,24 @@ filters before four-entry pagination. Deleted, revoked, expired or incompletely
 delivered items are hidden. Missing primary data or checkpoint conflicts fail
 closed. Catalog entries do not authorize later reads; each key read rechecks the
 current item and group grants, statuses, membership, epochs and checkpoints.
+
+`ACL_NIGHTLY_RUN_CONFIG` enables an independent TEST run owner around the two
+native device-transfer reads. It uses the shared identity registry transport,
+with owner `acl`, canonical origin and Auth origin `https://api.test.hyperme.sh`,
+separate owner/controller keys and explicit fixture scopes. Missing configuration
+keeps registration unavailable. The controller path is
+`POST /api/v1/acl/internal/nightly-run`; admitted transfer requests carry only
+`X-Nightly-Run-Grant`, never an owner key. The exact native subject, tenant and
+both transfer origins must match the admitted scope. The worker checks the shared
+context before protected reads; unknown completion retains the pending operation.
+The normal cryptographic bearer verifier also refuses original-run tokens without
+an admission, including introspection results. No paid-router scope is granted.
+
+Standalone wheel consumers use the qualified application graph bundled in the
+source archive: `bash scripts/install-qualified.sh /path/to/venv/bin/python /path/to/acl_service.whl`.
+The installer verifies the manifest and every private wheel digest, then performs
+normal dependency resolution with explicit overrides for those audited artifacts.
+A bare wheel installation without that graph is not the supported installation
+contract for independently advancing shared libraries. CI uses this same installer
+before executing the external-wheel contracts. Container/source consumers retain
+the recorded `uv.lock` and explicit project overrides.
