@@ -43,7 +43,7 @@ def source():
 
 def test_signing_holds_policy_lease_through_commit(source):
     value,state,policy,result,signer=source
-    assert value.attest_wallet_rotation('owner',{})=='signed-token'
+    assert value.attest_wallet_rotation('owner',{'issuedAt':90})=='signed-token'
     assert state.committed and not state.leased
     signer.sign_verified.assert_called_once_with(result['claims'],issued_at=90,lifetime=900)
     value.store._observe_floor.assert_called_once()
@@ -58,7 +58,7 @@ def test_final_guard_prevents_token_delivery(source,change):
         if change=='policy':policy['activePrincipals']=[]
         if change=='cancel':cancel.side_effect=HistoryConflict('cancelled')
     state.finish=finish
-    with pytest.raises(HistoryConflict):value.attest_wallet_rotation('owner',{},cancel=cancel)
+    with pytest.raises(HistoryConflict):value.attest_wallet_rotation('owner',{'issuedAt':90},cancel=cancel)
     assert not state.committed
 
 
@@ -68,7 +68,7 @@ def test_invalid_source_owner_capacity_and_native_heads_refuse(source):
     with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'large':'x'*65537})
     for heads in ({},{'owner':True},{'owner':-1}):
         result['heads']=heads
-        with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{})
+        with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'issuedAt':90})
     assert not signer.sign_verified.called
     value.store.has_freshness=False
     with pytest.raises(ValueError):RotationWitnessSource(value.store,policy_at=None,witness_policy=None,kid='',private_key=None)
@@ -77,20 +77,20 @@ def test_invalid_source_owner_capacity_and_native_heads_refuse(source):
 def test_missing_policy_key_or_owner_refuse(source):
     value,state,policy,result,signer=source
     value.kid='missing'
-    with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{})
+    with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'issuedAt':90})
     value.kid='key'
     with patch('rotation_witness_source.StatementSource._accounts',return_value={}):
-        with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{})
+        with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'issuedAt':90})
     @contextmanager
     def missing():yield None
     value.witness_policy.locked_policy=missing
-    with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{})
+    with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'issuedAt':90})
 
 
 def test_native_refusal_signing_failure_and_lease_exit_failure_propagate(source):
     value,state,policy,result,signer=source
     signer.sign_verified.side_effect=ValueError('signer refused')
-    with pytest.raises(ValueError):value.attest_wallet_rotation('owner',{})
+    with pytest.raises(ValueError):value.attest_wallet_rotation('owner',{'issuedAt':90})
     assert not state.committed
     signer.sign_verified.side_effect=None
     @contextmanager
@@ -98,4 +98,14 @@ def test_native_refusal_signing_failure_and_lease_exit_failure_propagate(source)
         yield SimpleNamespace(jwks=policy['trust']['jwks'])
         raise HistoryConflict('lease ended')
     value.witness_policy.locked_policy=changed
-    with pytest.raises(HistoryConflict):value.attest_wallet_rotation('owner',{})
+    with pytest.raises(HistoryConflict):value.attest_wallet_rotation('owner',{'issuedAt':90})
+
+
+@pytest.mark.parametrize('field,value',[('issuedAt',91),('principal','foreign'),('typ','other')])
+def test_native_output_is_bound_to_requested_owner_and_time(source,field,value):
+    instance,state,policy,result,signer=source
+    if field=='issuedAt':result[field]=value
+    else:result['claims'][field]=value
+    with pytest.raises(AdmissionRejected):
+        instance.attest_wallet_rotation('owner',{'issuedAt':90})
+    assert not signer.sign_verified.called and not state.committed

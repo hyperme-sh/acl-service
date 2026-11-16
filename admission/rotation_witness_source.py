@@ -52,7 +52,10 @@ class RotationWitnessSource:
                 result = json.loads(native._run_verifier(principal, at, genesis=_record(account.genesis),
                     entries=[_record(row) for row in account.entries], peers=_peer_inputs(principal, accounts),
                     rotationRequest=request))
-                if set(result) != {'issuedAt','claims','heads'} or set(result['heads']) != set(accounts):
+                if (set(result) != {'issuedAt','claims','heads'} or set(result['heads']) != set(accounts)
+                        or result['issuedAt'] != request.get('issuedAt')
+                        or result['claims'].get('principal') != principal
+                        or result['claims'].get('typ') != 'sociacl-rotate-attest-v4'):
                     raise AdmissionRejected('invalid rotation result')
                 for owner, head in result['heads'].items():
                     if type(head) is not int or not 0 <= head <= 9007199254740991:
