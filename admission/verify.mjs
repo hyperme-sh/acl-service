@@ -1,3 +1,4 @@
+import {walletRotationWitness} from './rotation-witness.mjs';
 import {credentialGraph} from './credential-graph.mjs';
 import {deviceTransferState} from './device-transfer.mjs';
 import {contactDocument} from './contact-document.mjs';
@@ -16,7 +17,7 @@ function requireResult(result) {
   return result.value;
 }
 
-function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, credentialLookup, agentGraph, groupGraph, groupObjectGraph, groupPolicyGraph, groupConsentGraph, groupWithdrawalGraph, groupCohortGraph, groupMemberStateGraph, mediaObject, mediaRecord, contactDocumentInput, deviceTransfer}) {
+function verify({principal, trust, now, genesis, entries, record, grant, signature, peers, observe, graph, credentialLookup, rotationRequest, agentGraph, groupGraph, groupObjectGraph, groupPolicyGraph, groupConsentGraph, groupWithdrawalGraph, groupCohortGraph, groupMemberStateGraph, mediaObject, mediaRecord, contactDocumentInput, deviceTransfer}) {
   const accounts = new Map();
   const wallets = new Map();
   const revokes = new Map();
@@ -43,7 +44,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
     }
     accounts.set(account.principal, {...account, rotations, links, ownRevokes});
   }
-  if (!deviceTransfer && !contactDocumentInput && !observe && !credentialLookup && !graph && !agentGraph && !groupGraph && !groupObjectGraph && !groupPolicyGraph && !groupConsentGraph && !groupWithdrawalGraph && !groupCohortGraph && !groupMemberStateGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
+  if (!deviceTransfer && !contactDocumentInput && !observe && !credentialLookup && !rotationRequest && !graph && !agentGraph && !groupGraph && !groupObjectGraph && !groupPolicyGraph && !groupConsentGraph && !groupWithdrawalGraph && !groupCohortGraph && !groupMemberStateGraph && !mediaObject && entries.length >= MAX_RESOLUTION_INPUT) throw Error('history-limit');
 
   function contextFor(account, until) {
     const links = new Map(account.links);
@@ -83,6 +84,7 @@ function verify({principal, trust, now, genesis, entries, record, grant, signatu
 
   if (deviceTransfer) return JSON.stringify(deviceTransferState(accounts, contextFor, now, principal));
   if (contactDocumentInput) return JSON.stringify(contactDocument(accounts, contextFor, now, contactDocumentInput));
+  if (rotationRequest) return JSON.stringify(walletRotationWitness(accounts, contextFor, now, principal, rotationRequest));
   if (credentialLookup) return JSON.stringify(credentialGraph(accounts, contextFor, now, credentialLookup));
   if (graph) return JSON.stringify(statementGraph(accounts, contextFor, now, graph));
   if (agentGraph) return JSON.stringify(delegationGraph(accounts, contextFor, now, agentGraph));

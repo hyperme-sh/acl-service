@@ -60,3 +60,6 @@
 !scripts/review_runtime_legal.py
 
 !admission/signed_store_source.py
+
+!admission/rotation-witness.mjs
+!admission/rotation_witness_source.py
