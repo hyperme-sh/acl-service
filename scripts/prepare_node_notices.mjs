@@ -5,6 +5,17 @@ import crypto from 'node:crypto';
 const root = process.argv[2];
 const output = process.argv[3];
 const rows = [];
+const supplements = process.argv[4];
+const lock = JSON.parse(fs.readFileSync('package-lock.json'));
+for (const name of fs.readdirSync(supplements)) {
+  const source = path.join(supplements,name);
+  const record = JSON.parse(fs.readFileSync(path.join(source,'source.json')));
+  const pkg = JSON.parse(fs.readFileSync(path.join(root,name,'package.json')));
+  const data = fs.readFileSync(path.join(source,'LICENSE'));
+  if (record.name !== name || record.version !== pkg.version || record.resolved !== lock.packages['node_modules/'+name].resolved || record.sha256 !== crypto.createHash('sha256').update(data).digest('hex')) throw new Error('npm supplement changed: '+name);
+  fs.copyFileSync(path.join(source,'LICENSE'),path.join(root,name,'LICENSE.upstream'));
+}
+
 function visit(dir) {
   for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue;

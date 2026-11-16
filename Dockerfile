@@ -29,7 +29,8 @@ WORKDIR /opt/acl-admission
 COPY admission/package.json admission/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 COPY scripts/prepare_node_notices.mjs /tmp/prepare_node_notices.mjs
-RUN node /tmp/prepare_node_notices.mjs node_modules npm-notices.json
+COPY notices/npm /tmp/npm-notices
+RUN node /tmp/prepare_node_notices.mjs node_modules npm-notices.json /tmp/npm-notices
 COPY admission/credential_source.py admission/credential-graph.mjs admission/device_transfer_source.py admission/device-transfer.mjs admission/history_admission.py admission/contact_source.py admission/contact-document.mjs admission/first_media_owner.py admission/verify.mjs admission/group-authority.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs admission/app-object-policy.mjs admission/statement-quota.mjs admission/delegation_source.py admission/delegation-graph.mjs admission/media_source.py admission/group_source.py admission/group_membership.py admission/group_key_source.py admission/group_wrap_source.py admission/group_item_source.py admission/group_owner_wrap_source.py admission/group_item_grants.py ./
 
 FROM python:3.13-slim-bookworm AS media-contract
