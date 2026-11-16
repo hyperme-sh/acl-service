@@ -8,7 +8,7 @@ const trust={jwks:f.jwks,policy:f.policy,pinnedIss:f.pinnedIss};
 const {attest,...request}=f['rotate-v4-wallet'];
 function run(candidate=request,entries=[f.wallet],extra={}){
  const child=spawnSync(process.execPath,[new URL('./verify.mjs',import.meta.url).pathname],{
-  input:JSON.stringify({principal:f.genesis,genesis:f.binding,entries,trust,now:f.now,peers:[],rotationRequest:candidate,...extra}),encoding:'utf8'});
+  input:JSON.stringify({principal:f.genesis,genesis:f.binding,entries,trust,now:request.issuedAt,peers:[],rotationRequest:candidate,...extra}),encoding:'utf8'});
  return {status:child.status,value:child.status===0?JSON.parse(child.stdout):null};
 }
 test('native wallet rotation requests produce the exact already accepted witness claims',()=>{
