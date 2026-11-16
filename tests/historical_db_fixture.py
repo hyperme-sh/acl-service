@@ -26,7 +26,8 @@ def install():
             path = PurePosixPath(name)
             if path.is_absolute() or '..' in path.parts:
                 raise ValueError('Unsafe schema fixture path')
-            if name == 'controlplane_db/migrations.py' or name.startswith((
+            if name in ('controlplane_db/migrations.py',
+                        'controlplane_db/_share_lookup_hardening.py') or name.startswith((
                 'controlplane_db/migration_chains/', 'controlplane_db/alembic/'
             )):
                 wheel.extract(name, scratch.name)
