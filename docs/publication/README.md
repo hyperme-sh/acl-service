@@ -17,8 +17,10 @@ Node package legal texts remain beside their installed modules, indexed by
 preserved separately. Native SociACL and fetched Cargo dependency legal texts
 are retained with the build lockfile; this includes build dependencies, so the
 collection is not a claim that every listed crate is linked into the library.
-Debian copyright files remain in the base image. This is notice preservation,
-not completion of LGPL/MPL replacement or base-image legal follow-ups.
+Debian copyright files remain in the base image. The separate
+[runtime legal review](runtime-legal-review.md) records the installed LGPL/MPL
+candidates, offline replacement contracts and base-image inventory, including
+the limits of those checks.
 
 Read-only history review covers fetched origin branches, tags and HEAD,
 including bounded archived wheel members. The initial scan examined 1,850

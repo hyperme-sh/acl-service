@@ -82,6 +82,8 @@ RUN useradd --uid 10001 --create-home acl \
     && python -I -c "from acl_service.infrastructure.epoch_verifier import SettledEpochVerifier; assert not SettledEpochVerifier().matches_settled(b'{}')" \
     && python -I -c "from acl_service.infrastructure.epoch_verifier import PrivateGrantVerifier; assert not PrivateGrantVerifier().matches_grant(b'{}', b'{}')" \
     && python -I -c "from acl_service.infrastructure.group_epoch_verifier import GroupEpochVerifier; v=GroupEpochVerifier(); assert not v.matches_manifest(b'{}', b'{}'); assert not v.verifies_history(b'{}'); assert not v.matches_settled(b'{}')"
+RUN --mount=type=bind,source=scripts/review_runtime_legal.py,target=/tmp/review_runtime_legal.py,readonly \
+    python -I /tmp/review_runtime_legal.py > /usr/share/acl-service/notices/runtime-review.json
 WORKDIR /home/acl
 USER 10001:10001
 EXPOSE 8000

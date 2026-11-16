@@ -85,3 +85,8 @@ from pathlib import Path
 print(json.dumps([json.loads(path.read_bytes()) for path in
                   (Path("admission/fixture.json"), Path("admission/store-fixture.json"))]))
 PY
+
+# Read-only legal inventory and import/replacement contracts stay in CI.
+docker run --rm --network none --read-only "$image" cat /usr/share/acl-service/notices/runtime-review.json
+bash scripts/check-library-replacement.sh "$image"
+bash scripts/check-no-source-bundles.sh "$image"
