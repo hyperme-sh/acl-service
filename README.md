@@ -1428,23 +1428,22 @@ credential's reader. Current joint authorization and item allocation checks
 remain in the domain/source coordinators. CI exercises both paths through the
 assembled application. Missing private-media runtime bindings refuse requests.
 
-### Prepared group owner wrap maintenance
+### Group owner wrap maintenance
 
 `GroupOwnerWrapSource` prepares and rechecks a separate owner-only permit for the
 existing encrypted owner wrap of an authentic settled maintenance parent. The
 current signed owner grant, enrolled encryption key, item digest, matching wrap
 revision, current attached or detached item scope and protected checkpoints are
 mandatory. The permit is valid for at most two seconds. It does not authorize a
-recipient read or advance an item epoch; no HTTP route or storage coordinator is
-installed for this capability yet.
+recipient read or advance an item epoch. The authenticated owner route uses the
+private-media allocation and rechecks this permit after storage returns.
 
 This supports preparing replacement direct-recipient wraps before an atomic group
 item epoch update. A browser must retain those opaque wraps before submitting that
 update and reconcile their publication afterward; command acceptance alone does
 not complete key delivery.
 
-The prepared `owner_wrap_router` exposes `item-owner-wrap-read` only when explicitly
-mounted. It requires the subject-bound private-media binding and `acl:media:write`,
+The installed `owner_wrap_router` exposes `item-owner-wrap-read`. It requires the subject-bound private-media binding and `acl:media:write`,
 accepts only object and group scope, and reads through the item allocation. The
 coordinator verifies the returned bytes and rechecks the owner permit after storage.
-The application does not mount this router. Normal reader routes are unchanged.
+Normal reader routes are unchanged.

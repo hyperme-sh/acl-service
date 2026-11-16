@@ -170,6 +170,16 @@ async def test_assembled_routes_precede_generic_group_action(setup,monkeypatch):
         assert result.status_code==200 and result.json()['payload']==body['payload']
         assert result.headers['cache-control']=='private, no-store'
         read.assert_awaited_once_with(s.authority,s.binding.store,str(s.tenant),'fixed-reader',scope['object'],scope['predicate'],scope['set'])
+        from acl_service.domain.group_owner_wrap import DeliveredOwnerWrap
+        maintenance=AsyncMock(return_value=DeliveredOwnerWrap(b'opaque',scope['object'],scope['predicate'],scope['set'],1,'a'*64,'owner-e','b'*64,'c'*64,102))
+        monkeypatch.setattr(routes,'deliver_owner_wrap',maintenance)
+        result=await client.post('/api/v1'+PATH+'item-owner-wrap-read',json=scope)
+        assert result.status_code==200 and result.json()['payload']==base64.b64encode(b'opaque').decode()
+        maintenance.assert_awaited_once_with(s.authority,s.binding.store,str(s.tenant),'fixed-reader',scope['object'],scope['predicate'],scope['set'])
+        s.user.scopes=['acl:media:read']
+        assert (await client.post('/api/v1'+PATH+'item-owner-wrap-read',json=scope)).status_code==403
+        s.user.scopes=['acl:media:write'];app.state.private_wrap_bindings=None
+        assert (await client.post('/api/v1'+PATH+'item-owner-wrap-read',json=scope)).status_code==503
     s.authority.group_item_authority_view.assert_awaited_once_with(str(s.tenant),'fixed-reader','media_owner_item')
     s.authority.group_wrap_view.assert_awaited_once()
     s.authority.group_item_view.assert_awaited_once()
@@ -366,12 +376,10 @@ async def test_group_item_bytes_use_private_media_binding_and_fixed_reader(setup
 
 
 @pytest.mark.asyncio
-async def test_prepared_owner_maintenance_route_is_uninstalled_and_write_scoped(setup,monkeypatch):
+async def test_owner_maintenance_route_is_write_scoped(setup,monkeypatch):
     from acl_service.domain.group_owner_wrap import DeliveredOwnerWrap,OwnerWrapRejected
-    from acl_service.app import create_app
     s=setup
-    # Production assembly remains unchanged; mounting below is contract-local only.
-    assert not any(getattr(route,'path','').endswith('/item-owner-wrap-read') for route in create_app().routes)
+    # Application mounting is exercised by the assembled HTTP contract above.
     assert not any(getattr(route,'path','').endswith('/item-owner-wrap-read') for route in s.app.routes)
     s.app.include_router(routes.owner_wrap_router)
     binding=SimpleNamespace(tenant=str(s.tenant),reader='fixed-owner',authority=object(),store=SimpleNamespace(tenant=str(s.tenant)))

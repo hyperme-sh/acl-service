@@ -70,16 +70,34 @@ class MediaBindingUnits(TestCase):
         binding=m.parse_settings(encode())[0]
         store=Mock();source=Mock()
         modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
-                 for name in ('history_admission','statement_source','media_source','group_source','group_membership','group_key_source','group_wrap_source','group_item_source')}
+                 for name in ('history_admission','statement_source','media_source','group_source','group_membership','group_key_source','group_wrap_source','group_item_source','group_owner_wrap_source')}
         modules['media_source'].MediaSource=source
         modules['acl_service.infrastructure.sqlite_history_store']=SimpleNamespace(SqliteHistoryStore=store)
         with patch.dict(sys.modules,modules):
             self.assertIs(m._source(binding),source.return_value)
         store.assert_called_once_with(binding.history,freshness_path=binding.freshness,require_authority_checkpoint=True)
         source.assert_called_once_with(store.return_value,TENANT)
-        for name in ('history_admission','group_source','group_membership','group_key_source','group_wrap_source','group_item_source'):
+        for name in ('history_admission','group_source','group_membership','group_key_source','group_wrap_source','group_item_source','group_owner_wrap_source'):
             with patch.dict(sys.modules,{**modules,name:SimpleNamespace(__file__='/tmp/other.py')}):
                 with self.assertRaises(ValueError):m._source(binding)
+
+    def test_owner_maintenance_source_loads_from_image_path_before_source_creation(self):
+        binding=m.parse_settings(encode())[0]
+        modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
+                 for name in ('history_admission','statement_source','media_source','group_source','group_membership','group_key_source','group_wrap_source','group_item_source')}
+        store=Mock();modules['acl_service.infrastructure.sqlite_history_store']=SimpleNamespace(SqliteHistoryStore=store)
+        loaded=SimpleNamespace(__file__='/opt/acl-admission/group_owner_wrap_source.py')
+        loader=SimpleNamespace(exec_module=Mock())
+        def source(*args):
+            self.assertIs(sys.modules['group_owner_wrap_source'],loaded)
+            loader.exec_module.assert_called_once_with(loaded)
+            return 'ready'
+        modules['media_source'].MediaSource=source
+        with patch.dict(sys.modules,modules),patch.object(m.importlib.util,'spec_from_file_location',return_value=SimpleNamespace(loader=loader)) as spec,\
+                patch.object(m.importlib.util,'module_from_spec',return_value=loaded):
+            sys.modules.pop('group_owner_wrap_source',None)
+            self.assertEqual(m._source(binding),'ready')
+            spec.assert_called_once_with('group_owner_wrap_source',m.Path('/opt/acl-admission/group_owner_wrap_source.py'))
 
     def test_failed_fixed_module_import_does_not_poison_retry(self):
         binding=m.parse_settings(encode())[0]
@@ -219,7 +237,7 @@ class MediaBindingUnits(TestCase):
         with patch.object(m,'_private_file',side_effect=lambda _:io.BytesIO()),patch.object(m.os.path,'samefile',return_value=True):
             with self.assertRaises(ValueError):m._provisioned(binding)
         modules={name:SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
-                 for name in ('history_admission','statement_source','media_source','group_source','group_membership','group_key_source','group_wrap_source','group_item_source')}
+                 for name in ('history_admission','statement_source','media_source','group_source','group_membership','group_key_source','group_wrap_source','group_item_source','group_owner_wrap_source')}
         factory=Mock();modules['media_source'].MediaSource=factory
         with patch.dict(sys.modules,modules):
             self.assertIs(m._source(binding),factory.return_value)

@@ -245,10 +245,11 @@ def create_app(
     app.state.group_wrap_slots = asyncio.Semaphore(2)
     app.state.group_wrap_body_slots = {key: asyncio.Semaphore(1) for key in (group_wrap_bindings or {})}
     app.state.group_wrap_tenant_slots = {key[0]: asyncio.Semaphore(1) for key in (group_wrap_bindings or {})}
-    from acl_service.interfaces.api.group_wrap_routes import router as group_wrap_router, owner_router as group_item_owner_router, item_byte_router as group_item_byte_router
+    from acl_service.interfaces.api.group_wrap_routes import router as group_wrap_router, owner_router as group_item_owner_router, item_byte_router as group_item_byte_router, owner_wrap_router as group_owner_wrap_router
     app.include_router(group_wrap_router, prefix="/api/v1")
     app.include_router(group_item_owner_router, prefix="/api/v1")
     app.include_router(group_item_byte_router, prefix="/api/v1")
+    app.include_router(group_owner_wrap_router, prefix="/api/v1")
     app.include_router(media_group_router, prefix="/api/v1")
     app.include_router(contact_lane_router)
     app.include_router(first_contact_router)
