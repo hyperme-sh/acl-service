@@ -1333,9 +1333,8 @@ recipient drafts, owner-signed private grants, native manifest and finalization,
 unchanged item-key commitment and ancestry before retaining the next item epoch.
 It records the command digest in the same checkpointed media write. Exact retry
 and `epoch_state` confirm retained bytes without re-signing or implying current
-access. The HTTP append/state routes remain uninstalled until current combined
-snapshot selection, status and item-wrap authorization are connected. Native and
-transaction contracts for this internal admission run only in CI.
+access. Authenticated owner HTTP append/state routes expose this admission.
+Native and transaction contracts run only in CI.
 
 The read-only [SEA device-transfer authority](docs/device-transfer.md) supplies
 scope-bound current identity/history decisions for the shared browser SDK.
@@ -1359,7 +1358,8 @@ Only the authenticated media owner receives the signing draft. Admission binds
 its current joint fence, exact signing time and lifetime, owner signature and
 object-version snapshot; it keeps at most 64 statuses without advancing the
 object version. It does not require a previously published wrap, avoiding a
-status/publication dependency cycle. Status HTTP routes remain uninstalled.
+status/publication dependency cycle. Authenticated owner HTTP routes expose
+status preparation, admission and exact retained-command reconciliation.
 
 Exact status retries confirm checkpointed identical bytes before comparing the
 old preparation fence. `group_item_status_state` reconciles retained bytes after
@@ -1411,10 +1411,11 @@ refused. The same negative snapshot is used by direct selection after admission;
 there is no fallback to a prior positive group snapshot or an earlier epoch.
 
 
-An uninstalled `owner_router` prepares `item-epoch-append`, `item-epoch-state`,
-`item-status-view`, `item-status-append`, `item-status-state` and `item-wrap-view`.
-The application does not mount these routes. CI explicitly mounts them to check
-fixed-subject owner binding, `acl:media:write` scope, strict bounded JSON, private
-responses, capacity limits and cancellation. Epoch bodies are capped at 270336
-bytes and signed status commands at 8192 bytes. Existing application routing
-returns 404 for these prepared commands until separately authorized installation.
+The application installs `owner_router` under `/api/v1/acl/sociacl/media/groups`
+for `item-epoch-append`, `item-epoch-state`, `item-status-view`,
+`item-status-append`, `item-status-state` and `item-wrap-view`. These six owner
+commands require configured tenant/subject bindings and `acl:media:write` scope.
+Missing runtime bindings remain unavailable. The wrap view returns metadata,
+not encrypted bytes or keys. CI checks application installation, fixed-subject
+owner binding, strict bounded JSON, private responses, capacity and cancellation.
+Epoch bodies are capped at 270336 bytes and signed status commands at 8192 bytes.
