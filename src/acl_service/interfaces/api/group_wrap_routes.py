@@ -12,6 +12,7 @@ from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.group_wrap import GroupWrapRejected, publish_group_wrap, deliver_group_wrap
+from acl_service.domain.group_owner_wrap import OwnerWrapRejected, deliver_owner_wrap
 from acl_service.domain.group_item_delivery import GroupItemDeliveryRejected, publish_group_item_wrap, deliver_group_item_wrap
 from acl_service.interfaces.api.private_wrap_routes import PRIVATE, capacity, refused
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
@@ -21,8 +22,10 @@ router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 # Item byte routes use private-media allocations and current joint authority.
 item_byte_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
-ITEM_BYTES={'item-wrap-publish','item-wrap-read'}
-ITEM_ACTIONS={'item-view','item-epoch-view','item-epoch-append','item-epoch-state',
+# Prepared only: the application does not mount this owner maintenance router.
+owner_wrap_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
+ITEM_BYTES={'item-wrap-publish','item-wrap-read','item-owner-wrap-read'}
+ITEM_ACTIONS={'item-owner-wrap-read','item-view','item-epoch-view','item-epoch-append','item-epoch-state',
     'item-grant-view','item-grant-append','item-grant-state','item-status-view','item-status-append','item-status-state','item-wrap-view','item-wrap-publish','item-wrap-read'}
 APPEND_ACTIONS={'item-grant-append','item-epoch-append','item-status-append'}
 STATE_ACTIONS={'item-grant-state','item-epoch-state','item-status-state'}
@@ -31,6 +34,11 @@ READER_ACTIONS={'item-grant-view','item-status-view','item-status-append','item-
 
 
 async def execute(action,binding,body):
+    if action=='item-owner-wrap-read':
+        result=asdict(await deliver_owner_wrap(binding.authority,binding.store,binding.tenant,binding.reader,
+            body['object'],body['predicate'],body['set']))
+        result['payload']=base64.b64encode(result['payload']).decode('ascii')
+        return result
     if action=='item-wrap-publish':
         digest=await publish_group_item_wrap(binding.authority,binding.store,binding.tenant,binding.reader,
             body['object'],body['predicate'],body['set'],body['reader'],body['at'],body['fence'],body['metadata'],body['payload'])
@@ -151,7 +159,7 @@ async def operation(action,request,tenant,user):
                 result=await connected(request,action,binding,body)
             return JSONResponse(result,headers=PRIVATE)
     except HistoryConflict:raise refused(409,'Group wrap authority changed; reconcile') from None
-    except (AdmissionRejected,GroupWrapRejected,GroupItemDeliveryRejected):raise refused(403,'Group wrap refused') from None
+    except (AdmissionRejected,GroupWrapRejected,GroupItemDeliveryRejected,OwnerWrapRejected):raise refused(403,'Group wrap refused') from None
     except TimeoutError:raise refused(503,'Group wraps unavailable') from None
 
 
@@ -238,3 +246,8 @@ async def item_wrap_publish(request:Request,tenant:UUID=Depends(require_matched_
 @item_byte_router.post('/item-wrap-read')
 async def item_wrap_read(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('item-wrap-read',request,tenant,user)
+
+
+@owner_wrap_router.post('/item-owner-wrap-read')
+async def item_owner_wrap_read(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-owner-wrap-read',request,tenant,user)

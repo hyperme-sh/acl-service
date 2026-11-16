@@ -363,3 +363,41 @@ async def test_group_item_bytes_use_private_media_binding_and_fixed_reader(setup
         for action,limit in [('item-wrap-read',2048),('item-wrap-publish',92160)]:
             assert (await client.post(PATH+action,content=b'x'*(limit+1),headers={'content-type':'application/json'})).status_code==413
     s.publish.assert_not_awaited();s.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_prepared_owner_maintenance_route_is_uninstalled_and_write_scoped(setup,monkeypatch):
+    from acl_service.domain.group_owner_wrap import DeliveredOwnerWrap,OwnerWrapRejected
+    from acl_service.app import create_app
+    s=setup
+    # Production assembly remains unchanged; mounting below is contract-local only.
+    assert not any(getattr(route,'path','').endswith('/item-owner-wrap-read') for route in create_app().routes)
+    assert not any(getattr(route,'path','').endswith('/item-owner-wrap-read') for route in s.app.routes)
+    s.app.include_router(routes.owner_wrap_router)
+    binding=SimpleNamespace(tenant=str(s.tenant),reader='fixed-owner',authority=object(),store=SimpleNamespace(tenant=str(s.tenant)))
+    s.app.state.private_wrap_bindings={(s.tenant,s.user.sub):binding}
+    s.app.state.private_wrap_slots=asyncio.Semaphore(2)
+    s.app.state.private_wrap_body_slots={(s.tenant,s.user.sub):asyncio.Semaphore(1)}
+    s.app.state.private_wrap_tenant_slots={s.tenant:asyncio.Semaphore(1)}
+    read=AsyncMock(return_value=DeliveredOwnerWrap(b'opaque','media_owner_item',RECORD['predicate'],RECORD['set'],1,'a'*64,'owner-e','b'*64,'c'*64,102))
+    monkeypatch.setattr(routes,'deliver_owner_wrap',read)
+    body={**RECORD,'object':'media_owner_item'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        result=await client.post(PATH+'item-owner-wrap-read',json=body)
+        assert result.status_code==200 and result.json()['payload']==base64.b64encode(b'opaque').decode()
+        assert result.headers['cache-control']=='private, no-store' and 'fence' not in result.json()
+        read.assert_awaited_once_with(binding.authority,binding.store,str(s.tenant),'fixed-owner',body['object'],body['predicate'],body['set'])
+        read.reset_mock()
+        for patch in [{'owner':'spoofed'},{'reader':'spoofed'},{'object':[]},{'set':'bad'}]:
+            assert (await client.post(PATH+'item-owner-wrap-read',json={**body,**patch})).status_code==400
+        s.user.scopes=['acl:media:read']
+        assert (await client.post(PATH+'item-owner-wrap-read',json=body)).status_code==403
+        read.assert_not_awaited();s.user.scopes=['acl:media:write']
+        read.side_effect=OwnerWrapRejected('private detail')
+        result=await client.post(PATH+'item-owner-wrap-read',json=body)
+        assert result.status_code==403 and 'private detail' not in result.text
+        read.side_effect=HistoryConflict('changed')
+        assert (await client.post(PATH+'item-owner-wrap-read',json=body)).status_code==409
+        read.side_effect=None;s.app.state.private_wrap_bindings=None
+        assert (await client.post(PATH+'item-owner-wrap-read',json=body)).status_code==503
+    s.publish.assert_not_awaited();s.read.assert_not_awaited()
