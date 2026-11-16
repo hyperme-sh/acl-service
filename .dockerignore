@@ -52,3 +52,7 @@
 !.github/workflows/
 !.github/workflows/third-party-notices/
 !.github/workflows/third-party-notices/**
+
+!scripts/prepare_node_notices.mjs
+!notices/
+!notices/**

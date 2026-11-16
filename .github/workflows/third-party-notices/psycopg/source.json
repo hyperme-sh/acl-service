@@ -1,6 +1,6 @@
 {
   "distribution": "psycopg",
-  "version": "3.3.6",
+  "version": "3.3.7",
   "repository": "https://github.com/spdx/license-list-data",
   "commit": "31846481de7ea17d92f2f46fad76abe58b2e9bb0",
   "files": {

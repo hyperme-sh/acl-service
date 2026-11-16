@@ -1,0 +1,935 @@
+{
+  "publication_cleared": false,
+  "findings": [
+    {
+      "kind": "hosted-code",
+      "member": "api/core/container.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "afc5dc5a30528ea3dacf5e0141c75d5550b395371f49883192cacc8c5cd07ede",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/dtos/billing_dto.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "12b64e62e20c47c33ddd8c8b43be8c627042e958cf1a814dcea581512f55fa15",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/dtos/stripe_setting_dto.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "a3adf2b94b26df9a7ecb7f6acb568e0cebfaa6614d3f5dfd3d455dbaef2db18d",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/dtos/subcription_plan_dto.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "a7eb16c1d49a9f4574def1f6e0e929878c6668b60719ba2343b0260014b0c382",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/entities/stripe_settings.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "d7297f8f627d50fe55edeb44d25caf1dccc44273f4c136583587d3f6a17c8351",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/enum/feature.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "f9ef67b6cb56a50eb4084b68f452ccb611690f2c68189c384660b2b50de1cb31",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/externals/stripe_resolver.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "e9d7414631d833328d4dc8fe890b7fc96eb1ecd6cfdec635421c52a00c13fcb7",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/messaging/tenant_event_publisher.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "085785e79d1e90d2938954c26b4bab609b64f730920fd4e6cbc35d57de9347b3",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/billing_record_repository_impl.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "0ce9c4bcbe1154ec8c97aafdd8de03ca01095529a1c189703175df7587191119",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/payment_repository_impl.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "46ad8c38417351170fdd21abeeda8f817298d2b1f3194d34e640866fd64af278",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/subscription_plan_repository_impl.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "16287aeabc21c3437ac23dc63a08b46e963fd24770d44269ce145e144b33ee9c",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/tenant_repository_impl.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "dd4d6edab80ae6a74aad9a58b11a65f2cff08791275130660cd854837bc7ff11",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/billing_endpoint.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "3bac390a76a5decbca6e246108cb1fd0d013c8ebfca8c34254735e7a659935c5",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/invoice_endpoint.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "026f531ca69eccdacaf3de97a581b9297e6c41e70874d905b6dd4890bef6a6ca",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/prices_endpoint.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "9583b4060a63a7e4c5e9d08f3a21dc290632b3a85ec5b3aab3f2b126f11ae68e",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/product_endpoint.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "a9ab6458463ebb7ad237fdedd00122431059e6a91529d79870aaad2cc9e62d93",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/stripe_endpoint.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "b2258546580cf3392afef40373cbf3d1c4c8bf7dd4a2306dd87fadc52b93b7bf",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/tenant_endpoint.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "3cbeed434c4cf0df83e5347c4c8439c172b009413ae16db01693af60bbffc1dd",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/middlewares/redis_cache_middleware.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "e4f16be020c5d7ae2ee2b1a6e940e7a1c0265863d7a2b5cf024bbdc89328e997",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/usecases/billing_record_service.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "282594d8444e56ea12f6e65ffa305fec682bc79583ce561cae22b868aa9c6ea4",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/usecases/stripe_setting_service.py",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "f9b2bbadbbe03b4b8265a0f49efeb49557d0c3b23d72e03963586bba5a8addb8",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_core-0.1.0.dist-info/METADATA",
+      "object": "d69b1d0233d725c657a9b60844f86366d72fc747",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7432af7dbbc16ddb0b86e0e74c25caf6d7da16e2a3622d819c4a36f009185189",
+      "content_sha256": "6caf4a1a37ee8c10bdf23d9f8f26ad11851359e4dc8bd9e73ff4ba7af7e92e0f",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0053_baseline.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "7e0ab592dd4e48411e98e87468288495ea768df7d3bb577417766cc0e144b1da",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0054_payout_addresses.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "5f3701823d635a61e5026e388f9259bb6f0f4e3f18447c047590f6e3e40ee96c",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0055_payout_subject.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "3558f25223fd0eb3b6c59f46ca749c8eb57485861a90f5dd8421e5ad8fef779c",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0056_usdc_journal.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "30f566688d8e60156d2091b1fcb5dbf3371e7234bb32fd62ec4a1c48328b6b04",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0057_usdc_intents.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "5c48dd0213ee9210d59f3c63abe3044c323a39c69c3afe15338c752a355234b1",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0058_usdc_transfers.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "1b5373d4310bc43d6d1c67874eb4a28e1ba4cdcd71e90cad3ffea55db874d400",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0059_usdc_outbound.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "ad1ef46417096a004d83976f5603826868b0e3cd48e474062366a489e5da0a44",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0060_onramp_sessions.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "6ba2407d7322bd35df5ce21312c13c81f1bfce7acf12fd4817307de848d4a2d5",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0061_connect_recipients.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "b002e4f7f3a8cc0833be7ad6c84937b73d63021ca9bc6d46d12337712878f59e",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0062_mismatch_controls.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "291d8f76054968a0e4dd1ab87de0d786396132af640cecf926a11544051e5632",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0063_tax_calculations.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "6b60ca5fdaa9f62ddca1de8dacf645c65ac218385cef49b053be9e05b53ee053",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0064_retire_custody.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "d2de16b153f214c07383e6dc1b42d2731cc4d0e63a26ea2e75d0f718f56b7cfa",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0065_host_payout_method.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "a5bc7867d5e6507a3cc3567c27aed6aff0307046fb4bfffdf791c37802ef7294",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0066_fiat_admission.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "9a44e4de28b44faf8411ffd841590758c658c1b54e439ddf4b72232b8dc36a50",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0067_control_proofs.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "ba2a775dbbdf71e8174c605950fc3b0c415472fd80e34029d2637f41e6f24d62",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0068_recipient_adoption.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "80c09d98d417a48f333cfef06ca56a79f93a7669419bc9f10170fbcad1d71ee3",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0069_access_grants.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "f5a4abdef345abb8724f612e50977ce20328450f00d61e5afa8f5bd2afabd490",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0070_access_lifecycle.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "1d24f19ca17625005850ea606160dfed17d0619d40227bc36bd041ed1daa8b8c",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0071_native_bank_approvals.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "11b253f3717e17456ceedaf65a42ba5b715b74e0c5ffeb24bd7d71b1deeca10b",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0072_recipient_contact.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "9895c185e4af46d2d16573768e3b6a0b15c507e8508bbc860b747212007db389",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0073_fiat_puerto_rico.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "53188a556007da9e6a6760c9016d3fe90c85f447f316148869da292ddcc4c85f",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0074_connect_live_mode.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "d7de3f34a4c515a323a741922b7a54df75bc2850fe174f2d28b17d6d1c969df7",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0075_reversal_exposure.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "22ae2bd572d4127463262d59b6be67c1d7fd42af0c52a8ca1417f65b97dfbc22",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0076_account_financial_fences.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "637728b9b9a0bae3b3ddb5ffb62703ae1362db23782edaa9282855489828ee55",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0077_financial_inventory.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "ea07cc4c692c9f8ad3d93b2b695b5d3ac6f013b6ba6f0048745f55c724ddd462",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0078_personal_access.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "ca5fd2fceac96e0e7f0bd222d0da060742e59411192739f701fd377d77af7a43",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0079_payer_risk_expiry.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "4a57a08566393725b74fed4aa58749184ac1d93ee07eeeccd3a4215eab3bf208",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0080_financial_state.py",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "11151730bf9c9b92940ae53f80df11317fa9201aa7239cd03e0cecf6fcf3b2ba",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/baseline.sql",
+      "object": "8405ab8edeba907e7b9aa24566c3816391948f58",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b19c219943df64b72eee404c233b92d44db8b4f659a0257c85bbed8ba183c31",
+      "content_sha256": "fc9ba53d65e28d71684597d171b5639819325d2bbbbfaed49dbcf458cb8c4aa8",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/core/container.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "afc5dc5a30528ea3dacf5e0141c75d5550b395371f49883192cacc8c5cd07ede",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/dtos/billing_dto.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "12b64e62e20c47c33ddd8c8b43be8c627042e958cf1a814dcea581512f55fa15",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/dtos/stripe_setting_dto.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "a3adf2b94b26df9a7ecb7f6acb568e0cebfaa6614d3f5dfd3d455dbaef2db18d",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/dtos/subcription_plan_dto.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "a7eb16c1d49a9f4574def1f6e0e929878c6668b60719ba2343b0260014b0c382",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/entities/stripe_settings.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "d7297f8f627d50fe55edeb44d25caf1dccc44273f4c136583587d3f6a17c8351",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/domain/enum/feature.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "f9ef67b6cb56a50eb4084b68f452ccb611690f2c68189c384660b2b50de1cb31",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/externals/stripe_resolver.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "e9d7414631d833328d4dc8fe890b7fc96eb1ecd6cfdec635421c52a00c13fcb7",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/messaging/tenant_event_publisher.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "085785e79d1e90d2938954c26b4bab609b64f730920fd4e6cbc35d57de9347b3",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/billing_record_repository_impl.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "0ce9c4bcbe1154ec8c97aafdd8de03ca01095529a1c189703175df7587191119",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/payment_repository_impl.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "46ad8c38417351170fdd21abeeda8f817298d2b1f3194d34e640866fd64af278",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/subscription_plan_repository_impl.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "c9001c6707ffaccd8c2297eec8e29598eaa5847c348dee9ee6cae47e006497f3",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/infrastructure/persistence/repositories/tenant_repository_impl.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "dd4d6edab80ae6a74aad9a58b11a65f2cff08791275130660cd854837bc7ff11",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/billing_endpoint.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "3bac390a76a5decbca6e246108cb1fd0d013c8ebfca8c34254735e7a659935c5",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/invoice_endpoint.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "026f531ca69eccdacaf3de97a581b9297e6c41e70874d905b6dd4890bef6a6ca",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/prices_endpoint.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "9583b4060a63a7e4c5e9d08f3a21dc290632b3a85ec5b3aab3f2b126f11ae68e",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/product_endpoint.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "a9ab6458463ebb7ad237fdedd00122431059e6a91529d79870aaad2cc9e62d93",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/stripe_endpoint.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "b2258546580cf3392afef40373cbf3d1c4c8bf7dd4a2306dd87fadc52b93b7bf",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/api_controllers/tenant_endpoint.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "3cbeed434c4cf0df83e5347c4c8439c172b009413ae16db01693af60bbffc1dd",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/interfaces/middlewares/redis_cache_middleware.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "e4f16be020c5d7ae2ee2b1a6e940e7a1c0265863d7a2b5cf024bbdc89328e997",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/usecases/billing_record_service.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "282594d8444e56ea12f6e65ffa305fec682bc79583ce561cae22b868aa9c6ea4",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "api/usecases/stripe_setting_service.py",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "f9b2bbadbbe03b4b8265a0f49efeb49557d0c3b23d72e03963586bba5a8addb8",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_core-0.1.0.dist-info/METADATA",
+      "object": "66c30406b3a89054d2327545812918ba8b3c5147",
+      "path": "tests_artifacts/dependencies/controlplane_core-0.1.0-py3-none-any.whl",
+      "blob_sha256": "788e721dd23db64c2c7883cafce70ae4c7c7ebf3a222e9993b25d89c90854b44",
+      "content_sha256": "0bc7e87f655c0be0df127186679d258a54fc973df3e8a522ee77a25473d1999a",
+      "classification": "retained-hosted-implementation",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0053_baseline.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "7e0ab592dd4e48411e98e87468288495ea768df7d3bb577417766cc0e144b1da",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0054_payout_addresses.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "5f3701823d635a61e5026e388f9259bb6f0f4e3f18447c047590f6e3e40ee96c",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0055_payout_subject.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "3558f25223fd0eb3b6c59f46ca749c8eb57485861a90f5dd8421e5ad8fef779c",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0056_usdc_journal.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "30f566688d8e60156d2091b1fcb5dbf3371e7234bb32fd62ec4a1c48328b6b04",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0057_usdc_intents.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "5c48dd0213ee9210d59f3c63abe3044c323a39c69c3afe15338c752a355234b1",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0058_usdc_transfers.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "1b5373d4310bc43d6d1c67874eb4a28e1ba4cdcd71e90cad3ffea55db874d400",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0059_usdc_outbound.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "ad1ef46417096a004d83976f5603826868b0e3cd48e474062366a489e5da0a44",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0060_onramp_sessions.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "6ba2407d7322bd35df5ce21312c13c81f1bfce7acf12fd4817307de848d4a2d5",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0061_connect_recipients.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "b002e4f7f3a8cc0833be7ad6c84937b73d63021ca9bc6d46d12337712878f59e",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0062_mismatch_controls.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "291d8f76054968a0e4dd1ab87de0d786396132af640cecf926a11544051e5632",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0063_tax_calculations.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "6b60ca5fdaa9f62ddca1de8dacf645c65ac218385cef49b053be9e05b53ee053",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0064_retire_custody.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "d2de16b153f214c07383e6dc1b42d2731cc4d0e63a26ea2e75d0f718f56b7cfa",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0065_host_payout_method.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "a5bc7867d5e6507a3cc3567c27aed6aff0307046fb4bfffdf791c37802ef7294",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0066_fiat_admission.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "9a44e4de28b44faf8411ffd841590758c658c1b54e439ddf4b72232b8dc36a50",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0067_control_proofs.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "ba2a775dbbdf71e8174c605950fc3b0c415472fd80e34029d2637f41e6f24d62",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0068_recipient_adoption.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "80c09d98d417a48f333cfef06ca56a79f93a7669419bc9f10170fbcad1d71ee3",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0069_access_grants.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "f5a4abdef345abb8724f612e50977ce20328450f00d61e5afa8f5bd2afabd490",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0070_access_lifecycle.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "1d24f19ca17625005850ea606160dfed17d0619d40227bc36bd041ed1daa8b8c",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/0071_native_bank_approvals.py",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "11b253f3717e17456ceedaf65a42ba5b715b74e0c5ffeb24bd7d71b1deeca10b",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    },
+    {
+      "kind": "hosted-code",
+      "member": "controlplane_db/migration_chains/payment_service/versions/baseline.sql",
+      "object": "86188df178181f2b5a8d000ca0342ccd1c28d08f",
+      "path": "tests_artifacts/dependencies/controlplane_db-0.1.0-py3-none-any.whl",
+      "blob_sha256": "7b1fd4ec3ffaebf9becb5809fde49edfc35bf8da75cf53a62d28d9dab548d369",
+      "content_sha256": "fc9ba53d65e28d71684597d171b5639819325d2bbbbfaed49dbcf458cb8c4aa8",
+      "classification": "retained-payment-schema",
+      "disposition": "retained-not-cleared-for-publication"
+    }
+  ]
+}
