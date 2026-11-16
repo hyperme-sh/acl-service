@@ -1,1 +1,586 @@
-[]
+[
+  {
+    "file": "08c4cf19d5a1dc907d9a2261afbcb347c36e2caf.txt",
+    "sha256": "6b64c18a005db54b5043ec8ba962a3fbbc024c238c04885dee54606bb4828fd8",
+    "rule": "generic-api-key",
+    "start": 52,
+    "end": 52,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "0ca86f7f770be44353dfe7454f634ab879945817.txt",
+    "sha256": "f33f16ec163f6bdf3de11672fb6e0c308b1cdd74786258aa9fa01655637dbd19",
+    "rule": "generic-api-key",
+    "start": 49,
+    "end": 49,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "2442017074130069d28e6fa138dc694a60f48840.txt",
+    "sha256": "38afb656734d0e885ed0fd6b7d742d563d58d56d29b3d1e266737b96d8c797a2",
+    "rule": "generic-api-key",
+    "start": 73,
+    "end": 73,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "5280fa98941ea75133e5ee385b17db802e9c582b.txt",
+    "sha256": "577dd838f4fe021580ce96254fb5df912caa9316cd18c7516ea08957bda5c088",
+    "rule": "generic-api-key",
+    "start": 51,
+    "end": 51,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "54db40040f776b2e5b4f95e67fe938860803ac3f.txt",
+    "sha256": "b7504aa6067ebdb4480bc05ff31f53a12be1c26d75e7cd29adc7408cd129571f",
+    "rule": "jwt",
+    "start": 22,
+    "end": 22,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 43,
+    "end": 43,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 57,
+    "end": 57,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 72,
+    "end": 72,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 81,
+    "end": 81,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 108,
+    "end": 108,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 126,
+    "end": 126,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 140,
+    "end": 140,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 163,
+    "end": 163,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 172,
+    "end": 172,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 187,
+    "end": 187,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "jwt",
+    "start": 201,
+    "end": 201,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 42,
+    "end": 42,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 52,
+    "end": 52,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 71,
+    "end": 71,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 80,
+    "end": 80,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 89,
+    "end": 89,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 96,
+    "end": 96,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 97,
+    "end": 97,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 115,
+    "end": 115,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 116,
+    "end": 116,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 139,
+    "end": 139,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 147,
+    "end": 147,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 148,
+    "end": 148,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 171,
+    "end": 171,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 196,
+    "end": 196,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 108,
+    "end": 108,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 126,
+    "end": 126,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "4c0d09eb0b3c2cd2404806b82040f251e2353241.txt",
+    "sha256": "51e774c884cab69b6421f48c2b15d20ff7e0af896db39fbc5251ff2f978c29a7",
+    "rule": "generic-api-key",
+    "start": 163,
+    "end": 163,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "8405ab8edeba907e7b9aa24566c3816391948f58-68.txt",
+    "sha256": "8c5144f807b3cc66e9cfaeda08befcc8a272c90092a961c26f911bffaa3158f4",
+    "rule": "generic-api-key",
+    "start": 241,
+    "end": 241,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "8405ab8edeba907e7b9aa24566c3816391948f58-68.txt",
+    "sha256": "8c5144f807b3cc66e9cfaeda08befcc8a272c90092a961c26f911bffaa3158f4",
+    "rule": "generic-api-key",
+    "start": 250,
+    "end": 250,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "8405ab8edeba907e7b9aa24566c3816391948f58-68.txt",
+    "sha256": "8c5144f807b3cc66e9cfaeda08befcc8a272c90092a961c26f911bffaa3158f4",
+    "rule": "generic-api-key",
+    "start": 254,
+    "end": 254,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "8405ab8edeba907e7b9aa24566c3816391948f58-68.txt",
+    "sha256": "8c5144f807b3cc66e9cfaeda08befcc8a272c90092a961c26f911bffaa3158f4",
+    "rule": "generic-api-key",
+    "start": 276,
+    "end": 276,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "86188df178181f2b5a8d000ca0342ccd1c28d08f-68.txt",
+    "sha256": "38a24b6bb40e8ee6d7912656b2db93b4317611376c03a1d2d326e1e5b5959397",
+    "rule": "generic-api-key",
+    "start": 239,
+    "end": 239,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "86188df178181f2b5a8d000ca0342ccd1c28d08f-68.txt",
+    "sha256": "38a24b6bb40e8ee6d7912656b2db93b4317611376c03a1d2d326e1e5b5959397",
+    "rule": "generic-api-key",
+    "start": 248,
+    "end": 248,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "86188df178181f2b5a8d000ca0342ccd1c28d08f-68.txt",
+    "sha256": "38a24b6bb40e8ee6d7912656b2db93b4317611376c03a1d2d326e1e5b5959397",
+    "rule": "generic-api-key",
+    "start": 252,
+    "end": 252,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "86188df178181f2b5a8d000ca0342ccd1c28d08f-68.txt",
+    "sha256": "38a24b6bb40e8ee6d7912656b2db93b4317611376c03a1d2d326e1e5b5959397",
+    "rule": "generic-api-key",
+    "start": 274,
+    "end": 274,
+    "reason": "Content SHA256 in package contract inventory"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 42,
+    "end": 42,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 52,
+    "end": 52,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 71,
+    "end": 71,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 80,
+    "end": 80,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 89,
+    "end": 89,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 96,
+    "end": 96,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 97,
+    "end": 97,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 115,
+    "end": 115,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 116,
+    "end": 116,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 139,
+    "end": 139,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 147,
+    "end": 147,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 148,
+    "end": 148,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 43,
+    "end": 43,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 57,
+    "end": 57,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 72,
+    "end": 72,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 81,
+    "end": 81,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 108,
+    "end": 108,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 126,
+    "end": 126,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 140,
+    "end": 140,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "jwt",
+    "start": 163,
+    "end": 163,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 108,
+    "end": 108,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 126,
+    "end": 126,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "ca61aacf2a86bd929ea6f3f714bf1f7681bfe858.txt",
+    "sha256": "c194be78b55bb8e0842f26d6f42fbdb449639e8d618f8c0924c28e762c58ab1f",
+    "rule": "generic-api-key",
+    "start": 163,
+    "end": 163,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "jwt",
+    "start": 43,
+    "end": 43,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "jwt",
+    "start": 57,
+    "end": 57,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "jwt",
+    "start": 72,
+    "end": 72,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "jwt",
+    "start": 81,
+    "end": 81,
+    "reason": "Public signed attestation in repository test vector; not a bearer credential"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "generic-api-key",
+    "start": 42,
+    "end": 42,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "generic-api-key",
+    "start": 52,
+    "end": 52,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "generic-api-key",
+    "start": 71,
+    "end": 71,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "generic-api-key",
+    "start": 80,
+    "end": 80,
+    "reason": "Public signature or public key in repository test vector"
+  },
+  {
+    "file": "cf877ec15b37aeffd9c83762b7fa596ac95bc3fb.txt",
+    "sha256": "a49f85630215cb6e66f95ef540694e08f55da984f9ec8b73fdca88072fcb4c47",
+    "rule": "generic-api-key",
+    "start": 89,
+    "end": 89,
+    "reason": "Public signature or public key in repository test vector"
+  }
+]
