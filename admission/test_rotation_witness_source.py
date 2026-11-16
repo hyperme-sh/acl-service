@@ -95,7 +95,11 @@ def test_native_refusal_signing_failure_and_lease_exit_failure_propagate(source)
     signer.sign_verified.side_effect=None
     @contextmanager
     def changed():
-        yield SimpleNamespace(jwks=policy['trust']['jwks'])
+        state.leased=True
+        try:
+            yield SimpleNamespace(jwks=policy['trust']['jwks'])
+        finally:
+            state.leased=False
         raise HistoryConflict('lease ended')
     value.witness_policy.locked_policy=changed
     with pytest.raises(HistoryConflict):value.attest_wallet_rotation('owner',{'issuedAt':90})
