@@ -122,6 +122,23 @@ class NativeMediaContracts(TestCase):
         with patch('group_source.GroupSource',return_value=items.keys.source):
             with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
 
+    def test_native_owner_maintenance_wrap_requires_owner_and_matching_parent(self):
+        from group_owner_wrap_source import GroupOwnerWrapSource
+        from acl_service.domain.history_store import HistoryConflict
+        grants,_,predicate,set_id=self.item_group_setup()
+        args=(self.tenant,self.owner,self.object,predicate,set_id)
+        view=grants.view(*args,self.owner)
+        grants.append(*args,self.now,view['fence'],self.f['itemGroupGrant'])
+        with self.assertRaises(AdmissionRejected):self.source.authorize(self.tenant,self.owner,self.object)
+        source=GroupOwnerWrapSource(grants.items);permit=source.authorize(*args)
+        self.assertEqual(permit.epoch,1);self.assertEqual(permit.digest,self.f['wrap']['digest'])
+        self.assertTrue(source.commit(permit))
+        with self.assertRaises(AdmissionRejected):source.authorize(self.tenant,'not-owner',self.object,predicate,set_id)
+        plan=grants.items.epoch_view(*args)
+        grants.items.append_epoch(*args,self.now,plan['fence'],self.f['itemEpochCommand'])
+        with self.assertRaises((AdmissionRejected,HistoryConflict)):source.commit(permit)
+        with self.assertRaises(AdmissionRejected):source.authorize(*args)
+
     def test_native_direct_reader_uses_combined_epoch_and_current_group_checkpoint(self):
         from unittest.mock import patch
         grants,members,predicate,set_id=self.item_group_setup()
