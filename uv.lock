@@ -13,6 +13,9 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+overrides = [{ name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=14355f230e15a5acf3b1283e87d5f65aceff35ba" }]
+
 [[package]]
 name = "acl-service"
 version = "0.1.0"
@@ -49,7 +52,7 @@ requires-dist = [
     { name = "controlplane-core", git = "https://github.com/hyperme-sh/controlplane-core.git?rev=c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8" },
     { name = "controlplane-db", git = "https://github.com/hyperme-sh/controlplane-db.git?rev=95ef61433374274f4a4fc287e15982be6357e1cc" },
     { name = "controlplane-events", git = "https://github.com/hyperme-sh/controlplane-events.git?rev=2a49f9af5f6c4dc9d6c4ddebc83c41d6331e2c87" },
-    { name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=127d15fce7c3af8d8f8e239fb306ce88de76f02a" },
+    { name = "controlplane-identity", git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=14355f230e15a5acf3b1283e87d5f65aceff35ba" },
     { name = "cryptography", specifier = ">=46.0.0" },
     { name = "spanopticon-models", git = "https://github.com/hyperme-sh/controlplane-models.git?rev=9a9bbb20c2e0cd41febf3233ce7a48fe17a84b04" },
 ]
@@ -1000,7 +1003,7 @@ dependencies = [
 [[package]]
 name = "controlplane-identity"
 version = "0.15.0"
-source = { git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=127d15fce7c3af8d8f8e239fb306ce88de76f02a#127d15fce7c3af8d8f8e239fb306ce88de76f02a" }
+source = { git = "https://github.com/hyperme-sh/controlplane-identity.git?rev=14355f230e15a5acf3b1283e87d5f65aceff35ba#14355f230e15a5acf3b1283e87d5f65aceff35ba" }
 dependencies = [
     { name = "eth-abi" },
     { name = "eth-account" },

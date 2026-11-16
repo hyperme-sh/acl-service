@@ -268,6 +268,8 @@ def create_app(
     from controlplane_api.metrics import install_http_metrics
 
     install_http_metrics(app)
+    from acl_service.nightly import install as install_nightly
+    install_nightly(app)
     return app
 
 

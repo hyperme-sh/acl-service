@@ -32,6 +32,10 @@ def verify(root):
             locked[entry['name']] = entry
     if not locked or len(records) != len(locked) or {r['distribution'] for r in records} != set(locked):
         raise ValueError('Fixture inventory differs from locked dependencies')
+    overrides = dict(pin(r) for r in project.get('tool', {}).get('uv', {}).get('override-dependencies', []))
+    for name, source in overrides.items():
+        if name not in locked or locked[name]['source'] != {'git': source}:
+            raise ValueError('Explicit override differs from locked dependency')
     def references(requirements):
         children = set()
         for requirement in requirements:
@@ -44,6 +48,7 @@ def verify(root):
                     raise ValueError('Unsupported conditional dependency')
                 continue
             name, source = pin(base)
+            source = overrides.get(name, source)
             if name not in locked or locked[name]['source'] != {'git': source}:
                 raise ValueError('Declared dependency differs from locked dependency')
             children.add(name)

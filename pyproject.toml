@@ -18,7 +18,7 @@ dependencies = [
     "casbin-sqlalchemy-adapter>=1.4.0",
     "cryptography>=46.0.0",
     "spanopticon-models @ git+https://github.com/hyperme-sh/controlplane-models.git@9a9bbb20c2e0cd41febf3233ce7a48fe17a84b04",
-    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@127d15fce7c3af8d8f8e239fb306ce88de76f02a",
+    "controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@14355f230e15a5acf3b1283e87d5f65aceff35ba",
 ]
 
 [dependency-groups]
@@ -44,3 +44,6 @@ allow-direct-references = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.uv]
+override-dependencies = ["controlplane-identity @ git+https://github.com/hyperme-sh/controlplane-identity.git@14355f230e15a5acf3b1283e87d5f65aceff35ba"]
