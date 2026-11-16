@@ -62,7 +62,9 @@ def create_app(
     contact_bindings: Mapping | None = None,
     device_transfer_bindings: Mapping | None = None,
     credential_bindings: Mapping | None = None,
+    rotation_bindings: Mapping | None = None,
 ) -> FastAPI:
+    owns_rotation_stores = rotation_bindings is None
     owns_signed_stores = signed_store_bindings is None
     if owns_signed_stores:
         from acl_service.infrastructure.signed_store_bindings import load_signed_store_bindings
@@ -135,8 +137,17 @@ def create_app(
         app.state.event_consumer=user_consumer
 
         try:
+            if owns_rotation_stores:
+                from acl_service.infrastructure.rotation_witness_bindings import load_rotation_bindings
+                from acl_service.infrastructure.witness_policy_repo import PostgresWitnessSigningPolicyReader
+                loaded = load_rotation_bindings(PostgresWitnessSigningPolicyReader(sync_eng))
+                app.state.rotation_witness_bindings = MappingProxyType(dict(loaded)) if loaded is not None else None
             yield
         finally:
+            if owns_rotation_stores:
+                sources = {id(b.source): b.source for b in (app.state.rotation_witness_bindings or {}).values()}
+                app.state.rotation_witness_bindings = None
+                for source in sources.values(): source.store.close()
             if owns_signed_stores:
                 sources = {id(b.writer): b.writer for b in (signed_store_bindings or {}).values()}
                 for source in sources.values(): source.store.close()
@@ -167,11 +178,11 @@ def create_app(
                 for store in stores.values():
                     await store.close()
 
-        event_consumer = getattr(app.state, "event_consumer", None)
-        if event_consumer is not None:
-            await event_consumer.stop()
-        sync_eng.dispose()
-        await engine.dispose()
+            event_consumer = getattr(app.state, "event_consumer", None)
+            if event_consumer is not None:
+                await event_consumer.stop()
+            sync_eng.dispose()
+            await engine.dispose()
 
     app = FastAPI(
         lifespan=lifespan,
@@ -224,6 +235,10 @@ def create_app(
     app.state.credential_bindings = MappingProxyType(dict(credential_bindings)) if credential_bindings is not None else None
     app.state.credential_slots = asyncio.Semaphore(2)
     app.include_router(credential_router, prefix="/api/v1")
+    from acl_service.interfaces.api.rotation_witness_routes import router as rotation_witness_router
+    app.state.rotation_witness_bindings = MappingProxyType(dict(rotation_bindings)) if rotation_bindings is not None else None
+    app.state.rotation_witness_slots = asyncio.Semaphore(2)
+    app.include_router(rotation_witness_router, prefix="/api/v1")
     from acl_service.interfaces.api.device_transfer_routes import router as device_transfer_router
     app.state.device_transfer_bindings = MappingProxyType(dict(device_transfer_bindings)) if device_transfer_bindings is not None else None
     app.state.device_transfer_slots = asyncio.Semaphore(2)

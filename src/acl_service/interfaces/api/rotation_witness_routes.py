@@ -1,4 +1,4 @@
-"""Prepared wallet-rotation adapter; deliberately not installed in the app."""
+"""Subject-bound wallet rotation; missing protected configuration refuses."""
 import asyncio
 import json
 import threading
