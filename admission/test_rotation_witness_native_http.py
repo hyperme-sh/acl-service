@@ -35,7 +35,7 @@ async def test_native_wallet_attestation_and_present_revocation(tmp_path,state_e
     request=copy.deepcopy(f['rotate-v4-wallet']);request.pop('attest')
     principal,now=f['genesis'],request['issuedAt']
     trust={key:f[key] for key in ('jwks','policy','pinnedIss')}
-    spec=dict(history_schema='rotation_h_'+uuid4().hex,checkpoint_schema='rotation_c_'+uuid4().hex,
+    spec=dict(history_schema='acl_h_'+uuid4().hex,checkpoint_schema='acl_c_'+uuid4().hex,
               tenant=str(uuid4()),source=str(uuid4()))
     provision_empty_media_source(state_url,**spec)
     store=PostgresHistoryStore(state_url,**spec)
