@@ -103,6 +103,42 @@ class HistoryFreshnessTests(unittest.TestCase):
         with self.store._transaction(write=False) as db:
             self.assertIsNone(db.execute("SELECT head FROM history_head_floors WHERE principal='synthetic'").fetchone())
 
+    def test_admission_commit_guard_rolls_back_entry_and_rotation_floor(self):
+        for fork in (False, True):
+            calls = []
+            def guard():
+                calls.append(True)
+                if len(calls) == 3:
+                    raise AdmissionRejected('original owner admission closed')
+            self.adapter._verify = lambda *args, **kwargs: b'fork' if fork else b''
+            with self.assertRaisesRegex(AdmissionRejected, 'original owner admission closed'):
+                self.adapter.admit('synthetic', b'{"kind":"rotate","seq":1}', before_commit=guard)
+            self.assertEqual(len(calls), 3)
+            self.assertEqual(self.store.read('synthetic').entries, ())
+            with self.store._transaction(write=False) as db:
+                self.assertEqual(db.execute('SELECT head FROM history_head_floors').fetchall(), [])
+
+    def test_admission_guard_refuses_before_native_verification(self):
+        def guard(): raise AdmissionRejected('closed')
+        with patch.object(self.adapter, '_verify') as verify:
+            with self.assertRaisesRegex(AdmissionRejected, 'closed'):
+                self.adapter.admit('synthetic', b'{"kind":"oidc"}', before_commit=guard)
+            verify.assert_not_called()
+        with self.assertRaises(ValueError):
+            self.adapter.admit('synthetic', b'{}', before_commit=False)
+
+    def test_caller_conflict_is_terminal_not_a_rotation_retry(self):
+        from acl_service.domain.history_store import HistoryConflict
+        calls = []
+        def guard():
+            calls.append(True)
+            if len(calls) == 3: raise HistoryConflict('owner admission lost')
+        self.adapter._verify = lambda *args, **kwargs: b''
+        with self.assertRaisesRegex(HistoryConflict, 'owner admission lost'):
+            self.adapter.admit('synthetic', b'{"kind":"rotate","seq":1}', before_commit=guard)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(self.store.read('synthetic').entries, ())
+
 
 if __name__ == "__main__":
     unittest.main()

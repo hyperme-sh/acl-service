@@ -36,7 +36,8 @@ class HistoryStore(Protocol):
         ...
 
     def append(self, principal: str, expected_revision: int, entry: bytes, *,
-               authority_revision: int | None = None, verified_rotation: int | None = None) -> None:
+               authority_revision: int | None = None, verified_rotation: int | None = None,
+               before_commit: Callable[[], None] | None = None) -> None:
         """Commit an admitted record only against its verified predecessor snapshot."""
         ...
 
