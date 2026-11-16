@@ -6,7 +6,6 @@ import re
 import time
 from acl_service.domain.group_wrap import GroupKeyReadPermit
 from acl_service.domain.history_store import HistoryConflict
-from acl_service.domain.private_wrap_delivery import bind_wrap_store
 
 
 @dataclass(frozen=True)
@@ -41,6 +40,13 @@ class GroupItemDeliveryRejected(ValueError):
     pass
 
 
+def _item_store_binding(store):
+    # Group-item bytes belong to the media allocation, never a generic record store.
+    bind=getattr(type(store),'for_object',None)
+    if not callable(bind):raise ValueError('item allocation store required')
+    return bind
+
+
 async def deliver_group_item_wrap(authority,store,tenant,reader,object,predicate,set_id,*,clock=time.time,cancel=lambda:None):
     """No default authority or HTTP installation. The source must check current
     membership, item grant/status/epoch and both checkpoints in one transaction,
@@ -51,6 +57,7 @@ async def deliver_group_item_wrap(authority,store,tenant,reader,object,predicate
         async with asyncio.timeout(3):
             cancel()
             if store.tenant!=tenant:raise ValueError()
+            bind=_item_store_binding(store)
             permit=await authority.authorize_group_item_read(tenant,reader,object,predicate,set_id)
             if type(permit) is not GroupItemReadPermit or type(permit.key) is not GroupKeyReadPermit:raise ValueError()
             key=permit.key
@@ -61,7 +68,7 @@ async def deliver_group_item_wrap(authority,store,tenant,reader,object,predicate
                     not clock()<permit.expires_at<=key.expires_at<=clock()+2 or
                     any(type(value) is not str or re.fullmatch('[a-f0-9]{64}',value) is None for value in
                         (key.revision_id,key.key_commitment,key.fence,permit.item_revision_id,permit.item_digest,permit.wrap_digest,permit.fence))):raise ValueError()
-            payload=await bind_wrap_store(store,object).read(permit.wrap_digest,permit.wrap_digest,cancel=cancel)
+            payload=await bind(store,object).read(permit.wrap_digest,permit.wrap_digest,cancel=cancel)
             cancel()
             if (type(payload) is not bytes or len(payload)!=permit.length or
                     hashlib.sha256(payload).hexdigest()!=permit.wrap_digest or clock()>=permit.expires_at):raise ValueError()
@@ -95,6 +102,7 @@ async def publish_group_item_wrap(authority,store,tenant,owner,object,predicate,
     import json
     try:
         if type(payload) is not bytes or not 1<=len(payload)<=65536 or store.tenant!=tenant:raise ValueError()
+        bind=_item_store_binding(store)
         digest=hashlib.sha256(payload).hexdigest()
         if type(metadata) is not dict or metadata.get('digest')!=digest:raise ValueError()
         metadata=json.loads(json.dumps(metadata,allow_nan=False))
@@ -106,7 +114,7 @@ async def publish_group_item_wrap(authority,store,tenant,owner,object,predicate,
                     type(permit.length) is not int or type(permit.expires_at) is not int or
                     not clock()<permit.expires_at<=clock()+2 or type(permit.fence) is not str or
                     re.fullmatch('[a-f0-9]{64}',permit.fence) is None):raise ValueError()
-            if await bind_wrap_store(store,object).create_or_reconcile(digest,payload)!=digest:raise ValueError()
+            if await bind(store,object).create_or_reconcile(digest,payload)!=digest:raise ValueError()
             if clock()>=permit.expires_at:raise ValueError()
             if await authority.commit_group_item_write(permit) is not True:raise ValueError()
             if clock()>=permit.expires_at:raise ValueError()
