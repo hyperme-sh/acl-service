@@ -59,7 +59,7 @@ jobs:
         run: |
           npm ci --prefix admission --ignore-scripts --no-audit
           npm ci --prefix "$SOCIACL_SOURCE/typescript" --ignore-scripts --no-audit
-          PYTHONPATH=tests .venv/bin/python -m pytest -p conftest -q admission/test_signed_http.py
+          PYTHONPATH=tests .venv/bin/python -m pytest -p conftest -q admission/test_signed_http.py admission/test_signed_postgres_http.py
       - name: Statement startup binding coverage
         run: |
           uv pip install --python .venv/bin/python coverage==7.6.1
