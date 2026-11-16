@@ -316,6 +316,7 @@ def test_credential_source_whole_domain_restart_and_rollback(source, monkeypatch
         engine = create_engine(url)
         try:
             with engine.begin() as db:
+                db.execute(text(f'DELETE FROM "{spec["history_schema"]}".history_head_floors WHERE principal=:principal'), {'principal':'two'})
                 db.execute(text(f'DELETE FROM "{spec["history_schema"]}".history_accounts WHERE principal=:principal'), {'principal':'two'})
             with pytest.raises(StoreRejected):
                 adapter(again).read(credential,100)
