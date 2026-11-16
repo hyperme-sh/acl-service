@@ -63,6 +63,10 @@ def create_app(
     device_transfer_bindings: Mapping | None = None,
     credential_bindings: Mapping | None = None,
 ) -> FastAPI:
+    owns_signed_stores = signed_store_bindings is None
+    if owns_signed_stores:
+        from acl_service.infrastructure.signed_store_bindings import load_signed_store_bindings
+        signed_store_bindings = load_signed_store_bindings()
     owns_credential_stores = credential_bindings is None
     if owns_credential_stores:
         from acl_service.infrastructure.credential_bindings import load_credential_bindings
@@ -133,6 +137,9 @@ def create_app(
         try:
             yield
         finally:
+            if owns_signed_stores:
+                sources = {id(b.writer): b.writer for b in (signed_store_bindings or {}).values()}
+                for source in sources.values(): source.store.close()
             if owns_credential_stores:
                 sources = {id(b.source): b.source for b in (credential_bindings or {}).values()}
                 for source in sources.values(): source.store.close()
