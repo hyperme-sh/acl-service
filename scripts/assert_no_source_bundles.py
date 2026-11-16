@@ -23,7 +23,7 @@ def verify(archive):
         for name in manifest[0]['Layers']:
             with tarfile.open(fileobj=image.extractfile(name)) as layer:
                 for member in layer:
-                    if prohibited(member.name):
+                    if not member.isdir() and prohibited(member.name):
                         raise ValueError('Source bundle in image layer: '+member.name)
     return len(manifest[0]['Layers'])
 

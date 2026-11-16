@@ -26,3 +26,14 @@ def test_deleted_lower_layer_bundle_is_rejected(tmp_path):
             add(outer,layer,stream.getvalue())
     with pytest.raises(ValueError,match='Source bundle'):
         audit.verify(image)
+
+
+def test_empty_base_source_directory_is_not_a_bundle(tmp_path):
+    image=tmp_path/'image.tar'
+    stream=io.BytesIO()
+    with tarfile.open(fileobj=stream,mode='w') as layer:
+        info=tarfile.TarInfo('usr/src');info.type=tarfile.DIRTYPE;layer.addfile(info)
+    with tarfile.open(image,'w') as outer:
+        for name,data in [('manifest.json',json.dumps([{'Layers':['base.tar']}]).encode()),('base.tar',stream.getvalue())]:
+            info=tarfile.TarInfo(name);info.size=len(data);outer.addfile(info,io.BytesIO(data))
+    assert audit.verify(image)==1
