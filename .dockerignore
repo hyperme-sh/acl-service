@@ -56,3 +56,5 @@
 !scripts/prepare_node_notices.mjs
 !notices/
 !notices/**
+
+!scripts/review_runtime_legal.py
