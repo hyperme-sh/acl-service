@@ -72,7 +72,7 @@ def test_version_lookup_failure_is_not_an_empty_inventory():
 
 def test_unavailable_inventory_is_scoped_to_exact_endpoints():
     from urllib.error import HTTPError
-    url = 'https://api.github.com/orgs/hyperme-sh/packages/container/user-service%2Fruntime/versions?page=1'
+    url = 'https://api.github.com/orgs/hyperme-sh/packages/container/acl-service%2Fruntime/versions?page=1'
     assert registry.unavailable(HTTPError(url, 404, 'missing', {}, None))
     assert not registry.unavailable(HTTPError(url, 500, 'server', {}, None))
     assert not registry.unavailable(HTTPError(url.replace('user-service', 'other'), 404, 'missing', {}, None))

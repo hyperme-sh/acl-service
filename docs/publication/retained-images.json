@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "publication_cleared": false,
+  "images": [
+    {
+      "digest": "sha256:ed33ee3671e57af78b050da082940eee2392d286c313e6b6a4308f3d6c92979a",
+      "layers": 16,
+      "user": "10001:10001",
+      "configured_environment_names": [],
+      "source_bundle_paths": [],
+      "hosted_path_occurrences": 1759,
+      "hosted_paths_sha256": "ba13399131b83929fa13611d73adf04002783cbfa681bc6b0ae3bf598b723fc2",
+      "disposition": "retained-not-cleared-for-publication",
+      "review_job": "https://github.com/hyperme-sh/acl-service/actions/runs/43968320736/job/133653860265"
+    },
+    {
+      "digest": "sha256:60cad651779111040bd7b6f90ae4fc139d7e123ca1f1b7f62722f283eb6eb767",
+      "layers": 17,
+      "user": "10001:10001",
+      "configured_environment_names": [],
+      "source_bundle_paths": [],
+      "hosted_path_occurrences": 1759,
+      "hosted_paths_sha256": "ba13399131b83929fa13611d73adf04002783cbfa681bc6b0ae3bf598b723fc2",
+      "disposition": "retained-not-cleared-for-publication",
+      "review_job": "https://github.com/hyperme-sh/acl-service/actions/runs/43968320736/job/133653860337"
+    },
+    {
+      "digest": "sha256:9053eebddaca87c99f6ef2533a773cb3f28c88a5d3fe9a0e1ae824fc3a8c2f6a",
+      "layers": 12,
+      "user": "10001:10001",
+      "configured_environment_names": [],
+      "source_bundle_paths": [],
+      "hosted_path_occurrences": 1759,
+      "hosted_paths_sha256": "f8483f22fa0e621d852377155e7f57c5eb51a55840eedbcf3ab70ee8640b8ddd",
+      "disposition": "retained-not-cleared-for-publication",
+      "review_job": "https://github.com/hyperme-sh/acl-service/actions/runs/43968320736/job/133653860412"
+    },
+    {
+      "digest": "sha256:d4a39eeca60a793bb4e28c29f6712379936787d0912c6cb6ba35015332f81e23",
+      "layers": 12,
+      "user": "10001:10001",
+      "configured_environment_names": [],
+      "source_bundle_paths": [],
+      "hosted_path_occurrences": 1759,
+      "hosted_paths_sha256": "f8483f22fa0e621d852377155e7f57c5eb51a55840eedbcf3ab70ee8640b8ddd",
+      "disposition": "retained-not-cleared-for-publication",
+      "review_job": "https://github.com/hyperme-sh/acl-service/actions/runs/43968320736/job/133653860701"
+    }
+  ]
+}
