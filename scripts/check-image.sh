@@ -2,6 +2,30 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 image=${1:?Pass the locally built image tag or digest}
+# Verify legal text survives into the shipped runtime, without network access.
+docker run --rm --network none --read-only "$image" python -I -c '
+import hashlib,json
+from pathlib import Path
+root=Path("/usr/share/acl-service")
+assert (root/"LICENSE").is_file() and (root/"NOTICE").is_file()
+rows=json.loads((root/"notices/python/index.json").read_text())
+assert rows
+for row in rows:
+    import re
+    key=re.sub(r"[-_.]+", "-", row["name"]).lower()
+    for item in row["texts"].values():
+        assert hashlib.sha256((root/"notices/python"/key/item["file"]).read_bytes()).hexdigest()==item["sha256"]
+node=json.loads((root/"notices/node/source.json").read_text())
+assert hashlib.sha256((root/"notices/node/LICENSE").read_bytes()).hexdigest()==node["sha256"]
+assert list((root/"notices/native/owner").rglob("LICENSE*"))
+npm=Path("/opt/acl-admission")
+packages=json.loads((npm/"npm-notices.json").read_text())
+assert packages
+for row in packages:
+    for item in row["texts"]:
+        assert hashlib.sha256((npm/"node_modules"/item["path"]).read_bytes()).hexdigest()==item["sha256"]
+print("Verified installed Python, npm, Node and native legal texts")
+'
 # Compare installed runtime bytes to the maintained package, not a historical tree.
 python3 - "$image" <<'PY'
 import hashlib, json, pathlib, subprocess, sys

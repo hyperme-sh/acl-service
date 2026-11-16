@@ -35,7 +35,7 @@ dev = [
 packages = ["src/acl_service"]
 
 [tool.hatch.build.targets.sdist]
-include = ["/LICENSE", "/NOTICE", "/tests_artifacts", "/src", "/tests", "/integration", "/scripts", "/tests_tools", "/releases", "/pyproject.toml", "/uv.lock", "/README.md", "/Dockerfile", "/.dockerignore"]
+include = ["/LICENSE", "/NOTICE", "/notices", "/tests_artifacts", "/src", "/tests", "/integration", "/scripts", "/tests_tools", "/releases", "/pyproject.toml", "/uv.lock", "/README.md", "/Dockerfile", "/.dockerignore"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
