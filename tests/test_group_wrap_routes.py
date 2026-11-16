@@ -289,3 +289,63 @@ async def test_owner_commands_bind_the_session_owner_in_ci(setup):
             limit=270336 if action.startswith('item-epoch-') else 8192 if action.endswith(('append','state')) else 2048
             assert (await client.post(PATH+action,content=b'x'*(limit+1),headers={'content-type':'application/json'})).status_code==413
         s.publish.assert_not_awaited();s.read.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_group_item_byte_routes_remain_uninstalled(setup):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=setup.app),base_url='https://acl') as client:
+        for action in ('item-wrap-publish','item-wrap-read'):
+            assert (await client.post(PATH+action,json={})).status_code==404
+
+
+@pytest.mark.asyncio
+async def test_group_item_bytes_use_private_media_binding_and_fixed_reader(setup,monkeypatch):
+    from acl_service.domain.group_item_delivery import DeliveredGroupItemWrap,GroupItemDeliveryRejected
+    s=setup;s.app.include_router(routes.item_byte_router)
+    binding=SimpleNamespace(tenant=str(s.tenant),reader='media-reader',authority=object(),store=SimpleNamespace(tenant=str(s.tenant)))
+    s.app.state.private_wrap_bindings={(s.tenant,s.user.sub):binding}
+    s.app.state.private_wrap_slots=asyncio.Semaphore(2)
+    s.app.state.private_wrap_body_slots={(s.tenant,s.user.sub):asyncio.Semaphore(1)}
+    s.app.state.private_wrap_tenant_slots={s.tenant:asyncio.Semaphore(1)}
+    publish=AsyncMock(return_value='d'*64)
+    read=AsyncMock(return_value=DeliveredGroupItemWrap(b'opaque','media_owner_item',RECORD['predicate'],RECORD['set'],2,'a'*64,'b'*64,3,'c'*64,'e'*64,102))
+    monkeypatch.setattr(routes,'publish_group_item_wrap',publish);monkeypatch.setattr(routes,'deliver_group_item_wrap',read)
+    scope={**RECORD,'object':'media_owner_item'}
+    body={**scope,'reader':'anchor-reader','at':100,'fence':'a'*64,'metadata':{'digest':'d'*64},'payload':base64.b64encode(b'opaque').decode()}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=s.app),base_url='https://acl') as client:
+        result=await client.post(PATH+'item-wrap-publish',json=body)
+        assert result.status_code==200 and result.json()=={'digest':'d'*64}
+        publish.assert_awaited_once_with(binding.authority,binding.store,str(s.tenant),'media-reader',scope['object'],scope['predicate'],scope['set'],
+            'anchor-reader',100,'a'*64,body['metadata'],b'opaque')
+        result=await client.post(PATH+'item-wrap-read',json=scope)
+        assert result.status_code==200 and result.json()['payload']==body['payload']
+        assert result.json()['item_epoch']==2 and result.json()['group_epoch']==3
+        assert result.headers['cache-control']=='private, no-store'
+        read.assert_awaited_once_with(binding.authority,binding.store,str(s.tenant),'media-reader',scope['object'],scope['predicate'],scope['set'])
+        for action,request_body,call in [('item-wrap-publish',body,publish),('item-wrap-read',scope,read)]:
+            call.reset_mock()
+            for patch in [{'owner':'spoofed'},{'object':[]},{'predicate':'direct'},{'set':'bad'}]:
+                assert (await client.post(PATH+action,json={**request_body,**patch})).status_code==400
+            s.user.scopes=['acl:media:read' if action.endswith('publish') else 'acl:media:write']
+            assert (await client.post(PATH+action,json=request_body)).status_code==403
+            s.user.scopes=['acl:media:read','acl:media:write'];call.assert_not_awaited()
+            await s.app.state.private_wrap_tenant_slots[s.tenant].acquire()
+            assert (await client.post(PATH+action,json=request_body)).status_code==429
+            s.app.state.private_wrap_tenant_slots[s.tenant].release();call.assert_not_awaited()
+            call.side_effect=GroupItemDeliveryRejected('private detail')
+            refused=await client.post(PATH+action,json=request_body)
+            assert refused.status_code==403 and 'private detail' not in refused.text
+            call.side_effect=HistoryConflict('private detail')
+            assert (await client.post(PATH+action,json=request_body)).status_code==409
+            call.side_effect=None
+            s.app.state.private_wrap_bindings=None
+            assert (await client.post(PATH+action,json=request_body)).status_code==503
+            s.app.state.private_wrap_bindings={}
+            assert (await client.post(PATH+action,json=request_body)).status_code==403
+            s.app.state.private_wrap_bindings={(s.tenant,s.user.sub):binding}
+        for patch in [{'reader':''},{'reader':[]},{'at':True},{'fence':'bad'},{'metadata':[]},{'payload':'!bad'}]:
+            assert (await client.post(PATH+'item-wrap-publish',json={**body,**patch})).status_code==400
+        assert (await client.post(PATH+'item-wrap-read',json={**scope,'reader':'spoofed'})).status_code==400
+        for action,limit in [('item-wrap-read',2048),('item-wrap-publish',92160)]:
+            assert (await client.post(PATH+action,content=b'x'*(limit+1),headers={'content-type':'application/json'})).status_code==413
+    s.publish.assert_not_awaited();s.read.assert_not_awaited()

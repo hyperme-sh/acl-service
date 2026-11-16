@@ -12,21 +12,34 @@ from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.group_wrap import GroupWrapRejected, publish_group_wrap, deliver_group_wrap
+from acl_service.domain.group_item_delivery import GroupItemDeliveryRejected, publish_group_item_wrap, deliver_group_item_wrap
 from acl_service.interfaces.api.private_wrap_routes import PRIVATE, capacity, refused
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
 
 router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
 # Owner commands share the authenticated group binding and admission limits.
 owner_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
+# Prepared byte routes are not installed by the application.
+item_byte_router=APIRouter(prefix='/acl/sociacl/media/groups',tags=['SociACL'])
+ITEM_BYTES={'item-wrap-publish','item-wrap-read'}
 ITEM_ACTIONS={'item-view','item-epoch-view','item-epoch-append','item-epoch-state',
-    'item-grant-view','item-grant-append','item-grant-state','item-status-view','item-status-append','item-status-state','item-wrap-view'}
+    'item-grant-view','item-grant-append','item-grant-state','item-status-view','item-status-append','item-status-state','item-wrap-view','item-wrap-publish','item-wrap-read'}
 APPEND_ACTIONS={'item-grant-append','item-epoch-append','item-status-append'}
 STATE_ACTIONS={'item-grant-state','item-epoch-state','item-status-state'}
-READER_ACTIONS={'item-grant-view','item-status-view','item-status-append','item-status-state','item-wrap-view'}
+READER_ACTIONS={'item-grant-view','item-status-view','item-status-append','item-status-state','item-wrap-view','item-wrap-publish'}
 
 
 
 async def execute(action,binding,body):
+    if action=='item-wrap-publish':
+        digest=await publish_group_item_wrap(binding.authority,binding.store,binding.tenant,binding.reader,
+            body['object'],body['predicate'],body['set'],body['reader'],body['at'],body['fence'],body['metadata'],body['payload'])
+        return {'digest':digest}
+    if action=='item-wrap-read':
+        result=asdict(await deliver_group_item_wrap(binding.authority,binding.store,binding.tenant,binding.reader,
+            body['object'],body['predicate'],body['set']))
+        result['payload']=base64.b64encode(result['payload']).decode('ascii')
+        return result
     if action=='item-authority-view':
         return await binding.authority.group_item_authority_view(binding.tenant,binding.reader,body['object'])
     args=(binding.tenant,binding.reader,body['predicate'],body['set'])
@@ -94,7 +107,7 @@ def parse_body(data,action):
     if action=='item-grant-view':expected.add('withdraw')
     if action in APPEND_ACTIONS:expected|={'at','fence','payload'}
     if action in STATE_ACTIONS:expected.add('payload')
-    if action=='wrap-publish':expected|={'at','fence','metadata','payload'}
+    if action in ('wrap-publish','item-wrap-publish'):expected|={'at','fence','metadata','payload'}
     if (type(body) is not dict or set(body)!=expected or body['predicate'] not in ('same-group','named-circle')
             or type(body['set']) is not str or re.fullmatch(r'set_p_[0-9a-f]{128}_[0-9a-f]{32}',body['set']) is None):raise ValueError()
     if action in ITEM_ACTIONS and (type(body['object']) is not str
@@ -104,7 +117,7 @@ def parse_body(data,action):
     if action=='item-grant-view' and type(body['withdraw']) is not bool:raise ValueError()
     if action in APPEND_ACTIONS and (type(body['at']) is not int or not 0<=body['at']<=9007199254740991 or
             type(body['fence']) is not str or re.fullmatch('[0-9a-f]{64}',body['fence']) is None or type(body['payload']) is not dict):raise ValueError()
-    if action=='wrap-publish':
+    if action in ('wrap-publish','item-wrap-publish'):
         if (type(body['at']) is not int or not 0<=body['at']<=9007199254740991
                 or type(body['fence']) is not str or re.fullmatch('[0-9a-f]{64}',body['fence']) is None
                 or type(body['metadata']) is not dict or type(body['payload']) is not str):raise ValueError()
@@ -115,29 +128,30 @@ def parse_body(data,action):
 
 
 async def operation(action,request,tenant,user):
-    bindings=request.app.state.group_wrap_bindings
+    prefix='private_wrap' if action in ITEM_BYTES else 'group_wrap'
+    bindings=getattr(request.app.state,prefix+'_bindings')
     if bindings is None:raise refused(503,'Group wraps unavailable')
     binding=bindings.get((tenant,user.sub))
-    scope='acl:media:read' if action=='wrap-read' else 'acl:media:write'
+    scope='acl:media:read' if action in ('wrap-read','item-wrap-read') else 'acl:media:write'
     if binding is None or binding.tenant!=str(tenant) or binding.store.tenant!=str(tenant) or scope not in user.scopes:
         raise refused(403,'Group wrap access refused')
     if not request.app.state.rate_limiter.allow(tenant,user.sub):raise refused(429,'Rate limit exceeded')
     if (request.headers.get('content-type','').split(';')[0]!='application/json'
             or request.headers.get('content-encoding','identity')!='identity'):raise refused(415,'Expected uncompressed JSON')
     try:
-        async with asyncio.timeout(5), capacity(request.app.state.group_wrap_body_slots[(tenant,user.sub)]):
-            data=bytearray();limit=270336 if action in ('item-epoch-append','item-epoch-state') else 92160 if action=='wrap-publish' else 8192 if action in APPEND_ACTIONS|STATE_ACTIONS else 2048
+        async with asyncio.timeout(5), capacity(getattr(request.app.state,prefix+'_body_slots')[(tenant,user.sub)]):
+            data=bytearray();limit=270336 if action in ('item-epoch-append','item-epoch-state') else 92160 if action in ('wrap-publish','item-wrap-publish') else 8192 if action in APPEND_ACTIONS|STATE_ACTIONS else 2048
             async with asyncio.timeout(1):
                 async for chunk in request.stream():
                     if len(data)+len(chunk)>limit:raise refused(413,'Request too large')
                     data.extend(chunk)
             try:body=parse_body(data,action)
             except (ValueError,RecursionError):raise refused(400,'Invalid group wrap request') from None
-            async with capacity(request.app.state.group_wrap_tenant_slots[tenant]), capacity(request.app.state.group_wrap_slots):
+            async with capacity(getattr(request.app.state,prefix+'_tenant_slots')[tenant]), capacity(getattr(request.app.state,prefix+'_slots')):
                 result=await connected(request,action,binding,body)
             return JSONResponse(result,headers=PRIVATE)
     except HistoryConflict:raise refused(409,'Group wrap authority changed; reconcile') from None
-    except (AdmissionRejected,GroupWrapRejected):raise refused(403,'Group wrap refused') from None
+    except (AdmissionRejected,GroupWrapRejected,GroupItemDeliveryRejected):raise refused(403,'Group wrap refused') from None
     except TimeoutError:raise refused(503,'Group wraps unavailable') from None
 
 
@@ -214,3 +228,13 @@ async def item_status_state(request:Request,tenant:UUID=Depends(require_matched_
 @owner_router.post('/item-wrap-view')
 async def item_wrap_view(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
     return await operation('item-wrap-view',request,tenant,user)
+
+
+@item_byte_router.post('/item-wrap-publish')
+async def item_wrap_publish(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-wrap-publish',request,tenant,user)
+
+
+@item_byte_router.post('/item-wrap-read')
+async def item_wrap_read(request:Request,tenant:UUID=Depends(require_matched_tenant),user:AuthMeResponse=Depends(get_current_user)):
+    return await operation('item-wrap-read',request,tenant,user)
