@@ -39,6 +39,13 @@ class GroupItemDeliveryTests(IsolatedAsyncioTestCase):
         self.assertFalse(hasattr(result,'fence'));self.assertFalse(hasattr(result,'reader_epub'))
         self.assertEqual(cancel.call_count,3)
 
+    async def test_generic_record_store_cannot_read_group_item_bytes(self):
+        legacy=SimpleNamespace(tenant='tenant',read=AsyncMock(return_value=DATA),for_object=Mock(return_value=self.bound))
+        with self.assertRaises(GroupItemDeliveryRejected):await self.deliver(store=legacy)
+        legacy.read.assert_not_awaited();legacy.for_object.assert_not_called()
+        self.authority.authorize_group_item_read.assert_not_awaited()
+        self.authority.commit_group_item_read.assert_not_awaited()
+
     async def test_bad_permits_refuse_before_storage(self):
         for value in [None,replace(self.permit,key=None),replace(self.permit,object='other'),
                       *[replace(self.permit,**change) for change in [{'item_epoch':True},{'item_epoch':0},{'item_epoch':9007199254740992},
@@ -98,6 +105,13 @@ class GroupItemPublicationTests(IsolatedAsyncioTestCase):
         args=dict(authority=self.authority,store=self.store,tenant='tenant',owner='owner',object='object',predicate='same-group',
             set_id='set',reader='reader',at=100,fence='fence',metadata={'digest':DIGEST},payload=DATA,clock=lambda:self.now)
         args.update(changes);return await publish_group_item_wrap(**args)
+
+    async def test_generic_record_store_cannot_reserve_or_publish_group_item_bytes(self):
+        legacy=SimpleNamespace(tenant='tenant',create_or_reconcile=AsyncMock(return_value=DIGEST),for_object=Mock(return_value=self.bound))
+        with self.assertRaises(GroupItemDeliveryRejected):await self.publish(store=legacy)
+        legacy.create_or_reconcile.assert_not_awaited();legacy.for_object.assert_not_called()
+        self.authority.prepare_group_item_write.assert_not_awaited()
+        self.authority.commit_group_item_write.assert_not_awaited()
 
     async def test_reserves_publishes_to_item_allocation_then_commits(self):
         def commit(permit):
