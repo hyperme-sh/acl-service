@@ -45,3 +45,15 @@ def test_first_owner_requires_verified_input_and_commit_guard():
     for principal,genesis,guard in [('',b'genesis',lambda:None),('owner','not-bytes',lambda:None),('owner',b'',lambda:None),('owner',b'genesis',None)]:
         with pytest.raises(ValueError):
             store.enroll_first_media_owner(principal,genesis,before_commit=guard)
+
+
+def test_provisioning_rejects_non_callable_guard_before_connecting(monkeypatch):
+    from acl_service.infrastructure import postgres_media_provision as provision
+    engine = Mock()
+    monkeypatch.setattr(provision, 'create_engine', engine)
+    with pytest.raises(ValueError, match='callable provisioning guard'):
+        provision.provision_empty_media_source('postgresql+psycopg://unused',
+            history_schema='acl_history', checkpoint_schema='acl_checkpoint',
+            tenant='00000000-0000-0000-0000-000000000001',
+            source='00000000-0000-0000-0000-000000000002', before_commit=False)
+    engine.assert_not_called()
