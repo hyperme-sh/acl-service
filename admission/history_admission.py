@@ -25,7 +25,7 @@ class EnrollmentGrant:
 
 
 def _record(raw):
-    if not isinstance(raw, bytes) or len(raw) > 128 * 1024:
+    if not isinstance(raw, bytes) or len(raw) > 256 * 1024:
         raise AdmissionRejected("invalid record size")
 
     def unique(pairs):

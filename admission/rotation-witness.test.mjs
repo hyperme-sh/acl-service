@@ -1,5 +1,6 @@
 // Native owner contract runs only in CI.
 import test from 'node:test';
+import {verifyRotate} from 'sociacl-ids';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -24,4 +25,11 @@ test('present revocation, invalid request, stale history and foreign wallet owne
  for(const extra of [{now:f.now+901},{genesis:{}},{entries:[f.wallet,f['rotate-v4-wallet']]},
   {peers:[{principal:f.peerBinding.principal,genesis:f.peerBinding,entries:[f.peerWalletTie]}]},
   {peers:[{principal:f.peerBinding.principal,genesis:f.peerBinding,entries:[],frozen:true}]}])assert.notEqual(run(request,undefined,extra).status,0);
+});
+
+test('installed identity consumer accepts the larger bounded rotation proof shape',()=>{
+ const record={...f['rotate-v4-wallet'],attest:'a'.repeat(128*1024)};
+ const context={...trust,now:request.issuedAt,links:new Map(),pinnedIss:new Set(trust.pinnedIss),history:()=>({ok:false,reason:'missing-history'})};
+ assert.equal(verifyRotate(record,f.genesis,context).reason,'bad-attestation');
+ assert.equal(verifyRotate({...record,attest:record.attest+'a'},f.genesis,context).reason,'too-long');
 });

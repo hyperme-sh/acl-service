@@ -31,7 +31,7 @@ class RotationPublishSource:
 
     def publish_wallet_rotation(self, principal, record, *, cancel=lambda:None):
         raw = encoded(record)
-        if len(raw) > 65536:
+        if len(raw) > 256 * 1024:
             raise AdmissionRejected('rotation record too large')
         value = _record(raw)
         if (value.get('principal') != principal or value.get('kind') != 'rotate'

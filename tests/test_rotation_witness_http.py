@@ -56,9 +56,9 @@ async def test_bounds_refusals_capacity_and_guard():
             response=await post();assert response.status_code==status and 'private detail' not in response.text
             assert response.headers['cache-control']=='private, no-store'
         source.attest_wallet_rotation.side_effect=None
-        for result in (None,{},'','x'*16385):
+        for result in (None,{},'','x'*(128*1024+1)):
             source.attest_wallet_rotation.return_value=result;assert (await post()).status_code==503
-        for content,status in [(b'x'*65537,413),(b'{"v":1,"v":1}',400),(b'{"v":NaN}',400)]:
+        for content,status in [(b'x'*(256 * 1024 + 1),413),(b'{"v":1,"v":1}',400),(b'{"v":NaN}',400)]:
             assert (await client.post('/acl/sociacl/rotation/wallet',content=content,headers={'content-type':'application/json'})).status_code==status
         assert (await client.post('/acl/sociacl/rotation/wallet',json=BODY,headers={'content-encoding':'gzip'})).status_code==415
         await app.state.rotation_witness_slots.acquire();assert (await post()).status_code==429
@@ -133,3 +133,25 @@ async def test_publication_routes_bind_subject_and_exact_records_and_results():
                         dict(good,head={**good['head'],'currentKey':'invalid'}),dict(good,head={**good['head'],'currentEpub':None})):
             source.wallet_rotation_state.return_value=invalid;assert (await read()).status_code==503
         user.scopes=[];assert (await publish()).status_code==403;assert (await read()).status_code==403
+
+@pytest.mark.asyncio
+async def test_supported_retained_link_capacity_for_all_rotation_routes():
+    import hashlib
+    import json
+    app,source,user=setup()
+    app.state.rotation_publication_enabled=True
+    request={**BODY,'retainedLinks':[f'{i:064x}' for i in range(1024)]}
+    record={**request,'attest':'a'*(128*1024)}
+    digest=hashlib.sha256(json.dumps(record,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    point='a'*43+'.'+'b'*43
+    source.publish_wallet_rotation.return_value={'recordHash':digest}
+    source.wallet_rotation_state.return_value={'recordHash':digest,'present':True,
+        'head':{'sequence':1,'currentKey':point,'currentEpub':point}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://unit') as client:
+        for suffix,body in [('',request),('/publish',record),('/state',{'record':record})]:
+            assert len(json.dumps(body).encode())>65536
+            response=await client.post('/acl/sociacl/rotation/wallet'+suffix,json=body)
+            assert response.status_code==200
+            response=await client.post('/acl/sociacl/rotation/wallet'+suffix,
+                content=b'x'*(256*1024+1),headers={'content-type':'application/json'})
+            assert response.status_code==413
