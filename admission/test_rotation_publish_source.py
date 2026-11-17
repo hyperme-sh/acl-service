@@ -63,7 +63,7 @@ def test_changed_authority_refuses_state_delivery_and_append_commit(setup,change
 def test_invalid_owner_record_source_and_hash_refuse(setup):
     source,state,policy,record,accounts,head,native=setup
     for bad in ({},dict(record,principal='other'),dict(record,kind='wallet'),dict(record,authorizer=None),
-                dict(record,authorizer={'kind':'oidc-fresh-login'}),dict(record,attest=''),dict(record,attest=1),dict(record,large='x'*65537)):
+                dict(record,authorizer={'kind':'oidc-fresh-login'}),dict(record,attest=''),dict(record,attest=1),dict(record,large='x'*(256 * 1024 + 1))):
         with pytest.raises(AdmissionRejected):source.publish_wallet_rotation('owner',bad)
     with pytest.raises(AdmissionRejected):source.publish_wallet_rotation('other',dict(record,principal='other'))
     for bad in ('0'*63,'A'*64,None):
@@ -81,3 +81,19 @@ def test_unknown_owner_diagnostics_and_bad_native_head_refuse(setup):
         head.clear();head.update(saved)
     accounts.clear()
     with pytest.raises(AdmissionRejected):source.wallet_rotation_state('owner','0'*64)
+
+def test_max_retained_links_and_escaped_proof_fit_native_record(setup):
+    from history_admission import _record
+    source,state,policy,record,accounts,head,native=setup
+    record.update(retainedLinks=[f'{i:064x}' for i in range(1024)],
+                  authorizer={'kind':'wallet','siwe':{'message':'\uffff'*8192,'signature':'0x'+'a'*130}},
+                  attest='a'*16384)
+    raw=encoded(record)
+    assert 128 * 1024 < len(raw) < 256 * 1024
+    assert _record(raw)==record
+    assert source.publish_wallet_rotation('owner',record)=={'recordHash':hashlib.sha256(raw).hexdigest()}
+    native.admit.assert_called_once()
+    accounts['owner']=HistorySnapshot('owner',b'{}',(raw,))
+    assert source.wallet_rotation_state('owner',hashlib.sha256(raw).hexdigest())['present']
+    with pytest.raises(AdmissionRejected):
+        _record(b' '*(256 * 1024 + 1))

@@ -1,5 +1,8 @@
 # acl-service
 
+Wallet rotation requests and admitted records are bounded to 256 KiB, including
+the state lookup envelope, to accommodate 1,024 retained links and bounded proofs.
+
 `SOCIACL_ROTATION_PUBLICATION_ENABLED=1` separately enables the configured
 rotation subject's `POST /api/v1/acl/sociacl/rotation/wallet/publish` and
 `/wallet/state` routes. Absent or `0` keeps both unavailable. They require the

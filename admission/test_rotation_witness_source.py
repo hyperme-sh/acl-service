@@ -65,7 +65,7 @@ def test_final_guard_prevents_token_delivery(source,change):
 def test_invalid_source_owner_capacity_and_native_heads_refuse(source):
     value,state,policy,result,signer=source
     with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('other',{})
-    with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'large':'x'*65537})
+    with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'large':'x'*(256 * 1024 + 1)})
     for heads in ({},{'owner':True},{'owner':-1}):
         result['heads']=heads
         with pytest.raises(AdmissionRejected):value.attest_wallet_rotation('owner',{'issuedAt':90})
@@ -126,3 +126,9 @@ def test_publication_delegates_to_same_protected_source(source):
         assert value.wallet_rotation_state('owner','hash',cancel=cancel)=={'present':True}
         cls.return_value.wallet_rotation_state.assert_called_once_with('owner','hash',cancel=cancel)
         assert cls.call_args.args==(value.store,)
+
+def test_max_retained_links_reach_native_witness(source):
+    value,state,policy,result,signer=source
+    request={'issuedAt':90,'retainedLinks':[f'{i:064x}' for i in range(1024)]}
+    assert value.attest_wallet_rotation('owner',request)=='signed-token'
+    assert state.committed

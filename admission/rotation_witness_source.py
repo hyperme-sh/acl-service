@@ -21,7 +21,7 @@ class RotationWitnessSource:
         at = int(self.clock())
         policy = copy.deepcopy(self.policy_at(at))
         request = json.loads(encoded(request))
-        if len(encoded(request)) > 65536 or principal not in policy['activePrincipals']:
+        if len(encoded(request)) > 256 * 1024 or principal not in policy['activePrincipals']:
             raise AdmissionRejected('rotation request refused')
         def guard():
             cancel()

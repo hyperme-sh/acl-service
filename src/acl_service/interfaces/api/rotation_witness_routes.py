@@ -68,7 +68,7 @@ async def _rotation(request, tenant, user, action):
                 raise refused(415, 'Expected uncompressed JSON')
             data = bytearray()
             async for chunk in request.stream():
-                if len(data) + len(chunk) > 65536: raise refused(413, 'Rotation request too large')
+                if len(data) + len(chunk) > 256 * 1024: raise refused(413, 'Rotation request too large')
                 data.extend(chunk)
             try:
                 body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields, parse_constant=_invalid_constant)
