@@ -25,7 +25,11 @@ def main():
     fixture = {'DATABASE_URL': url, 'FIXTURE_ACL_URL': f'http://{app}:8000',
                **{name: str(uuid.uuid4()) for name in ('FIXTURE_TENANT_A', 'FIXTURE_TENANT_B',
                                                      'FIXTURE_USER_A', 'FIXTURE_USER_B', 'FIXTURE_USER_C')}}
-    mount = f'type=bind,src={Path(__file__).resolve().parents[1] / "tests/runtime_startup_probe.py"},dst=/checks/probe.py,readonly'
+    root = Path(__file__).resolve().parents[1]
+    mounts = [argument for source, destination in (
+        (root / 'tests', '/checks/tests'),
+        (root / 'tests_artifacts', '/checks/tests_artifacts'),
+    ) for argument in ('--mount', f'type=bind,src={source},dst={destination},readonly')]
     def docker(*command, timeout=180):
         result = subprocess.run(['docker', *command], text=True,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
@@ -36,8 +40,8 @@ def main():
     def run_probe(phase):
         flags = [argument for name, value in fixture.items() for argument in ('--env', name + '=' + value)]
         print(docker('run', '--rm', '--name', probe, '--network', network,
-                     '--read-only', '--tmpfs', '/tmp', '--mount', mount, *flags,
-                     args.image_id, 'python', '-I', '/checks/probe.py', phase), end='')
+                     '--read-only', '--tmpfs', '/tmp', *mounts, *flags,
+                     args.image_id, 'python', '-I', '/checks/tests/runtime_startup_probe.py', phase), end='')
     try:
         docker('network', 'create', '--internal', network)
         docker('run', '--detach', '--name', database, '--network', network,

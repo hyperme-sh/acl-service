@@ -11,6 +11,9 @@ from api.core import config as api_config
 from api.infrastructure.security import keycloak_jwt as kc_jwt
 from auth_service.deps import get_current_tenant, get_current_user
 from auth_service.schemas import AuthMeResponse
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tests/historical_db_fixture.py'))
 from controlplane_db.migrations import upgrade
 from testcontainers.postgres import PostgresContainer
 

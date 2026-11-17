@@ -54,7 +54,7 @@ def known_notice_hash(row, layers, supplement):
 if __name__ == '__main__':
     rows = json.loads(Path(sys.argv[1]).read_text())
     assets = json.loads(Path('.github/workflows/reviewed-image-assets.json').read_text())
-    supplement = json.loads(Path('.github/workflows/third-party-notices/auth-service/source.json').read_text())
+    supplement = json.loads(Path('.github/workflows/historical-auth-notice.json').read_text())
     source = [r for r in rows if known_asset(r, Path(sys.argv[2]), assets) or known_notice_hash(r, Path(sys.argv[2]), supplement)]
     unexpected = [r for r in rows if not known(r, Path(sys.argv[2])) and r not in source]
     fingerprint_count = sum(known(r, Path(sys.argv[2])) for r in rows)

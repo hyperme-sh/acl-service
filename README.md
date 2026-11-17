@@ -535,10 +535,10 @@ PostgreSQL 17 and applies the pinned database migrations. A missing Docker
 daemon or a failed migration fails the run. `tests/` is the CI entry point.
 `core/acl-service/tests` is retained history.
 
-`bash scripts/check-package.sh --fixtures` installs the verified dependency
-wheels in `tests_artifacts/` and runs the same consumer checks without Git
-credentials. `bash scripts/check-postgres.sh` installs the package and runs
-`integration/` against a disposable PostgreSQL 16 container.
+PR package checks install the actual locked public dependencies anonymously.
+The archived dependency wheels are retained for historical verification only;
+tests load the DB migration files separately, outside the runtime image.
+The integration suite runs in scheduled nightly CI.
 `bash scripts/check-image.sh acl-service:local` compares image bytes with
 `src/acl_service` and exercises the HTTP routes in a read-only container with
 networking disabled.
@@ -1486,11 +1486,12 @@ context before protected reads; unknown completion retains the pending operation
 The normal cryptographic bearer verifier also refuses original-run tokens without
 an admission, including introspection results. No paid-router scope is granted.
 
-Standalone wheel consumers use the qualified application graph bundled in the
-source archive: `bash scripts/install-qualified.sh /path/to/venv/bin/python /path/to/acl_service.whl`.
-The installer verifies the manifest and every private wheel digest, then performs
-normal dependency resolution with explicit overrides for those audited artifacts.
-A bare wheel installation without that graph is not the supported installation
-contract for independently advancing shared libraries. CI uses this same installer
-before executing the external-wheel contracts. Container/source consumers retain
-the recorded `uv.lock` and explicit project overrides.
+Standalone wheel consumers use the current public dependency graph from the
+matching source archive:
+`bash scripts/install-qualified.sh /path/to/venv/bin/python /path/to/acl_service.whl`.
+The installer exports the recorded `uv.lock`, applies the explicit project
+overrides, and resolves the application dependencies from their public sources.
+It does not install the archived dependency-wheel fixtures. CI uses this same
+installer before running the external-wheel contracts. Container/source consumers
+retain the recorded `uv.lock` and explicit project overrides. Running TEST
+services continue to follow the moving GHCR channel.

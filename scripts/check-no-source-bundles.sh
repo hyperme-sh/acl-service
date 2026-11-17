@@ -5,3 +5,5 @@ scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 docker image save "$image" -o "$scratch/image.tar"
 python3 scripts/assert_no_source_bundles.py "$scratch/image.tar"
+
+python3 scripts/assert_no_hosted_dependencies.py "$scratch/image.tar"

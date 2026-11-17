@@ -8,6 +8,9 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
+import runpy
+from pathlib import Path
+runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tests/historical_db_fixture.py'))
 from controlplane_db.migrations import upgrade
 
 

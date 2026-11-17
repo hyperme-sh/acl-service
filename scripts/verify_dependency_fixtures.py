@@ -1,4 +1,4 @@
-"""Verify the complete locked private dependency graph without fetching Git."""
+"""Verify the archived dependency graph; never install it into new runtimes without fetching Git."""
 import email.parser
 import hashlib
 import json
@@ -23,8 +23,8 @@ def pin(requirement):
 def verify(root):
     root = Path(root); directory = root/'tests_artifacts/dependencies'
     records = json.loads((directory/'manifest.json').read_text())['dependencies']
-    project = tomllib.loads((root/'pyproject.toml').read_text())
-    lock = tomllib.loads((root/'uv.lock').read_text())
+    project = tomllib.loads((directory/'pyproject.toml').read_text())
+    lock = tomllib.loads((directory/'uv.lock').read_text())
     locked = {}
     for entry in lock['package']:
         if 'git' in entry['source']:

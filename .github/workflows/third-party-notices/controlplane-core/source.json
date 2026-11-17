@@ -1,9 +1,0 @@
-{
-  "distribution": "controlplane-core",
-  "version": "0.1.0",
-  "repository": "https://github.com/hyperme-sh/controlplane-core",
-  "commit": "c46bf282a8f1a605cfb8acb9beafb474c0b1b0c8",
-  "files": {
-    "LICENSE": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
-  }
-}
