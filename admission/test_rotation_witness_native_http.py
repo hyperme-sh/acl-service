@@ -39,7 +39,7 @@ async def test_native_wallet_attestation_and_present_revocation(tmp_path,state_e
               tenant=str(uuid4()),source=str(uuid4()))
     provision_empty_media_source(state_url,**spec)
     store=PostgresHistoryStore(state_url,**spec)
-    grant=EnrollmentGrant(principal,'qualification','single-use',now+60)
+    grant=EnrollmentGrant(principal,'qualification','one-use-grant',f['now']+60)
     writer=HistoryAdmission(store,grant_for=lambda _:grant,trust_at=lambda _:trust,clock=lambda:now)
     writer.enroll(principal,json.dumps(f['binding']).encode(),f['signature'])
     writer.admit(principal,json.dumps(f['wallet']).encode())
