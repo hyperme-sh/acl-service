@@ -62,4 +62,5 @@
 !admission/signed_store_source.py
 
 !admission/rotation-witness.mjs
+!admission/rotation_publish_source.py
 !admission/rotation_witness_source.py
