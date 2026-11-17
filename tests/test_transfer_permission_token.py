@@ -8,14 +8,12 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from acl_service.app import create_app
 from starlette.requests import Request
 
 from auth_service import scoped_session, transfer_permission, outbox
 from auth_service.schemas import AuthMeResponse
-from acl_service import nightly
 from acl_service.infrastructure.device_transfer_bindings import DeviceTransferBinding
-from acl_service.interfaces.api.device_transfer_routes import router
 from controlplane_api.config import settings
 from test_device_transfer import TENANT, OWNER, BODY
 
@@ -46,14 +44,13 @@ async def test_auth_issued_transfer_scope_is_checked_by_actual_acl_route(tmp_pat
             Request({'type':'http','headers':[]}),AuthMeResponse.from_claims(provider),provider)
         return json.loads(response.body)['access_token']
     ordinary=await issue(False);authorized=await issue(True)
-    app=FastAPI();app.include_router(router);nightly.install(app)
     source=Mock();source.read.return_value={'checkpoint':{'revision':'ab'*32,'validUntil':100000}}
-    app.state.device_transfer_bindings={(TENANT,'reader'):DeviceTransferBinding(OWNER,source)}
+    app=create_app(device_transfer_bindings={(TENANT,'reader'):DeviceTransferBinding(OWNER,source)})
     app.state.device_transfer_slots=asyncio.Semaphore(2)
     app.state.rate_limiter=SimpleNamespace(allow=lambda *_:True)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://consumer.invalid') as client:
         async def post(token,tenant=str(TENANT)):
-            return await client.post('/acl/sociacl/device-transfer/state',json=BODY,
+            return await client.post('/api/v1/acl/sociacl/device-transfer/state',json=BODY,
                 headers={'Authorization':'Bearer '+token,'X-Tenant-ID':tenant})
         assert (await post(ordinary)).status_code==403
         source.read.assert_not_called()
