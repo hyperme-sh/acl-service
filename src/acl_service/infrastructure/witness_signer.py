@@ -121,7 +121,11 @@ class WitnessSigner:
         except (TypeError, ValueError, OverflowError):
             raise WitnessRejected() from None
         # Compact signature adds one dot and 86 unpadded base64url characters.
-        if len(encoded) + 87 > 16384:
+        limit = 128 * 1024 if payload.get("typ") in (
+            "sociacl-rotate-attest-v1", "sociacl-rotate-attest-v2",
+            "sociacl-rotate-attest-v3", "sociacl-rotate-attest-v4",
+        ) else 16384
+        if len(encoded) + 87 > limit:
             raise WitnessRejected()
         der = self.private_key.sign(encoded.encode("ascii"), ec.ECDSA(hashes.SHA256()))
         r, s = utils.decode_dss_signature(der)

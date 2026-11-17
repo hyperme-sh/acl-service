@@ -92,7 +92,7 @@ async def _rotation(request, tenant, user, action):
             work = asyncio.create_task(asyncio.to_thread(getattr(binding.source,method), binding.principal, payload, cancel=guard))
             result = await connected_result(request, work, stopped)
             if action == 'attest':
-                if not isinstance(result, str) or not 0 < len(result) <= 16384:raise ValueError()
+                if not isinstance(result, str) or not 0 < len(result) <= 128 * 1024:raise ValueError()
                 result = {'attest':result}
             else:
                 keys = {'recordHash','present','head'} if action == 'state' else {'recordHash'}

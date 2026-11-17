@@ -56,7 +56,7 @@ async def test_bounds_refusals_capacity_and_guard():
             response=await post();assert response.status_code==status and 'private detail' not in response.text
             assert response.headers['cache-control']=='private, no-store'
         source.attest_wallet_rotation.side_effect=None
-        for result in (None,{},'','x'*16385):
+        for result in (None,{},'','x'*(128*1024+1)):
             source.attest_wallet_rotation.return_value=result;assert (await post()).status_code==503
         for content,status in [(b'x'*(256 * 1024 + 1),413),(b'{"v":1,"v":1}',400),(b'{"v":NaN}',400)]:
             assert (await client.post('/acl/sociacl/rotation/wallet',content=content,headers={'content-type':'application/json'})).status_code==status
@@ -141,7 +141,7 @@ async def test_supported_retained_link_capacity_for_all_rotation_routes():
     app,source,user=setup()
     app.state.rotation_publication_enabled=True
     request={**BODY,'retainedLinks':[f'{i:064x}' for i in range(1024)]}
-    record={**request,'attest':'a'*16384}
+    record={**request,'attest':'a'*(128*1024)}
     digest=hashlib.sha256(json.dumps(record,sort_keys=True,separators=(',',':')).encode()).hexdigest()
     point='a'*43+'.'+'b'*43
     source.publish_wallet_rotation.return_value={'recordHash':digest}

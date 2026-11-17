@@ -144,3 +144,21 @@ def test_committed_interop_sample_matches_publisher_contract():
         public.public_key.verify(utils.encode_dss_signature(r, s), (header + "." + payload).encode(), ec.ECDSA(hashes.SHA256()))
     with pytest.raises(WitnessRejected):
         WitnessSigner(public, private, lambda: 1001).sign_verified(claims(), issued_at=1000)
+
+def test_real_rotation_signer_handles_maximum_retained_link_claims():
+    public, private = key()
+    signer = WitnessSigner(public, private, lambda: 1000)
+    payload = {**claims(), "typ": "sociacl-rotate-attest-v4",
+               "retainedLinks": [f"{i:064x}" for i in range(1024)]}
+    token = signer.sign_verified(payload, issued_at=1000)
+    assert 16384 < len(token) < 128 * 1024
+    header, body, signature = token.split(".")
+    assert json.loads(decode(body)) == {**payload, "iat": 1000, "exp": 1900}
+    raw = decode(signature)
+    public.public_key.verify(utils.encode_dss_signature(
+        int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big")),
+        (header + "." + body).encode(), ec.ECDSA(hashes.SHA256()))
+    with pytest.raises(WitnessRejected):
+        signer.sign_verified({**payload, "padding": "a" * (128 * 1024)}, issued_at=1000)
+    with pytest.raises(WitnessRejected):
+        signer.sign_verified({**payload, "typ": "sociacl-acl-attest-v1"}, issued_at=1000)

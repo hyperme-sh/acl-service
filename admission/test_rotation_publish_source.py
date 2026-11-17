@@ -87,7 +87,7 @@ def test_max_retained_links_and_escaped_proof_fit_native_record(setup):
     source,state,policy,record,accounts,head,native=setup
     record.update(retainedLinks=[f'{i:064x}' for i in range(1024)],
                   authorizer={'kind':'wallet','siwe':{'message':'\uffff'*8192,'signature':'0x'+'a'*130}},
-                  attest='a'*16384)
+                  attest='a'*(128*1024))
     raw=encoded(record)
     assert 128 * 1024 < len(raw) < 256 * 1024
     assert _record(raw)==record
