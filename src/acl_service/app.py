@@ -237,6 +237,8 @@ def create_app(
     app.include_router(credential_router, prefix="/api/v1")
     from acl_service.interfaces.api.rotation_witness_routes import router as rotation_witness_router
     app.state.rotation_witness_bindings = MappingProxyType(dict(rotation_bindings)) if rotation_bindings is not None else None
+    from acl_service.infrastructure.rotation_witness_bindings import load_rotation_publication_enabled
+    app.state.rotation_publication_enabled = load_rotation_publication_enabled()
     app.state.rotation_witness_slots = asyncio.Semaphore(2)
     app.include_router(rotation_witness_router, prefix="/api/v1")
     from acl_service.interfaces.api.device_transfer_routes import router as device_transfer_router

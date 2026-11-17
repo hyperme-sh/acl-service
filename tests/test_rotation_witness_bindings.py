@@ -71,7 +71,7 @@ def test_source_import_and_constructor_cleanup(monkeypatch):
     store=Mock();settings=SimpleNamespace(open=lambda:store)
     module=SimpleNamespace(__file__='/opt/acl-admission/rotation_witness_source.py',RotationWitnessSource=Mock(return_value='source'))
     with ExitStack() as stack:
-        for name in ('history_admission','statement_source','rotation_witness_source'):
+        for name in ('history_admission','statement_source','rotation_publish_source','rotation_witness_source'):
             value=module if name=='rotation_witness_source' else SimpleNamespace(__file__='/opt/acl-admission/'+name+'.py')
             stack.enter_context(patch.dict(bindings.sys.modules,{name:value}))
         assert bindings._source(settings,'policy','witness','kid','private')=='source'
@@ -84,7 +84,7 @@ def test_source_import_and_constructor_cleanup(monkeypatch):
 
 @pytest.mark.parametrize('failure',[False,True])
 def test_private_module_loader_rolls_back_failed_import(monkeypatch,failure):
-    for name in ('history_admission','statement_source','rotation_witness_source'):
+    for name in ('history_admission','statement_source','rotation_publish_source','rotation_witness_source'):
         # Track absence too, so modules inserted by the loader cannot escape this test.
         monkeypatch.setitem(bindings.sys.modules,name,None)
         del bindings.sys.modules[name]
@@ -135,3 +135,10 @@ async def test_startup_owns_sources_and_cleans_up_on_configuration_refusal(monke
         assert app.state.rotation_witness_bindings is None
     loader.assert_called_once_with(policy)
     consumer.stop.assert_awaited_once();sync_engine.dispose.assert_called_once();async_engine.dispose.assert_awaited_once()
+
+
+def test_publication_flag_is_explicit_and_default_off():
+    assert bindings.load_rotation_publication_enabled({}) is False
+    assert bindings.load_rotation_publication_enabled({'SOCIACL_ROTATION_PUBLICATION_ENABLED':'0'}) is False
+    assert bindings.load_rotation_publication_enabled({'SOCIACL_ROTATION_PUBLICATION_ENABLED':'1'}) is True
+    with pytest.raises(ValueError):bindings.load_rotation_publication_enabled({'SOCIACL_ROTATION_PUBLICATION_ENABLED':'true'})

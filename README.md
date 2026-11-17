@@ -1,5 +1,16 @@
 # acl-service
 
+`SOCIACL_ROTATION_PUBLICATION_ENABLED=1` separately enables the configured
+rotation subject's `POST /api/v1/acl/sociacl/rotation/wallet/publish` and
+`/wallet/state` routes. Absent or `0` keeps both unavailable. They require the
+same private bindings and `acl:identity:rotate` scope as signing. Publish accepts
+only the fully signed public wallet rotation, including its attestation. State
+accepts only `{record: <the complete signed public rotation>}` and returns
+presence, its server-computed canonical record hash and the authenticated current
+head. Lost responses require exact state lookup; no automatic resend occurs.
+Publication uses native admission, current revocation checks, authority fencing
+and a guarded atomic append. Neither route creates enrollment or browser sessions.
+
 `SOCIACL_ROTATION_BINDINGS_FILE` enables `POST /api/v1/acl/sociacl/rotation/wallet`
 only for configured tenant/subject pairs with `acl:identity:rotate`. Without the
 private file, signing is unavailable. Version 1 contains a `bindings` array;

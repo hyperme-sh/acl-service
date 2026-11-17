@@ -98,3 +98,38 @@ async def test_timeout_keeps_capacity_until_signing_worker_exits(monkeypatch):
         finish.set()
         async with asyncio.timeout(5):
             while app.state.rotation_witness_slots.locked():await asyncio.sleep(.01)
+
+
+@pytest.mark.asyncio
+async def test_publication_routes_bind_subject_and_exact_records_and_results():
+    import hashlib
+    import json
+    app,source,user=setup()
+    body={**BODY,'attest':'signed-token'}
+    digest=hashlib.sha256(json.dumps(body,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    source.publish_wallet_rotation.return_value={'recordHash':digest}
+    point='a'*43+'.'+'b'*43
+    good={'recordHash':digest,'present':True,'head':{'sequence':1,'currentKey':point,'currentEpub':point}}
+    source.wallet_rotation_state.return_value=good
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://unit') as client:
+        async def publish(value=body):return await client.post('/acl/sociacl/rotation/wallet/publish',json=value)
+        async def read(value=None):return await client.post('/acl/sociacl/rotation/wallet/state',json={'record':body} if value is None else value)
+        assert (await publish()).status_code==503
+        assert (await read()).status_code==503
+        app.state.rotation_publication_enabled=True
+        assert (await publish()).json()=={'recordHash':digest}
+        assert source.publish_wallet_rotation.call_args.args==('owner',body)
+        response=await read();assert response.json()==good
+        assert response.headers['cache-control']=='private, no-store'
+        assert source.wallet_rotation_state.call_args.args==('owner',digest)
+        for invalid in (BODY,{**body,'secret':'private'},[],{**body,'authorizer':{'kind':'oidc-fresh-login'}}):
+            assert (await publish(invalid)).status_code==400
+        assert (await publish({**body,'principal':'foreign'})).status_code==403
+        for invalid in ({},{'recordHash':'A'*64},{'recordHash':0},{'recordHash':digest,'owner':'foreign'}):
+            assert (await read(invalid)).status_code==400
+        source.publish_wallet_rotation.return_value={'recordHash':'0'*64};assert (await publish()).status_code==503
+        for invalid in (None,{'recordHash':digest},dict(good,present=1),dict(good,head={}),
+                        dict(good,head={**good['head'],'sequence':True}),dict(good,head={**good['head'],'sequence':-1}),
+                        dict(good,head={**good['head'],'currentKey':'invalid'}),dict(good,head={**good['head'],'currentEpub':None})):
+            source.wallet_rotation_state.return_value=invalid;assert (await read()).status_code==503
+        user.scopes=[];assert (await publish()).status_code==403;assert (await read()).status_code==403

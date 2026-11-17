@@ -14,7 +14,7 @@ from acl_service.interfaces.api.rotation_witness_routes import RotationBinding
 
 
 def _source(settings, policy, witness_policy, kid, private_key):
-    for name in ('history_admission','statement_source','rotation_witness_source'):
+    for name in ('history_admission','statement_source','rotation_publish_source','rotation_witness_source'):
         path=Path('/opt/acl-admission')/(name+'.py')
         if name in sys.modules:
             if Path(sys.modules[name].__file__)!=path:raise ValueError('unexpected verifier module')
@@ -71,3 +71,9 @@ def load_rotation_bindings(witness_policy, environ=None, *, source_factory=None)
     except Exception:
         for source in sources.values():source.store.close()
         raise ValueError('Invalid rotation signing configuration') from None
+
+
+def load_rotation_publication_enabled(environ=None):
+    value=(os.environ if environ is None else environ).get('SOCIACL_ROTATION_PUBLICATION_ENABLED','0')
+    if value not in ('0','1'):raise ValueError('invalid rotation publication setting')
+    return value == '1'
