@@ -79,3 +79,16 @@ access must always check current authority; a successful copy grants no rights.
 CI checks protected-source units, authenticated HTTP refusal, packed declarations,
 browser bundling and a synthetic SDK transfer using real SociACL keyring bytes
 and the canonical ACL verifier. No live or shared TEST runs are required here.
+
+## Native Auth permission grants
+
+Auth's transfer permission contract requires an explicit owner grant in
+`AUTH_TRANSFER_GRANTS_FILE`, plus current organization authority. The native
+Auth validator rereads the same protected configuration on ACL token use; missing
+configuration, revoked grants and changed membership refuse before source reads.
+No scope is synthesized from tenant membership or a launcher identity.
+
+The CI consumer contract issues a real Auth tenant token and submits it through
+ACL's native bearer dependencies. Ordinary membership tokens refuse, and grant
+removal or membership revocation prevents subsequent reads. This source change
+installs no grant, account binding, reader case or live route.

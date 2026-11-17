@@ -48,7 +48,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "auth-service", git = "https://github.com/hyperme-sh/auth-service.git?rev=0440087ad5f583feed0546bd96132891cc98242a" },
+    { name = "auth-service", git = "https://github.com/hyperme-sh/auth-service.git?rev=5db7eb7753d61831e709910c0c940524209c32a7" },
     { name = "casbin", specifier = ">=1.36.0" },
     { name = "casbin-sqlalchemy-adapter", specifier = ">=1.4.0" },
     { name = "controlplane-api", git = "https://github.com/hyperme-sh/controlplane-api.git?rev=0813448d067d59a0cc8fa2d144d85ddfde465af4" },
@@ -269,7 +269,7 @@ wheels = [
 [[package]]
 name = "auth-service"
 version = "0.2.0"
-source = { git = "https://github.com/hyperme-sh/auth-service.git?rev=0440087ad5f583feed0546bd96132891cc98242a#0440087ad5f583feed0546bd96132891cc98242a" }
+source = { git = "https://github.com/hyperme-sh/auth-service.git?rev=5db7eb7753d61831e709910c0c940524209c32a7#5db7eb7753d61831e709910c0c940524209c32a7" }
 dependencies = [
     { name = "bcrypt" },
     { name = "controlplane-api" },

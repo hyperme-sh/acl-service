@@ -10,7 +10,7 @@ license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.13"
 dependencies = [
     "controlplane-api @ git+https://github.com/hyperme-sh/controlplane-api.git@0813448d067d59a0cc8fa2d144d85ddfde465af4",
-    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@0440087ad5f583feed0546bd96132891cc98242a",
+    "auth-service @ git+https://github.com/hyperme-sh/auth-service.git@5db7eb7753d61831e709910c0c940524209c32a7",
     "controlplane-core @ git+https://github.com/hyperme-sh/controlplane-core.git@d5e658e1a139b58718a1dc1a5a532efd63d4f01c",
     "controlplane-db @ git+https://github.com/hyperme-sh/controlplane-db.git@907b9390b3d68aa67903ffec849e9f1d64c17f1f",
     "controlplane-events @ git+https://github.com/hyperme-sh/controlplane-events.git@41bac4f366eeeedae47a0ada18d89f3dee1ca608",
