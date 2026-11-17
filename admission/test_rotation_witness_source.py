@@ -113,3 +113,16 @@ def test_native_output_is_bound_to_requested_owner_and_time(source,field,value):
     with pytest.raises(AdmissionRejected):
         instance.attest_wallet_rotation('owner',{'issuedAt':90})
     assert not signer.sign_verified.called and not state.committed
+
+
+def test_publication_delegates_to_same_protected_source(source):
+    value,state,policy,result,signer=source
+    with patch('rotation_publish_source.RotationPublishSource') as cls:
+        cls.return_value.publish_wallet_rotation.return_value={'recordHash':'hash'}
+        cls.return_value.wallet_rotation_state.return_value={'present':True}
+        cancel=Mock()
+        assert value.publish_wallet_rotation('owner',{'signed':True},cancel=cancel)=={'recordHash':'hash'}
+        cls.return_value.publish_wallet_rotation.assert_called_once_with('owner',{'signed':True},cancel=cancel)
+        assert value.wallet_rotation_state('owner','hash',cancel=cancel)=={'present':True}
+        cls.return_value.wallet_rotation_state.assert_called_once_with('owner','hash',cancel=cancel)
+        assert cls.call_args.args==(value.store,)

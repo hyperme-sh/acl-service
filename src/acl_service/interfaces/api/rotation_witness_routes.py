@@ -1,6 +1,8 @@
 """Subject-bound wallet rotation; missing protected configuration refuses."""
 import asyncio
 import json
+import hashlib
+import re
 import threading
 import subprocess
 from uuid import UUID
@@ -27,8 +29,26 @@ class RotationBinding:
 @router.post('/wallet')
 async def wallet_rotation(request: Request,
     tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
+    return await _rotation(request,tenant,user,'attest')
+
+
+@router.post('/wallet/publish')
+async def publish_rotation(request: Request,
+    tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
+    return await _rotation(request,tenant,user,'publish')
+
+
+@router.post('/wallet/state')
+async def rotation_state(request: Request,
+    tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
+    return await _rotation(request,tenant,user,'state')
+
+
+async def _rotation(request, tenant, user, action):
     check_scope(tenant, user.sub)
     if 'acl:identity:rotate' not in user.scopes: raise refused(403, 'Rotation refused')
+    if action != 'attest' and not getattr(request.app.state, 'rotation_publication_enabled', False):
+        raise refused(503, 'Rotation publication unavailable')
     bindings = getattr(request.app.state, 'rotation_witness_bindings', None)
     if bindings is None: raise refused(503, 'Rotation unavailable')
     binding = bindings.get((tenant, user.sub))
@@ -52,20 +72,38 @@ async def wallet_rotation(request: Request,
                 data.extend(chunk)
             try:
                 body = json.loads(data.decode('utf-8'), object_pairs_hook=_unique_fields, parse_constant=_invalid_constant)
+                if action == 'state':
+                    if type(body) is not dict or set(body) != {'record'}:raise ValueError()
+                    body=body['record']
                 fields = {'v','kind','principal','seq','prevKey','nextKey','nextEpub','issuedAt','retainedLinks','authorizer','nextSig'}
-                if type(body) is not dict or set(body) != fields or body.get('kind') != 'rotate': raise ValueError()
+                if action != 'attest':fields.add('attest')
+                if type(body) is not dict or set(body) != fields or body.get('kind') != 'rotate':raise ValueError()
                 authorizer = body['authorizer']
-                if type(authorizer) is not dict or set(authorizer) != {'kind','link','siwe'} or authorizer['kind'] != 'wallet': raise ValueError()
+                if type(authorizer) is not dict or set(authorizer) != {'kind','link','siwe'} or authorizer['kind'] != 'wallet':raise ValueError()
                 proof = authorizer['siwe']
-                if type(proof) is not dict or set(proof) != {'message','signature'}: raise ValueError()
+                if type(proof) is not dict or set(proof) != {'message','signature'}:raise ValueError()
                 json.dumps(body, allow_nan=False)
             except (ValueError, TypeError, RecursionError): raise refused(400, 'Invalid rotation request') from None
             if body['principal'] != binding.principal:
                 raise refused(403, 'Rotation refused')
-            work = asyncio.create_task(asyncio.to_thread(binding.source.attest_wallet_rotation, binding.principal, body, cancel=guard))
+            method = {'attest':'attest_wallet_rotation','publish':'publish_wallet_rotation','state':'wallet_rotation_state'}[action]
+            digest = hashlib.sha256(json.dumps(body,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+            payload = digest if action == 'state' else body
+            work = asyncio.create_task(asyncio.to_thread(getattr(binding.source,method), binding.principal, payload, cancel=guard))
             result = await connected_result(request, work, stopped)
-            if not isinstance(result, str) or not 0 < len(result) <= 16384: raise ValueError()
-            return JSONResponse({'attest':result}, headers=PRIVATE)
+            if action == 'attest':
+                if not isinstance(result, str) or not 0 < len(result) <= 16384:raise ValueError()
+                result = {'attest':result}
+            else:
+                keys = {'recordHash','present','head'} if action == 'state' else {'recordHash'}
+                if type(result) is not dict or set(result) != keys or result['recordHash'] != digest:raise ValueError()
+                if action == 'state':
+                    head = result['head']
+                    if (type(result['present']) is not bool or type(head) is not dict or
+                            set(head) != {'sequence','currentKey','currentEpub'} or type(head['sequence']) is not int or
+                            not 0 <= head['sequence'] <= 9007199254740991 or
+                            any(not isinstance(head[key],str) or re.fullmatch(r'[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}',head[key]) is None for key in ('currentKey','currentEpub'))):raise ValueError()
+            return JSONResponse(result, headers=PRIVATE)
     except AdmissionRejected: raise refused(403, 'Rotation refused') from None
     except HistoryConflict: raise refused(409, 'Rotation changed') from None
     except (TimeoutError, OSError, RuntimeError, ValueError, subprocess.SubprocessError): raise refused(503, 'Rotation unavailable') from None

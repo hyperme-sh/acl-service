@@ -66,6 +66,7 @@ async def test_native_wallet_attestation_and_present_revocation(tmp_path,state_e
     tenant=UUID(spec['tenant']);actor=AuthMeResponse(sub='owner',tenant_id=tenant,scopes=['acl:identity:rotate'])
     app.dependency_overrides[deps.get_current_user]=lambda:actor
     app.dependency_overrides[deps.get_current_tenant_from_token]=lambda:actor.tenant_id
+    app.state.rotation_publication_enabled=True
     app.state.rotation_witness_bindings=bindings;app.state.rotation_witness_slots=asyncio.Semaphore(1)
     app.state.rate_limiter=SimpleNamespace(allow=lambda *_:True)
     try:
@@ -84,14 +85,18 @@ async def test_native_wallet_attestation_and_present_revocation(tmp_path,state_e
             response=await client.post('/acl/sociacl/rotation/wallet',json=request)
             assert response.status_code==200,response.text
             signed={**request,**response.json()}
-            from rotation_publish_source import RotationPublishSource
             import hashlib
             from statement_source import encoded
-            publisher=RotationPublishSource(store,policy_at=lambda _:policy,clock=lambda:request['issuedAt'])
             digest=hashlib.sha256(encoded(signed)).hexdigest()
-            assert publisher.wallet_rotation_state(principal,digest)['present'] is False
-            assert publisher.publish_wallet_rotation(principal,signed)=={'recordHash':digest}
-            published=publisher.wallet_rotation_state(principal,digest)
+            lookup=await client.post('/acl/sociacl/rotation/wallet/state',json={'record':signed})
+            assert lookup.status_code==200,lookup.text
+            assert lookup.json()['present'] is False
+            appended=await client.post('/acl/sociacl/rotation/wallet/publish',json=signed)
+            assert appended.status_code==200,appended.text
+            assert appended.json()=={'recordHash':digest}
+            lookup=await client.post('/acl/sociacl/rotation/wallet/state',json={'record':signed})
+            assert lookup.status_code==200,lookup.text
+            published=lookup.json()
             assert published['present'] is True
             assert published['head']['currentKey']==request['nextKey']
             assert published['head']['sequence']==request['seq']

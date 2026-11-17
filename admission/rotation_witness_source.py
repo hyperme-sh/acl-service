@@ -68,3 +68,12 @@ class RotationWitnessSource:
             guard()
         guard()
         return token
+
+
+    def publish_wallet_rotation(self, principal, record, *, cancel=lambda:None):
+        from rotation_publish_source import RotationPublishSource
+        return RotationPublishSource(self.store,policy_at=self.policy_at,clock=self.clock).publish_wallet_rotation(principal,record,cancel=cancel)
+
+    def wallet_rotation_state(self, principal, record_hash, *, cancel=lambda:None):
+        from rotation_publish_source import RotationPublishSource
+        return RotationPublishSource(self.store,policy_at=self.policy_at,clock=self.clock).wallet_rotation_state(principal,record_hash,cancel=cancel)
