@@ -78,11 +78,14 @@ async def test_native_wallet_attestation_and_present_revocation(tmp_path,state_e
             assert response.status_code==200,response.text
             assert set(response.json())=={'attest'}
             assert len(store.read(principal).entries)==1  # Signing never appends.
+            policy['activePrincipals']=[];private('policy.json',policy)
+            assert (await client.post('/acl/sociacl/rotation/wallet',json=request)).status_code==403
+            policy['activePrincipals']=[principal];private('policy.json',policy)
+            response=await client.post('/acl/sociacl/rotation/wallet',json=request)
+            assert response.status_code==200,response.text
             signed={**request,**response.json()}
             writer.admit(principal,json.dumps(signed).encode())  # Real native signature/claim acceptance.
             assert len(store.read(principal).entries)==2
-            assert (await client.post('/acl/sociacl/rotation/wallet',json=request)).status_code==403
-            policy['activePrincipals']=[];private('policy.json',policy)
             assert (await client.post('/acl/sociacl/rotation/wallet',json=request)).status_code==403
     finally:
         for binding in bindings.values():binding.source.store.close()
