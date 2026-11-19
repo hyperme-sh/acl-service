@@ -732,6 +732,11 @@ Each row replaces `historyFile` and `freshnessFile` with `postgresFile`, an
 absolute private regular file. All other subject, reader, storage and allocation
 fields retain their existing meaning. Version 1 remains compatible.
 
+Allocation configuration `version: 3` uses the same PostgreSQL settings and
+requires a separate private `retirementKeyFile`. The allocation transport uses
+`storageKeyFile` for issuance and the new file only for retirement. The loader
+refuses shared files or equal credentials before creating a client.
+
 The private PostgreSQL file contains exactly `version: 1`, `databaseUrl`
 (an explicit `postgresql+psycopg` address), `historySchema`, `checkpointSchema`,
 `tenant`, and `source`. Schema identifiers begin with `acl_` and contain only

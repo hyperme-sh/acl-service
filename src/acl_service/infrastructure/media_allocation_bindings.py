@@ -25,17 +25,22 @@ def load_allocation_bindings(environ=None, *, source_factory=None, client_factor
         if len(raw)>65536:raise ValueError()
         value=json.loads(raw,object_pairs_hook=_unique)
         if (type(value) is not dict or set(value)!={'version','bindings'} or type(value['version']) is not int
-                or value['version'] not in (1,2) or type(value['bindings']) is not list or not 1<=len(value['bindings'])<=64):raise ValueError()
+                or value['version'] not in (1,2,3) or type(value['bindings']) is not list or not 1<=len(value['bindings'])<=64):raise ValueError()
         base=BASE if value['version']==1 else (BASE-{'historyFile','freshnessFile'})|{'postgresFile'}
-        if any(type(row) is not dict or set(row)!=base|EXTRA for row in value['bindings']):raise ValueError()
-        settings=_prepare_settings(parse_settings(canonical({'version':value['version'],'bindings':[{key:row[key] for key in base} for row in value['bindings']]})))
+        split_retirement=value['version']==3
+        extra=EXTRA|{'retirementKeyFile'} if split_retirement else EXTRA
+        if any(type(row) is not dict or set(row)!=base|extra for row in value['bindings']):raise ValueError()
+        base_version=2 if split_retirement else value['version']
+        settings=_prepare_settings(parse_settings(canonical({'version':base_version,'bindings':[{key:row[key] for key in base} for row in value['bindings']]})))
         prepared=[];tenants={};paths={}
         for binding,row in zip(settings,value['bindings']):
             _provisioned(binding,allow_empty=True)
             issuer,source=_uuid(row['issuer']),_uuid(row['source']);_integer(row['policyUntil'])
             policy_path,key_path=_path(row['policyFile']),_path(row['sourceKeyFile'])
+            retirement_path=_path(row['retirementKeyFile']) if split_retirement else None
             if binding.postgres_settings is not None and binding.postgres_settings.source!=source:raise ValueError()
-            all_paths=tuple(p for p in (binding.history,binding.freshness,binding.postgres_file,binding.key_file,policy_path,key_path) if p is not None)
+            all_paths=tuple(p for p in (binding.history,binding.freshness,binding.postgres_file,
+                binding.key_file,policy_path,key_path,retirement_path) if p is not None)
             if len(set(all_paths))!=len(all_paths) or any(os.path.samefile(a,b) for i,a in enumerate(all_paths) for b in all_paths[i+1:]):raise ValueError()
             if any(os.path.samefile(_path(configured),path) for path in all_paths):raise ValueError()
             for path in all_paths:
@@ -53,18 +58,23 @@ def load_allocation_bindings(environ=None, *, source_factory=None, client_factor
             if any(key.public_bytes_raw()==signing_key.public_key().public_bytes_raw() for key in keys.values()):raise ValueError()
             signer=AllocationRequestSigner(issuer=issuer,source=source,tenant=str(binding.tenant),
                 policy_digest=hashlib.sha256(canonical(policy)).hexdigest(),key_id=row['keyId'],signing_key=signing_key)
-            spec=canonical({key:row[key] for key in EXTRA})
+            spec=canonical({key:row[key] for key in extra})
             if binding.tenant in tenants and tenants[binding.tenant]!=spec:raise ValueError()
             tenants[binding.tenant]=spec
             with _private_file(binding.key_file) as stream:credential=stream.read(4097).decode('ascii')
-            prepared.append((binding,issuer,source,policy,signer,keys,credential,row['policyUntil']))
+            options={}
+            if retirement_path is not None:
+                with _private_file(retirement_path) as stream:retirement_key=stream.read(4097).decode('ascii')
+                if retirement_key==credential or not re.fullmatch(r'[\x21-\x7e]{1,4096}',retirement_key):raise ValueError()
+                options['retirement_key']=retirement_key
+            prepared.append((binding,issuer,source,policy,signer,keys,credential,row['policyUntil'],options))
         sources={};result={}
-        for binding,issuer,source,policy,signer,keys,credential,until in prepared:
+        for binding,issuer,source,policy,signer,keys,credential,until,options in prepared:
             if binding.tenant not in sources:
                 authority=(source_factory or _source)(binding)
                 if not authority.production_ready or authority.tenant!=str(binding.tenant):raise ValueError()
                 sources[binding.tenant]=authority
-                clients[binding.tenant]=(client_factory or AllocationClient)(binding.origin,str(binding.tenant),credential)
+                clients[binding.tenant]=(client_factory or AllocationClient)(binding.origin,str(binding.tenant),credential,**options)
             result[(binding.tenant,binding.subject)]=AllocationBinding(str(binding.tenant),binding.reader,sources[binding.tenant],
                 clients[binding.tenant],signer,issuer,source,policy,until,keys)
         return result

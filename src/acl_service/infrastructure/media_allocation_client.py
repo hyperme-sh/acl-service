@@ -13,16 +13,19 @@ class AllocationUnavailable(ValueError):
 
 
 class AllocationClient:
-    def __init__(self, origin, tenant, api_key, *, client=None):
+    def __init__(self, origin, tenant, api_key, *, retirement_key=None, client=None):
         parsed=urlsplit(origin)
         if (parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.port
                 or parsed.path or parsed.query or parsed.fragment or str(UUID(tenant))!=tenant or not UUID(tenant).int
-                or type(api_key) is not str or not re.fullmatch(r'[\x21-\x7e]{1,4096}',api_key)):
+                or type(api_key) is not str or not re.fullmatch(r'[\x21-\x7e]{1,4096}',api_key)
+                or (retirement_key is not None and (type(retirement_key) is not str
+                    or not re.fullmatch(r'[\x21-\x7e]{1,4096}',retirement_key) or retirement_key==api_key))):
             raise ValueError('Invalid allocation transport configuration')
         self.tenant=tenant
         self.origin=origin
         self._url=origin+'/api/v1/storage/allocations/issue'
         self._headers={'X-Api-Key':api_key,'X-Tenant-ID':tenant,'Accept-Encoding':'identity'}
+        self._retirement_headers=self._headers if retirement_key is None else {**self._headers,'X-Api-Key':retirement_key}
         if client is None:
             import httpx
             client=httpx.AsyncClient(trust_env=False,follow_redirects=False,timeout=2,
@@ -37,7 +40,7 @@ class AllocationClient:
             raise AllocationUnavailable('Invalid allocation request')
         body={'object':scope.object,'owner':scope.owner,'ownershipDigest':scope.ownership_digest,
               'request':base64.b64encode(request).decode('ascii')}
-        return await self._exchange(self._url,body)
+        return await self._exchange(self._url,body,self._headers)
 
     async def retire(self, scope, request):
         if scope.tenant!=self.tenant or type(request) is not bytes or not 1<=len(request)<=4096:
@@ -45,7 +48,7 @@ class AllocationClient:
         scope.claims()
         body={'object':scope.object,'owner':scope.owner,'command':scope.command,
               'request':base64.b64encode(request).decode('ascii')}
-        raw=await self._exchange(self.origin+'/api/v1/storage/media/retire',body)
+        raw=await self._exchange(self.origin+'/api/v1/storage/media/retire',body,self._retirement_headers)
         try:
             result=json.loads(raw,object_pairs_hook=_unique)
             if (type(result) is not dict or set(result)!={'accepted','command','cleanup'}
@@ -55,9 +58,9 @@ class AllocationClient:
         except (ValueError,TypeError,RecursionError):
             raise AllocationUnavailable('Retirement confirmation unavailable') from None
 
-    async def _exchange(self, url, body):
+    async def _exchange(self, url, body, headers):
         try:
-            async with asyncio.timeout(2), self._client.stream('POST',url,headers=self._headers,
+            async with asyncio.timeout(2), self._client.stream('POST',url,headers=headers,
                     json=body,follow_redirects=False,timeout=2) as response:
                 if response.status_code!=200 or response.headers.get('content-encoding','identity')!='identity':
                     raise ValueError()
