@@ -50,7 +50,8 @@ class PostgresHistoryStore(RelationalHistoryStore):
     has_freshness = True
     provisioned_media = True
 
-    def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False):
+    def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False,
+                 read_snapshot=False):
         if type(active_media_index) is not bool:raise ValueError('invalid media index mode')
         self.active_media_index=active_media_index
         self.history_schema = scope_name(history_schema)
@@ -65,7 +66,7 @@ class PostgresHistoryStore(RelationalHistoryStore):
             self.engine.dispose()
             raise ValueError('PostgreSQL required')
         try:
-            with self._transaction(write=False) as db:
+            with self._transaction(write=False, read_snapshot=read_snapshot) as db:
                 for table in ('history_ciphertext', 'statement_tenant', 'media_sources', 'media_allocations',
                               'freshness.ciphertext_heads', 'freshness.media_checkpoints', 'freshness.media_allocations'):
                     db.execute(f'SELECT 1 FROM {table} LIMIT 1')

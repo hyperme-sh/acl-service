@@ -26,7 +26,7 @@ class VaultStatements:
         if type(at) is not int or at < 0 or int(self.clock()) != at:
             raise HistoryConflict('vault snapshot evaluation expired')
         cancel()
-        store = self.settings.open()
+        store = self.settings.open(read_snapshot=True)
         try:
             # The PostgreSQL transaction checks both markers and the independent
             # digest before exposing the enrolled history.
