@@ -84,6 +84,8 @@ def create_app(
     if statement_bindings is None:
         from acl_service.infrastructure.statement_bindings import load_statement_bindings
         statement_bindings = load_statement_bindings()
+        from acl_service.infrastructure.vault_statement_binding import add_vault_statement_binding
+        statement_bindings = add_vault_statement_binding(statement_bindings, os.environ)
     if delegation_bindings is None:
         from acl_service.infrastructure.delegation_bindings import load_delegation_bindings
         delegation_bindings = load_delegation_bindings()
