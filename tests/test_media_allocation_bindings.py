@@ -74,8 +74,8 @@ def test_postgres_allocation_requires_the_same_source_identifier(configuration):
     postgres_file.chmod(0o600)
     row={key:value for key,value in c.row.items() if key not in ('historyFile','freshnessFile')}
     row['postgresFile']=str(postgres_file)
-    def configured(row):
-        c.file.write_text(json.dumps({'version':2,'bindings':[row]}));c.file.chmod(0o600)
+    def configured(row, version=2):
+        c.file.write_text(json.dumps({'version':version,'bindings':[row]}));c.file.chmod(0o600)
         return {'SOCIACL_MEDIA_ALLOCATION_FILE':str(c.file)}
     values=module.load_allocation_bindings(configured(row),source_factory=c.source_factory,client_factory=c.client_factory)
     assert values[(UUID(c.tenant),'subject')].source==c.row['source']
@@ -84,3 +84,20 @@ def test_postgres_allocation_requires_the_same_source_identifier(configuration):
     with pytest.raises(ValueError,match='Invalid private'):
         module.load_allocation_bindings(configured({**row,'source':str(UUID(int=99))}),
             source_factory=c.source_factory,client_factory=c.client_factory)
+    retire_key=c.tmp_path/'retire.key'
+    retire_key.write_text('retire-only')
+    retire_key.chmod(0o400)
+    module.load_allocation_bindings(configured({**row,'retirementKeyFile':str(retire_key)}, 3),
+        source_factory=c.source_factory,client_factory=c.client_factory)
+    c.client_factory.assert_called_with(row['storageOrigin'],c.tenant,'fixture',retirement_key='retire-only')
+    c.client_factory.reset_mock()
+    for invalid in (row, {**row,'retirementKeyFile':row['storageKeyFile']}):
+        with pytest.raises(ValueError,match='Invalid private'):
+            module.load_allocation_bindings(configured(invalid, 3),
+                source_factory=c.source_factory,client_factory=c.client_factory)
+    retire_key.chmod(0o600)
+    retire_key.write_text('fixture')
+    with pytest.raises(ValueError,match='Invalid private'):
+        module.load_allocation_bindings(configured({**row,'retirementKeyFile':str(retire_key)}, 3),
+            source_factory=c.source_factory,client_factory=c.client_factory)
+    c.client_factory.assert_not_called()

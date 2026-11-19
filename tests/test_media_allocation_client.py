@@ -1,6 +1,7 @@
 """One-shot private gateway exchange; untrusted replies remain signed inputs."""
 from types import SimpleNamespace
 from uuid import UUID
+import json
 import httpx
 import pytest
 from acl_service.infrastructure.media_allocation_client import AllocationClient,AllocationUnavailable
@@ -22,6 +23,23 @@ async def test_bounded_request_and_exact_response_without_retry():
         client=AllocationClient('https://storage.example',TENANT,'private-fixture-key',client=http)
         assert await client.issue(SCOPE,b'proof')==b'{"signed":"grant"}'
     assert len(calls)==1
+
+
+@pytest.mark.asyncio
+async def test_issuer_and_retirement_requests_use_distinct_credentials():
+    calls=[]
+    command='b'*64
+    def handle(request):
+        calls.append((request.url.path,request.headers['x-api-key']))
+        assert request.headers['x-tenant-id']==TENANT
+        body={'accepted':True,'command':command,'cleanup':'complete'}
+        return httpx.Response(200,stream=httpx.ByteStream(json.dumps(body).encode()))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client=AllocationClient('https://storage.example',TENANT,'issue-only',retirement_key='retire-only',client=http)
+        await client.issue(SCOPE,b'issue-proof')
+        retirement=SimpleNamespace(tenant=TENANT,object=SCOPE.object,owner=SCOPE.owner,command=command,claims=lambda:None)
+        assert (await client.retire(retirement,b'retire-proof'))['cleanup']=='complete'
+    assert calls==[('/api/v1/storage/allocations/issue','issue-only'),('/api/v1/storage/media/retire','retire-only')]
 
 
 @pytest.mark.asyncio
