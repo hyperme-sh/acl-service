@@ -286,6 +286,26 @@ def test_first_owner_is_atomic_absence_only_and_survives_restart(source):
     finally:again.close()
 
 
+def test_synthetic_initial_owner_retry_is_exact_and_rejects_an_existing_source(source):
+    store, spec, url = source
+    guard = lambda: None
+    assert store.enroll_first_media_owner(
+        'fixture', b'genesis', before_commit=guard, allow_exact_retry=True,
+    ) is True
+    again = PostgresHistoryStore(url, **spec)
+    try:
+        assert again.enroll_first_media_owner(
+            'fixture', b'genesis', before_commit=guard, allow_exact_retry=True,
+        ) is False
+        for principal, genesis in (('fixture', b'changed'), ('other', b'genesis')):
+            with pytest.raises(HistoryConflict):
+                again.enroll_first_media_owner(
+                    principal, genesis, before_commit=guard, allow_exact_retry=True,
+                )
+    finally:
+        again.close()
+
+
 def test_first_owner_cancellation_rolls_back_and_concurrency_has_one_winner(source):
     store,spec,url=source
     calls=0
