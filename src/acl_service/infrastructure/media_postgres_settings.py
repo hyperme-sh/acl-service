@@ -17,9 +17,10 @@ class PostgresMediaSettings:
     source: str
     active_media_index: bool = False
 
-    def open(self):
+    def open(self, *, read_snapshot=False):
         return PostgresHistoryStore(self.database_url, history_schema=self.history_schema,
-            checkpoint_schema=self.checkpoint_schema, tenant=self.tenant, source=self.source, active_media_index=self.active_media_index)
+            checkpoint_schema=self.checkpoint_schema, tenant=self.tenant, source=self.source,
+            active_media_index=self.active_media_index, read_snapshot=read_snapshot)
 
 
 def read_postgres_settings(path, tenant):

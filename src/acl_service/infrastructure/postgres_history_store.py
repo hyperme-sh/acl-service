@@ -50,7 +50,8 @@ class PostgresHistoryStore(RelationalHistoryStore):
     has_freshness = True
     provisioned_media = True
 
-    def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False):
+    def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False,
+                 read_snapshot=False):
         if type(active_media_index) is not bool:raise ValueError('invalid media index mode')
         self.active_media_index=active_media_index
         self.history_schema = scope_name(history_schema)
@@ -65,7 +66,7 @@ class PostgresHistoryStore(RelationalHistoryStore):
             self.engine.dispose()
             raise ValueError('PostgreSQL required')
         try:
-            with self._transaction(write=False) as db:
+            with self._transaction(write=False, read_snapshot=read_snapshot) as db:
                 for table in ('history_ciphertext', 'statement_tenant', 'media_sources', 'media_allocations',
                               'freshness.ciphertext_heads', 'freshness.media_checkpoints', 'freshness.media_allocations'):
                     db.execute(f'SELECT 1 FROM {table} LIMIT 1')
@@ -126,16 +127,23 @@ class PostgresHistoryStore(RelationalHistoryStore):
             return True
 
     @contextmanager
-    def _transaction(self, *, write, ciphertext=False, before_commit=None):
+    def _transaction(self, *, write, ciphertext=False, before_commit=None, read_snapshot=False):
+        if write and read_snapshot:
+            raise ValueError('read-only snapshot cannot write history')
         try:
             with self.engine.begin() as connection:
+                if read_snapshot:
+                    connection.exec_driver_sql('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
                 connection.exec_driver_sql("SET LOCAL lock_timeout = '1000ms'")
                 connection.exec_driver_sql("SET LOCAL statement_timeout = '3000ms'")
                 connection.exec_driver_sql(f'SET LOCAL search_path = "{self.history_schema}", pg_catalog')
                 db = _Connection(connection, self.history_schema, self.checkpoint_schema, origin=self)
                 expected = (self.tenant, self.source, 2 if self.active_media_index else 1)
-                marker = db.execute('SELECT tenant,source,version FROM source_marker WHERE id=1 FOR UPDATE').fetchone()
-                checkpoint = db.execute('SELECT tenant,source,version FROM freshness.source_marker WHERE id=1 FOR UPDATE').fetchone()
+                # A repeatable snapshot reads the markers, checkpoint and rows
+                # from the same committed view without taking writer locks.
+                lock = '' if read_snapshot else ' FOR UPDATE'
+                marker = db.execute('SELECT tenant,source,version FROM source_marker WHERE id=1' + lock).fetchone()
+                checkpoint = db.execute('SELECT tenant,source,version FROM freshness.source_marker WHERE id=1' + lock).fetchone()
                 if marker != expected or checkpoint != expected:
                     raise StoreRejected()
                 if db.execute('SELECT digest FROM freshness.authority_checkpoint WHERE id=1').fetchone() != (authority_digest(db),):

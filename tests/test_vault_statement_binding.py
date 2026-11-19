@@ -1,11 +1,13 @@
 from contextlib import contextmanager
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
 from acl_service.domain.history_store import AdmissionRejected
+from acl_service.infrastructure import postgres_history_store as history
+from acl_service.infrastructure.media_postgres_settings import PostgresMediaSettings
 from acl_service.infrastructure.vault_statement_binding import SCOPE, VaultStatements, add_vault_statement_binding
 
 
@@ -19,12 +21,13 @@ def test_vault_statement_snapshot_is_default_off_and_read_only():
     close = Mock()
 
     @contextmanager
-    def transaction(*, write):
-        assert not write
+    def transaction(*, write, read_snapshot):
+        assert not write and read_snapshot
         yield db
 
     store = SimpleNamespace(_transaction=transaction, close=close)
-    source = VaultStatements(SimpleNamespace(tenant='tenant', open=lambda: store), owner, clock=lambda: 2)
+    settings = SimpleNamespace(tenant='tenant', open=Mock(return_value=store))
+    source = VaultStatements(settings, owner, clock=lambda: 2)
     with pytest.raises(AdmissionRejected):
         source.append(SCOPE, 2, '', [], lambda: None)
     with pytest.raises(AdmissionRejected):
@@ -33,3 +36,68 @@ def test_vault_statement_snapshot_is_default_off_and_read_only():
     assert response['snapshot']['history']['accounts'][0]['genesisEpubBindings'] == [genesis]
     assert response['snapshot']['rows'] == []
     close.assert_called_once()
+    settings.open.assert_called_once_with(read_snapshot=True)
+
+
+def test_reader_settings_open_store_without_writer_locks():
+    tenant = '00000000-0000-0000-0000-000000000001'
+    source = '00000000-0000-0000-0000-000000000002'
+    settings = PostgresMediaSettings('postgresql+psycopg://reader@localhost/test',
+                                    'acl_s3rch_vault_history', 'acl_s3rch_vault_checkpoint', tenant, source)
+    engine, connection, db = Mock(), Mock(), Mock()
+    engine.dialect.name = 'postgresql'
+
+    @contextmanager
+    def connect():
+        yield connection
+
+    engine.begin.side_effect = connect
+
+    def execute(sql):
+        assert 'FOR UPDATE' not in sql
+        if 'source_marker' in sql:
+            return Mock(fetchone=lambda: (tenant, source, 1))
+        if 'authority_checkpoint' in sql:
+            return Mock(fetchone=lambda: (b'digest',))
+        return Mock(fetchone=lambda: (tenant,))
+
+    db.execute.side_effect = execute
+    with patch.object(history, 'create_engine', return_value=engine), \
+            patch.object(history, '_Connection', return_value=db), \
+            patch.object(history, 'authority_digest', return_value=b'digest'):
+        store = settings.open(read_snapshot=True)
+        store.close()
+    assert connection.exec_driver_sql.call_args_list[0].args == (
+        'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY',
+    )
+    engine.dispose.assert_called_once()
+
+
+def test_vault_snapshot_preserves_source_and_checkpoint_checks_without_writer_locks():
+    store = history.PostgresHistoryStore.__new__(history.PostgresHistoryStore)
+    connection, db = Mock(), Mock()
+    store.engine = SimpleNamespace(begin=lambda: snapshot_connection())
+    store.tenant, store.source = 'tenant', 'source'
+    store.active_media_index = False
+    store.history_schema, store.checkpoint_schema = 'history', 'checkpoint'
+
+    @contextmanager
+    def snapshot_connection():
+        yield connection
+
+    marker = Mock(fetchone=lambda: ('tenant', 'source', 1))
+    checkpoint = Mock(fetchone=lambda: (b'digest',))
+    db.execute.side_effect = [marker, marker, checkpoint]
+    with patch.object(history, '_Connection', return_value=db), \
+            patch.object(history, 'authority_digest', return_value=b'digest') as digest:
+        with store._transaction(write=False, read_snapshot=True) as snapshot:
+            assert snapshot is db
+        digest.assert_called_once_with(db)
+    assert connection.exec_driver_sql.call_args_list[0].args == (
+        'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY',
+    )
+    assert [call.args[0] for call in db.execute.call_args_list] == [
+        'SELECT tenant,source,version FROM source_marker WHERE id=1',
+        'SELECT tenant,source,version FROM freshness.source_marker WHERE id=1',
+        'SELECT digest FROM freshness.authority_checkpoint WHERE id=1',
+    ]
