@@ -9,10 +9,15 @@ from acl_service.domain.keyring_store import MAX_GENERATION, StoreKind, StoreRej
 class RelationalHistoryStore:
     """Implementations supply serialized transactions and positional SQL bindings."""
 
-    def enroll(self, principal: str, genesis: bytes) -> None:
+    def enroll(self, principal: str, genesis: bytes, *,
+               before_commit: Callable[[], None] | None = None) -> None:
         if not principal or not isinstance(genesis, bytes) or not genesis:
             raise ValueError("missing principal or genesis")
-        with self._transaction(write=True) as db:
+        if before_commit is not None and not callable(before_commit):
+            raise ValueError("callable enrollment guard required")
+        with self._transaction(write=True, before_commit=before_commit) as db:
+            if before_commit is not None:
+                before_commit()
             inserted = db.execute(
                 "INSERT INTO history_accounts VALUES (?, ?) ON CONFLICT(principal) DO NOTHING",
                 (principal, genesis),

@@ -136,7 +136,9 @@ class HistoryAdmission:
                                              before_commit=lambda: self._require_evaluation(at))
         return generation + 1
 
-    def enroll(self, principal: str, genesis: bytes, signature: str):
+    def enroll(self, principal: str, genesis: bytes, signature: str, *, before_commit=None):
+        if before_commit is not None and not callable(before_commit):
+            raise ValueError("callable enrollment guard required")
         now = int(self.clock())
         grant = self.grant_for(principal)
         if (not grant or grant.principal != principal or not grant.authority or
@@ -144,9 +146,14 @@ class HistoryAdmission:
             raise AdmissionRejected("no active enrollment grant")
         self._verify(principal, now, genesis=_record(genesis), entries=[],
                      grant=asdict(grant), signature=signature)
-        if int(self.clock()) >= grant.expires_at or self.grant_for(principal) != grant:
-            raise AdmissionRejected("enrollment grant changed or expired")
-        self.store.enroll(principal, genesis)
+        def current():
+            if before_commit is not None:
+                before_commit()
+            if int(self.clock()) >= grant.expires_at or self.grant_for(principal) != grant:
+                raise AdmissionRejected("enrollment grant changed or expired")
+
+        current()
+        self.store.enroll(principal, genesis, before_commit=current)
 
     def admit(self, principal: str, record: bytes, *, before_commit=None):
         if before_commit is not None and not callable(before_commit):

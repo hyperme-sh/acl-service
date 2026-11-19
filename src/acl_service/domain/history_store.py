@@ -31,7 +31,8 @@ class HistoryConflict(ValueError):
 
 
 class HistoryStore(Protocol):
-    def enroll(self, principal: str, genesis: bytes) -> None:
+    def enroll(self, principal: str, genesis: bytes, *,
+               before_commit: Callable[[], None] | None = None) -> None:
         """Create an exclusively managed principal once, after admission."""
         ...
 
