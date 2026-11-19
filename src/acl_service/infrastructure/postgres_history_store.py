@@ -1,5 +1,6 @@
 """Already-provisioned PostgreSQL history and independently restored checkpoints."""
 from contextlib import contextmanager
+import hashlib
 import re
 from uuid import UUID
 
@@ -80,7 +81,6 @@ class PostgresHistoryStore(RelationalHistoryStore):
 
     def enroll_first_media_owner(self, principal, genesis, *, before_commit):
         """Internal verified bootstrap; refuse any prior source contents."""
-        import hashlib
         if not principal or type(genesis) is not bytes or not genesis or not callable(before_commit):
             raise ValueError('verified first owner required')
         with self._transaction(write=True,before_commit=before_commit) as db:
@@ -95,6 +95,26 @@ class PostgresHistoryStore(RelationalHistoryStore):
             db.execute('INSERT INTO history_accounts VALUES (?,?)',(principal,genesis))
             db.executemany('INSERT INTO freshness.ciphertext_heads VALUES(?,?,0,?)',
                            [(principal,kind,hashlib.sha256(b'').digest()) for kind in ('recovery','wraps')])
+
+    def enroll_media_fixture(self, operator, principal, genesis, *, before_commit):
+        """Add one verified account and its checkpoints to an existing source."""
+        if (not operator or not principal or operator == principal or type(genesis) is not bytes
+                or not genesis or not callable(before_commit)):
+            raise ValueError('verified media fixture required')
+        with self._transaction(write=True, before_commit=before_commit) as db:
+            before_commit()
+            if not db.execute('SELECT 1 FROM history_accounts WHERE principal=?', (operator,)).fetchone():
+                raise HistoryConflict('original operator is not enrolled')
+            held = db.execute('SELECT genesis FROM history_accounts WHERE principal=?', (principal,)).fetchone()
+            if held is not None:
+                if held[0] != genesis:
+                    raise HistoryConflict('fixture already enrolled with different genesis')
+                return False
+            db.execute('INSERT INTO history_accounts VALUES (?,?)', (principal, genesis))
+            empty = hashlib.sha256(b'').digest()
+            db.executemany('INSERT INTO freshness.ciphertext_heads VALUES(?,?,0,?)',
+                           [(principal, kind, empty) for kind in ('recovery', 'wraps')])
+            return True
 
     @contextmanager
     def _transaction(self, *, write, ciphertext=False, before_commit=None):
