@@ -50,6 +50,20 @@ class AdmissionTests(unittest.TestCase):
             self.enroll()
         self.assertIsNone(self.store.read(self.principal))
 
+    def test_enrollment_guard_rolls_back_after_insert(self):
+        calls = 0
+
+        def guard():
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                raise AdmissionRejected("lease lost before commit")
+
+        raw = json.dumps(self.fixture["binding"]).encode()
+        with self.assertRaisesRegex(AdmissionRejected, "lease lost before commit"):
+            self.adapter.enroll(self.principal, raw, self.fixture["signature"], before_commit=guard)
+        self.assertIsNone(self.store.read(self.principal))
+
     def test_witnessed_revocations_and_oidc(self):
         self.enroll()
         for name in ("wallet", "oidc", "revoke"):
