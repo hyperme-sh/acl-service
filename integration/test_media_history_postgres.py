@@ -381,3 +381,24 @@ def test_history_append_guard_rolls_back_entry_floor_and_checkpoint(source, refu
             assert db.execute('SELECT head FROM history_head_floors').fetchall() == []
     finally:
         again.close()
+
+
+def test_additive_media_fixture_enrollment_keeps_the_original_operator(source):
+    store, spec, url = source
+    with pytest.raises(HistoryConflict, match='operator is not enrolled'):
+        store.enroll_media_fixture('operator', 'fixture', b'fixture-genesis', before_commit=lambda: None)
+    store.enroll_first_media_owner('operator', b'operator-genesis', before_commit=lambda: None)
+    assert store.enroll_media_fixture('operator', 'fixture', b'fixture-genesis', before_commit=lambda: None)
+    assert not store.enroll_media_fixture('operator', 'fixture', b'fixture-genesis', before_commit=lambda: None)
+    with pytest.raises(HistoryConflict, match='different genesis'):
+        store.enroll_media_fixture('operator', 'fixture', b'substituted', before_commit=lambda: None)
+    restarted = PostgresHistoryStore(url, **spec)
+    try:
+        assert restarted.read('operator').genesis == b'operator-genesis'
+        assert restarted.read('fixture').genesis == b'fixture-genesis'
+        with restarted._transaction(write=False) as db:
+            rows = db.execute('SELECT principal,kind FROM freshness.ciphertext_heads ORDER BY principal,kind').fetchall()
+            assert rows == [('fixture', 'recovery'), ('fixture', 'wraps'),
+                            ('operator', 'recovery'), ('operator', 'wraps')]
+    finally:
+        restarted.close()

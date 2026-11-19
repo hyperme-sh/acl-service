@@ -66,3 +66,50 @@ class FirstOwnerTests(TestCase):
         with patch('first_media_owner.HistoryAdmission._verify',side_effect=expired):
             with self.assertRaises(AdmissionRejected):self.admit()
         self.store.enroll_first_media_owner.assert_not_called()
+
+
+class FixtureOwnerTests(TestCase):
+    def setUp(self):
+        from media_fixture_owner import SOURCE, TENANT, TestMediaOwnerGrant
+        self.principal = 'A' * 43 + '.' + 'B' * 43
+        self.operator = 'C' * 43 + '.' + 'D' * 43
+        self.grant = TestMediaOwnerGrant(self.principal, '0x' + 'e' * 40, 'a' * 64, 140)
+        self.store = Mock(tenant=TENANT, source=SOURCE)
+        self.resolve = Mock(return_value=(self.grant, self.operator))
+        self.genesis = b'{"kind":"genesis"}'
+        self.store.enroll_media_fixture.side_effect = lambda *a, **kw: kw['before_commit']() is None
+
+    def admit(self, grant=None):
+        from media_fixture_owner import admit_test_media_owner
+        return admit_test_media_owner(self.store, grant or self.grant, self.genesis, 'native-signature',
+                                      resolve=self.resolve, trust_at=Mock(), clock=lambda: 100)
+
+    def test_exact_fixture_grant_is_checked_through_commit(self):
+        with patch('media_fixture_owner.HistoryAdmission._verify', return_value=b'accepted') as verify:
+            self.assertTrue(self.admit())
+        self.assertEqual(self.store.enroll_media_fixture.call_args.args,
+                         (self.operator, self.principal, self.genesis))
+        self.assertEqual(verify.call_args.kwargs['grant']['authority'], self.grant.authority)
+        self.assertEqual(self.resolve.call_count, 3)
+
+    def test_operator_foreign_source_or_changed_grant_refuses(self):
+        with patch('media_fixture_owner.HistoryAdmission._verify', return_value=b'accepted'):
+            for changed in (replace(self.grant, wallet=DECLARED_WALLET),
+                            replace(self.grant, principal=self.operator)):
+                with self.assertRaises(AdmissionRejected):
+                    self.admit(changed)
+            original_source = self.store.source
+            self.store.source = '00000000-0000-0000-0000-000000000001'
+            with self.assertRaises(AdmissionRejected):
+                self.admit()
+            self.store.source = original_source
+            self.store.enroll_media_fixture.assert_not_called()
+            self.resolve.side_effect = [(self.grant, self.operator), (self.grant, self.operator), None]
+            with self.assertRaises(AdmissionRejected):
+                self.admit()
+
+    def test_changed_native_signature_never_reaches_the_store(self):
+        with patch('media_fixture_owner.HistoryAdmission._verify', return_value=b'fork'):
+            with self.assertRaises(AdmissionRejected):
+                self.admit()
+        self.store.enroll_media_fixture.assert_not_called()
