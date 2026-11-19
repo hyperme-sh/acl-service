@@ -18,24 +18,27 @@ class TestMediaOwnerGrant:
     wallet: str
     nonce: str
     expires_at: int
+    initial: bool = False
 
     @property
     def authority(self):
-        return f's3rch-test-media-owner-v1:{TENANT}:{SOURCE}:{self.wallet}'
+        scope = f's3rch-test-media-owner-v1:{TENANT}:{SOURCE}:{self.wallet}'
+        return scope + ':initial' if self.initial else scope
 
 
 def admit_test_media_owner(store, grant, genesis, signature, *, resolve, trust_at, clock=time.time):
     """Resolve the fixture and current grant through the owning TEST configuration.
 
-    The resolver returns the exact current grant and the already admitted
-    operator principal. The native signature binds this fixture to the existing
-    TEST source. The operator cannot be selected as the fixture.
+    The resolver returns the current grant and either the admitted operator
+    principal for additive enrollment or None for initial synthetic enrollment.
+    The native signature binds the fixture, source and enrollment mode.
     """
     now = int(clock())
     if (type(grant) is not TestMediaOwnerGrant or store.tenant != TENANT or store.source != SOURCE
             or not isinstance(grant.principal, str) or SEA_KEY.fullmatch(grant.principal) is None
             or not isinstance(grant.wallet, str) or re.fullmatch(r'0x[0-9a-f]{40}', grant.wallet) is None
-            or grant.wallet == DECLARED_WALLET or not isinstance(grant.nonce, str)
+            or grant.wallet == DECLARED_WALLET or type(grant.initial) is not bool
+            or not isinstance(grant.nonce, str)
             or re.fullmatch(r'[a-f0-9]{64}', grant.nonce) is None or type(grant.expires_at) is not int
             or not now < grant.expires_at <= now + 60):
         raise AdmissionRejected('invalid TEST media owner grant')
@@ -46,11 +49,16 @@ def admit_test_media_owner(store, grant, genesis, signature, *, resolve, trust_a
         resolved = resolve(TENANT, SOURCE)
         at = int(clock())
         if (not isinstance(resolved, tuple) or len(resolved) != 2 or resolved[0] != grant
-                or not isinstance(resolved[1], str) or SEA_KEY.fullmatch(resolved[1]) is None
-                or resolved[1] == grant.principal or (operator is not None and operator != resolved[1])
                 or not now <= at < grant.expires_at):
             raise AdmissionRejected('TEST media owner grant unavailable or changed')
-        operator = resolved[1]
+        current_operator = resolved[1]
+        if grant.initial:
+            if current_operator is not None:
+                raise AdmissionRejected('initial TEST media owner grant cannot replace an operator')
+        elif (not isinstance(current_operator, str) or SEA_KEY.fullmatch(current_operator) is None
+                or current_operator == grant.principal or (operator is not None and operator != current_operator)):
+            raise AdmissionRejected('TEST media owner operator unavailable or changed')
+        operator = current_operator
 
     current()
     admission = HistoryAdmission(store, grant_for=lambda _: None, trust_at=trust_at, clock=clock)
@@ -60,4 +68,7 @@ def admit_test_media_owner(store, grant, genesis, signature, *, resolve, trust_a
                          grant=signed, signature=signature) != b'accepted':
         raise AdmissionRejected('TEST media owner signature refused')
     current()
+    if grant.initial:
+        return store.enroll_first_media_owner(grant.principal, genesis, before_commit=current,
+                                             allow_exact_retry=True)
     return store.enroll_media_fixture(operator, grant.principal, genesis, before_commit=current)

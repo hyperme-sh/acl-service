@@ -113,3 +113,24 @@ class FixtureOwnerTests(TestCase):
             with self.assertRaises(AdmissionRejected):
                 self.admit()
         self.store.enroll_media_fixture.assert_not_called()
+
+    def test_initial_fixture_uses_exact_initial_native_scope(self):
+        grant = replace(self.grant, initial=True)
+        self.resolve.return_value = (grant, None)
+        self.store.enroll_first_media_owner.side_effect = lambda *a, **kw: kw['before_commit']() is None
+        with patch('media_fixture_owner.HistoryAdmission._verify', return_value=b'accepted') as verify:
+            self.assertTrue(self.admit(grant))
+        self.assertTrue(self.store.enroll_first_media_owner.call_args.kwargs['allow_exact_retry'])
+        self.assertEqual(self.store.enroll_first_media_owner.call_args.args, (self.principal, self.genesis))
+        self.assertEqual(verify.call_args.kwargs['grant']['authority'], self.grant.authority + ':initial')
+        self.assertEqual(self.resolve.call_count, 3)
+        self.store.enroll_media_fixture.assert_not_called()
+
+    def test_initial_fixture_refuses_operator_or_changed_mode(self):
+        grant = replace(self.grant, initial=True)
+        with patch('media_fixture_owner.HistoryAdmission._verify', return_value=b'accepted'):
+            for resolved in ((grant, self.operator), (self.grant, None)):
+                self.resolve.return_value = resolved
+                with self.assertRaises(AdmissionRejected):
+                    self.admit(grant)
+        self.store.enroll_first_media_owner.assert_not_called()

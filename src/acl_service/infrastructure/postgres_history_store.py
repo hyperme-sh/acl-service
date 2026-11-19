@@ -79,12 +79,19 @@ class PostgresHistoryStore(RelationalHistoryStore):
     def close(self):
         self.engine.dispose()
 
-    def enroll_first_media_owner(self, principal, genesis, *, before_commit):
-        """Internal verified bootstrap; refuse any prior source contents."""
+    def enroll_first_media_owner(self, principal, genesis, *, before_commit, allow_exact_retry=False):
+        """Bootstrap an empty source, with optional idempotence for an exact prior genesis."""
         if not principal or type(genesis) is not bytes or not genesis or not callable(before_commit):
             raise ValueError('verified first owner required')
         with self._transaction(write=True,before_commit=before_commit) as db:
             before_commit()
+            if allow_exact_retry:
+                held = db.execute('SELECT genesis FROM history_accounts WHERE principal=?', (principal,)).fetchone()
+                if (held == (genesis,) and db.execute(
+                        'SELECT 1 FROM history_accounts WHERE principal<>? LIMIT 1',
+                        (principal,),
+                ).fetchone() is None):
+                    return False
             for table in ('history_accounts','history_entries','history_head_floors','history_ciphertext',
                           'media_sources','media_allocations','freshness.ciphertext_heads',
                           'freshness.media_checkpoints','freshness.media_allocations'):
@@ -95,6 +102,8 @@ class PostgresHistoryStore(RelationalHistoryStore):
             db.execute('INSERT INTO history_accounts VALUES (?,?)',(principal,genesis))
             db.executemany('INSERT INTO freshness.ciphertext_heads VALUES(?,?,0,?)',
                            [(principal,kind,hashlib.sha256(b'').digest()) for kind in ('recovery','wraps')])
+            if allow_exact_retry:
+                return True
 
     def enroll_media_fixture(self, operator, principal, genesis, *, before_commit):
         """Add one verified account and its checkpoints to an existing source."""
