@@ -43,7 +43,7 @@ def test_reader_settings_open_store_without_writer_locks():
     tenant = '00000000-0000-0000-0000-000000000001'
     source = '00000000-0000-0000-0000-000000000002'
     settings = PostgresMediaSettings('postgresql+psycopg://reader@localhost/test',
-                                    'history', 'checkpoint', tenant, source)
+                                    'acl_s3rch_vault_history', 'acl_s3rch_vault_checkpoint', tenant, source)
     engine, connection, db = Mock(), Mock(), Mock()
     engine.dialect.name = 'postgresql'
 
