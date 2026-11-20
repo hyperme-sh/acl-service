@@ -8,10 +8,10 @@ from uuid import UUID
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.infrastructure.media_postgres_settings import read_postgres_settings
 from acl_service.infrastructure.statement_bindings import _path, _private_file, _unique
-from acl_service.interfaces.api.statement_routes import StatementBinding
+from acl_service.interfaces.api.statement_routes import NATIVE_VAULT_SCOPE, StatementBinding
 
 CONFIG = 'SOCIACL_TEST_VAULT_STATEMENT_FILE'
-SCOPE = 's3rch-native-vault'
+SCOPE = NATIVE_VAULT_SCOPE
 
 
 class VaultStatements:

@@ -26,6 +26,9 @@ class StatementBinding:
     scope: str
     source: Source
 
+NATIVE_VAULT_SCOPE = "s3rch-native-vault"
+NATIVE_VAULT_READ = "acl:vault:statements:read"
+
 @router.post("/{scope}/{operation}")
 async def statement_operation(scope: str, operation: str, request: Request,
     tenant: UUID = Depends(require_matched_tenant), user: AuthMeResponse = Depends(get_current_user)):
@@ -42,7 +45,10 @@ async def graph_operation(scope, operation, request, tenant, user, *, namespace,
     if not binding.source.production_ready: raise HTTPException(503, "Statement source unavailable")
     if operation not in ("snapshot", "append"): raise HTTPException(404, "Unknown operation")
     permission = permission_prefix + ("read" if operation == "snapshot" else "write")
-    if permission not in user.scopes: raise HTTPException(403, "Statement scope required")
+    vault_reader = (namespace == "statement" and scope == NATIVE_VAULT_SCOPE
+                    and operation == "snapshot" and NATIVE_VAULT_READ in user.scopes)
+    if permission not in user.scopes and not vault_reader:
+        raise HTTPException(403, "Statement scope required")
     if not request.app.state.rate_limiter.allow(tenant, user.sub): raise HTTPException(429, "Rate limit exceeded")
     slots = getattr(request.app.state, namespace + "_slots")
     if slots.locked(): raise HTTPException(429, "Statement source busy")
