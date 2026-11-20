@@ -6,9 +6,34 @@ from uuid import uuid4
 import httpx
 import pytest
 from fastapi import FastAPI
-from acl_service.interfaces.api.statement_routes import router, StatementBinding
+from acl_service.interfaces.api.statement_routes import NATIVE_VAULT_READ, NATIVE_VAULT_SCOPE, router, StatementBinding
 from acl_service.interfaces.api.delegation_routes import router as delegation_router
 from acl_service.deps import get_current_user, require_matched_tenant
+
+@pytest.mark.asyncio
+async def test_vault_permission_reads_only_the_bound_vault_snapshot():
+    tenant = uuid4()
+    actor = SimpleNamespace(sub='service', scopes=[NATIVE_VAULT_READ])
+    source = SimpleNamespace(tenant=str(tenant), production_ready=True,
+                             read=lambda *_: {'snapshot': {}, 'fence': 'a' * 64})
+    app = FastAPI()
+    app.include_router(router)
+    app.state.statement_bindings = {
+        (tenant, actor.sub, scope): StatementBinding(scope, source)
+        for scope in (NATIVE_VAULT_SCOPE, 'forum')
+    }
+    app.state.statement_slots = asyncio.Semaphore(1)
+    app.state.rate_limiter = SimpleNamespace(allow=lambda *_: True)
+    app.dependency_overrides[get_current_user] = lambda: actor
+    app.dependency_overrides[require_matched_tenant] = lambda: tenant
+    path = '/acl/sociacl/statements/'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='https://owner') as client:
+        body = {'evaluatedAt': 100}
+        assert (await client.post(path + NATIVE_VAULT_SCOPE + '/snapshot', json=body)).status_code == 200
+        assert (await client.post(path + NATIVE_VAULT_SCOPE + '/append', json=body)).status_code == 403
+        assert (await client.post(path + 'forum/snapshot', json=body)).status_code == 403
+        actor.sub = 'unbound'
+        assert (await client.post(path + NATIVE_VAULT_SCOPE + '/snapshot', json=body)).status_code == 403
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["statement", "delegation"])
