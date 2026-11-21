@@ -135,8 +135,6 @@ class StatementUnits(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['graph']['candidates'], [])
         self.assertFalse(run.call_args.kwargs['graph']['statementOnly'])
 
-if __name__ == '__main__': unittest.main()
-
 
     def test_forum_update_commit_rechecks_delivery_and_deduplicates_exact_retry(self):
         statement = {'kind': 'object', 'record': {'object': 'stmt-fixture', 'owner': 'owner'}}
@@ -181,3 +179,7 @@ if __name__ == '__main__': unittest.main()
         with self.assertRaises(HistoryConflict):
             self.source.append_forum_update('forum', 100, after['fence'], [statement], update,
                                             hold_delivery=hold)
+
+
+if __name__ == '__main__':
+    unittest.main()
