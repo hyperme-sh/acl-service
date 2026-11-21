@@ -13,6 +13,10 @@ def desired(config, person):
     subject = person.get('broker_subject')
     if not isinstance(subject,str) or not subject.strip() or len('user:'+subject)>255:
         raise ValueError('Bound broker subject required')
+    if config['binding']['version'] == 2:
+        declared_subject = config['binding']['oidc']['broker_subject']
+        if subject != declared_subject or person_id != declared_subject:
+            raise ValueError('Declared synthetic broker subject required')
     organizations = person.get('organizations',[])
     expected = [{'slug':slug, 'id':org['organization_id'], 'tenant_id':org['tenant_id'], 'roles':org['roles']}
                 for slug,org in sorted(config['binding']['organizations'].items())]
