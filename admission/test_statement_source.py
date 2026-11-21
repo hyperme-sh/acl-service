@@ -206,5 +206,39 @@ class StatementUnits(unittest.TestCase):
         self.assertEqual(self.source.read('forum', 100)['snapshot']['rows'], rows)
 
 
+    def test_plane_decision_uses_bound_origin_tenant_digest_and_no_redirect(self):
+        import json
+        from unittest.mock import MagicMock, patch
+        from acl_service.infrastructure.forum_commit import plane_forum_commit
+
+        bot = str(uuid4())
+        update = dict(tenant=TENANT, forumId='forum-owner', principal='owner', botId=bot,
+                      assignmentId=bot, sessionId=bot, taskId=bot, deliveryId=bot,
+                      sequence=1, statementId='stmt-fixture', signature='SEA-fixture', status='completed')
+        key = 'hm_fcm_' + 'a' * 64
+        decide = plane_forum_commit('https://plane.example.test', TENANT, 'forum-owner', key)
+        with patch('acl_service.infrastructure.forum_commit.http.client.HTTPSConnection') as dial:
+            conn = MagicMock()
+            dial.return_value = conn
+            response = conn.getresponse.return_value
+            response.status = 302
+            with self.assertRaises(HistoryConflict):
+                decide(update)
+            self.assertEqual(dial.call_count, 1)
+            args, kwargs = conn.request.call_args
+            self.assertEqual(args, ('POST', f'/api/v1/hypermesh/bots/{bot}/forum/authorize-update'))
+            self.assertEqual(kwargs['headers']['X-Tenant-ID'], TENANT)
+            self.assertEqual(kwargs['headers']['Authorization'], 'Bearer ' + key)
+            body = json.loads(kwargs['body'])
+            self.assertNotIn('signature', body)
+            self.assertEqual(body['status'], 'completed')
+            response.status = 200
+            response.read.return_value = json.dumps({'version': 1, 'digest': body['digest']}).encode()
+            decide(update)
+            with self.assertRaises(AdmissionRejected):
+                decide({**update, 'forumId': 'elsewhere'})
+            self.assertEqual(dial.call_count, 2)
+
+
 if __name__ == '__main__':
     unittest.main()
