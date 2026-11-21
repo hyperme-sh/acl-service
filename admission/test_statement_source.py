@@ -15,7 +15,7 @@ class StatementUnits(unittest.TestCase):
         self.store = SqliteHistoryStore(Path(self.tmp.name) / 'history.db')
         self.store.enroll('owner', b'{}'); self.now = 100
         self.hook = lambda: None
-        def verify(accounts, doc, at, rows, only):
+        def verify(accounts, doc, at, rows, only, update=None):
             self.hook()
             return {'heads': {'owner': 0}, 'snapshot': {'completeThrough': at,
                 'history': {'completeThrough': at, 'accounts': [], 'links': []}, 'rows': doc['rows'] + rows}}
@@ -142,7 +142,7 @@ class StatementUnits(unittest.TestCase):
             'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
             'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
             'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
-            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed',
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed', 'attestation': 'a' * 86,
         }
         calls = 0
         paused = True
@@ -186,7 +186,7 @@ class StatementUnits(unittest.TestCase):
             'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
             'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
             'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
-            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed',
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed', 'attestation': 'a' * 86,
         }
         rows = [{'kind': 'object', 'record': {'object': update['statementId'], 'owner': 'owner'}}]
         prior = self.source.read('forum', 100)
@@ -208,7 +208,7 @@ class StatementUnits(unittest.TestCase):
 
     def test_plane_decision_uses_bound_origin_tenant_digest_and_no_redirect(self):
         import json
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
         from acl_service.infrastructure.forum_commit import plane_forum_commit
 
         bot = str(uuid4())
@@ -217,27 +217,28 @@ class StatementUnits(unittest.TestCase):
                       sequence=1, statementId='stmt-fixture', signature='SEA-fixture', status='completed')
         key = 'hm_fcm_' + 'a' * 64
         decide = plane_forum_commit('https://plane.example.test', TENANT, 'forum-owner', key)
-        with patch('acl_service.infrastructure.forum_commit.http.client.HTTPSConnection') as dial:
-            conn = MagicMock()
-            dial.return_value = conn
-            response = conn.getresponse.return_value
-            response.status = 302
+        with patch('acl_service.infrastructure.forum_commit.subprocess.run') as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = b'302\n'
             with self.assertRaises(HistoryConflict):
                 decide(update)
-            self.assertEqual(dial.call_count, 1)
-            args, kwargs = conn.request.call_args
-            self.assertEqual(args, ('POST', f'/api/v1/hypermesh/bots/{bot}/forum/authorize-update'))
-            self.assertEqual(kwargs['headers']['X-Tenant-ID'], TENANT)
-            self.assertEqual(kwargs['headers']['Authorization'], 'Bearer ' + key)
-            body = json.loads(kwargs['body'])
+            args, kwargs = run.call_args
+            self.assertNotIn(key, args[0])
+            request = json.loads(kwargs['input'])
+            self.assertEqual(kwargs['timeout'], 0.65)
+            self.assertEqual(request['host'], 'plane.example.test')
+            self.assertEqual(request['path'], f'/api/v1/hypermesh/bots/{bot}/forum/authorize-update')
+            self.assertEqual(request['headers']['X-Tenant-ID'], TENANT)
+            self.assertEqual(request['headers']['Authorization'], 'Bearer ' + key)
+            body = request['body']
             self.assertNotIn('signature', body)
             self.assertEqual(body['status'], 'completed')
-            response.status = 200
-            response.read.return_value = json.dumps({'version': 1, 'digest': body['digest']}).encode()
+            run.return_value.stdout = b'200\n' + json.dumps({'version': 1, 'digest': body['digest']}).encode()
             decide(update)
             with self.assertRaises(AdmissionRejected):
                 decide({**update, 'forumId': 'elsewhere'})
-            self.assertEqual(dial.call_count, 2)
+            self.assertEqual(run.call_count, 2)
+
 
 
 if __name__ == '__main__':

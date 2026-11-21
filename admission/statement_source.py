@@ -21,7 +21,7 @@ def encoded(value):
 
 def forum_update(value):
     keys = {"tenant", "forumId", "principal", "botId", "assignmentId", "sessionId",
-            "taskId", "deliveryId", "sequence", "statementId", "signature", "status"}
+            "taskId", "deliveryId", "sequence", "statementId", "signature", "status", "attestation"}
     if not isinstance(value, dict) or set(value) != keys:
         raise AdmissionRejected("invalid forum update fields")
     for field in ("botId", "assignmentId", "sessionId", "taskId", "deliveryId", "tenant"):
@@ -36,6 +36,8 @@ def forum_update(value):
             raise AdmissionRejected("invalid signed forum update")
     if not value["signature"].startswith("SEA") or type(value["sequence"]) is not int or not 0 < value["sequence"] <= 2**53 - 1:
         raise AdmissionRejected("invalid forum update sequence or signature")
+    if not isinstance(value["attestation"], str) or not re.fullmatch(r"[A-Za-z0-9_-]{86}", value["attestation"]):
+        raise AdmissionRejected("forum update attestation required")
     if value["status"] not in ("completed", "failed"):
         raise AdmissionRejected("terminal forum status required")
     return json.loads(encoded(value))
@@ -82,7 +84,7 @@ class StatementSource:
             raise AdmissionRejected("identity capacity")
         return accounts
 
-    def _verify(self, accounts, doc, at, candidates, statement_only):
+    def _verify(self, accounts, doc, at, candidates, statement_only, update=None):
         principal = next(iter(accounts))
         account = accounts[principal]
         verifier = HistoryAdmission(self.store, grant_for=lambda _: None,
@@ -90,7 +92,7 @@ class StatementSource:
         return json.loads(verifier._run_verifier(principal, at, genesis=_record(account.genesis),
             entries=[_record(row) for row in account.entries], peers=_peer_inputs(principal, accounts),
             graph={"forum": doc["forum"], "rows": doc["rows"], "candidates": candidates,
-                   "statementOnly": statement_only}))
+                   "statementOnly": statement_only, **({"forumUpdate": update} if update is not None else {})}))
 
     @staticmethod
     def _digest(revision, nonce, document):
@@ -223,7 +225,8 @@ class StatementSource:
                         raise AdmissionRejected("new signed statement object required")
                     updates[key] = update
                     doc["forumUpdates"] = updates
-            result = self.verifier(self._accounts(db), doc, at, rows, statement_only)
+            extra = (update,) if update is not None else ()
+            result = self.verifier(self._accounts(db), doc, at, rows, statement_only, *extra)
             snapshot = result["snapshot"]
             if len(snapshot["rows"]) > 1024 or len(encoded(snapshot)) > MAX_BYTES:
                 raise AdmissionRejected("statement capacity")

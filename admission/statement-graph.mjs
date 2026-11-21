@@ -2,15 +2,17 @@ import {authorizeAppObjectAppend, requireCurrentParentOwner} from "./app-object-
 import {enforceStatementQuota} from './statement-quota.mjs';
 // Uses the same authenticated identity contexts as recovery admission.
 import {resolveStoreAccount, verifyObjectRecord, verifySeeGrant, verifyPostGrant,
-  parseObjectRecord, parseSeeGrant, parsePostGrant, grantSoul, postSoul, objectPrincipal} from 'sociacl-ids';
+  parseObjectRecord, parseSeeGrant, parsePostGrant, grantSoul, postSoul, objectPrincipal, verifyKeySignature} from 'sociacl-ids';
 const take = result => { if (!result.ok) throw Error(result.reason); return result.value; };
 export function statementGraph(accounts, contextFor, now, graph) {
+  const currentKeys = new Map();
   const heads = {}, history = {completeThrough: now, links: [], accounts: []};
   for (const [principal, account] of accounts) {
     if (account.frozen) throw Error('frozen-history');
     const diagnostics = [], head = resolveStoreAccount(principal, account.rotations, contextFor(account, now), diagnostics);
     if (diagnostics.length || !head.bindingEpub || head.rotations.length !== account.rotations.length ||
         account.entries.some(row => row.issuedAt > now)) throw Error('invalid-history');
+    currentKeys.set(principal, head.currentKey);
     heads[principal] = head.rotations.at(-1)?.seq ?? 0;
     history.links.push(...account.links.values());
     history.accounts.push({principal, rotations: account.rotations, revocations: account.ownRevokes,
@@ -53,6 +55,21 @@ export function statementGraph(accounts, contextFor, now, graph) {
     requireCurrentParentOwner([...held, ...proposed], child.record.object, child.record.owner, verify, 'missing-room-owner');
   }
   if (graph.statementOnly) authorizeAppObjectAppend(proposed, held, allowed, now);
+  if (graph.forumUpdate !== undefined) {
+    const update = graph.forumUpdate;
+    const {tenant, forumId, principal, botId, assignmentId, sessionId, taskId, deliveryId,
+      sequence, statementId, status, signature, attestation} = update;
+    const key = currentKeys.get(principal);
+    const transcript = Buffer.from(JSON.stringify(['s3rch-forum-update-v1', tenant, forumId, principal,
+      botId, assignmentId, sessionId, taskId, deliveryId, sequence, statementId, status, signature]));
+    if (!graph.statementOnly || forumId !== graph.forum || !key ||
+        !allowed('see', principal) || !allowed('post', principal) ||
+        !verifyKeySignature(key, attestation, transcript).ok) throw Error('forum-update-signature-refused');
+    const ownerRow = [...proposed, ...held].find(row => row.kind === 'object' &&
+      row.record.object === statementId && row.record.owner === principal);
+    if (!ownerRow || !statementId.startsWith('stmt_')) throw Error('forum-update-object-missing');
+    verify(ownerRow);
+  }
   // Retain every admitted cancellation and prior record. No overwriting history.
   const identity = row => JSON.stringify([row.kind, row.soul, Buffer.from(row.bytes).toString('base64')]);
   const seen = new Set(held.map(identity)), novel = [];
