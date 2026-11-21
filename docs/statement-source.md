@@ -106,3 +106,13 @@ sequence with changed content and accepts an identical retry with no new
 rows. This entry point needs a coordinator that can hold Plane's authority
 through the statement transaction. The existing HTTP append remains an
 ACL-only operation.
+
+For a service deployment, add `forumCommit` to the existing statement binding
+entry. The object contains the fixed HTTPS Plane `origin`, `forumId` and an
+absolute owner-only `credentialFile` with the matching `hm_fcm_` credential.
+This enables the scoped `forum-update` operation for that statement subject.
+The route verifies the fenced ACL write before requesting Plane's durable
+decision inside the SQLite write transaction. Authority changes on the ACL
+side serialize through that transaction. Plane orders its decision with pause
+and assignment revocation under the bot row lock. A lost or unavailable
+decision rolls back the ACL write.

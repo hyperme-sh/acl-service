@@ -181,5 +181,30 @@ class StatementUnits(unittest.TestCase):
                                             hold_delivery=hold)
 
 
+    def test_remote_decision_runs_at_commit_and_failure_rolls_back(self):
+        update = {
+            'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
+            'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
+            'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture',
+        }
+        rows = [{'kind': 'object', 'record': {'object': update['statementId'], 'owner': 'owner'}}]
+        prior = self.source.read('forum', 100)
+        ordering = []
+        self.hook = lambda: ordering.append('acl')
+        def refuse(proof):
+            self.assertEqual(proof, update)
+            ordering.append('plane')
+            raise AdmissionRejected('paused before decision')
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_forum_update('forum', 100, prior['fence'], rows, update,
+                                            authorize_commit=refuse)
+        self.assertEqual(ordering, ['acl', 'plane'])
+        self.assertEqual(self.source.read('forum', 100), prior)
+        self.source.append_forum_update('forum', 100, prior['fence'], rows, update,
+                                        authorize_commit=lambda _: ordering.append('accepted'))
+        self.assertEqual(self.source.read('forum', 100)['snapshot']['rows'], rows)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -161,30 +161,44 @@ class StatementSource:
     def append(self, scope, at, fence, rows, cancel=lambda: None, *, statement_only=True):
         return self._append(scope, at, fence, rows, cancel, statement_only=statement_only)
 
-    def append_forum_update(self, scope, at, fence, rows, update, *, hold_delivery, cancel=lambda: None):
+    def append_forum_update(self, scope, at, fence, rows, update, *, hold_delivery=None,
+                            authorize_commit=None, cancel=lambda: None):
         """Trusted coordinator only. Hold Plane's serialization through SQLite COMMIT.
 
-        The caller verifies the SEA payload and acquires a guard bound to this
-        exact update. A remote status read cannot implement hold_delivery.
+        A local coordinator may hold a delivery guard over the transaction.
+        The service coordinator instead obtains an exact durable Plane decision
+        while the SQLite write lock excludes changes to the checked ACL.
         """
         bound = forum_update(update)
         if bound["tenant"] != self.tenant:
             raise AdmissionRejected("forum update tenant differs")
         self._guard(at, cancel)
+        if (hold_delivery is None) == (authorize_commit is None):
+            raise AdmissionRejected("exactly one Plane commit authority required")
+        if authorize_commit is not None:
+            return self._append(scope, at, fence, rows, cancel, statement_only=True,
+                                update=bound, authorize_commit=authorize_commit)
         with hold_delivery(json.loads(encoded(bound))) as current:
             def guard():
                 cancel()
                 current()
             return self._append(scope, at, fence, rows, guard, statement_only=True, update=bound)
 
-    def _append(self, scope, at, fence, rows, cancel, *, statement_only, update=None):
+    def _append(self, scope, at, fence, rows, cancel, *, statement_only, update=None, authorize_commit=None):
         self._guard(at, cancel)
         minimum = 0 if update is not None else 1
         if not isinstance(fence, str) or not re.fullmatch(r"[0-9a-f]{64}", fence) or not isinstance(rows, list) or not minimum <= len(rows) <= 65 or len(encoded(rows)) > 65536:
             raise AdmissionRejected("invalid append")
         # Detach caller-owned input before verification or mutation.
         rows = json.loads(encoded(rows))
-        with self.store._transaction(write=True, before_commit=lambda: self._guard(at, cancel)) as db:
+
+        def before_commit():
+            self._guard(at, cancel)
+            if authorize_commit is not None:
+                authorize_commit(json.loads(encoded(update)))
+                self._guard(at, cancel)
+
+        with self.store._transaction(write=True, before_commit=before_commit) as db:
             held, doc = self._load(db, scope, at)
             if not hmac.compare_digest(fence, self._fence(db, scope, held, at)):
                 raise HistoryConflict("statement source changed")
