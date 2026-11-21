@@ -8,7 +8,7 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 from acl_service.startup_identity import desired,plan
-from acl_service._startup_contract import fingerprint
+from acl_service._startup_contract import binding_fingerprint, fingerprint
 from acl_service.domain.policy_store import PolicyRecord
 
 
@@ -45,6 +45,26 @@ class StartupTests(unittest.TestCase):
         c,p=fixture()
         for key,value in [('status','reconciled'),('tenant_id','other'),('mapping_sha256','0'*64),('permissions',['admin']),('broker_subject',None),('organizations',[])]:
             with self.subTest(key=key),self.assertRaises(ValueError):desired(c,dict(p,**{key:value}))
+
+    def test_synthetic_policy_requires_the_declared_canonical_subject(self):
+        config, person = fixture()
+        subject = person['person_id']
+        config['binding'].pop('entra')
+        config['binding'].update(version=2, oidc={
+            'issuer': 'https://auth.test.hyperme.sh/realms/startup-nightly',
+            'broker': 'startup-nightly',
+            'subject': '76259cb6-a67f-5d78-83ec-8f1cabc0eb44',
+            'broker_subject': subject,
+        }, keycloak_admin={'enabled': False, 'realm': 'controlplane'})
+        config['owner'].update(network_id='hyperme.sh', profile={'email': 'owner@startup-nightly.invalid'},
+                               broker={'issuer': 'https://auth.test.hyperme.sh/realms/controlplane',
+                                       'audience': 'controlplane-frontend'})
+        config['binding_sha256'] = binding_fingerprint(config['binding'])
+        person.update(mapping_sha256=fingerprint(config), broker_subject=subject, network_id='hyperme.sh')
+        _, grants = desired(config, person)
+        self.assertIn(('g', ['user:' + subject, config['binding']['sea_public_key']]), grants)
+        with self.assertRaisesRegex(ValueError, 'Declared synthetic broker subject'):
+            desired(config, person | {'broker_subject': config['binding']['oidc']['subject']})
 
     def test_exact_library_copy(self):
         record=json.loads((ROOT/'src/acl_service/startup_contract_source.json').read_text())
