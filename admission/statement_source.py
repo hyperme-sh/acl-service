@@ -21,7 +21,7 @@ def encoded(value):
 
 def forum_update(value):
     keys = {"tenant", "forumId", "principal", "botId", "assignmentId", "sessionId",
-            "taskId", "deliveryId", "sequence", "statementId", "signature"}
+            "taskId", "deliveryId", "sequence", "statementId", "signature", "status"}
     if not isinstance(value, dict) or set(value) != keys:
         raise AdmissionRejected("invalid forum update fields")
     for field in ("botId", "assignmentId", "sessionId", "taskId", "deliveryId", "tenant"):
@@ -36,6 +36,8 @@ def forum_update(value):
             raise AdmissionRejected("invalid signed forum update")
     if not value["signature"].startswith("SEA") or type(value["sequence"]) is not int or not 0 < value["sequence"] <= 2**53 - 1:
         raise AdmissionRejected("invalid forum update sequence or signature")
+    if value["status"] not in ("completed", "failed"):
+        raise AdmissionRejected("terminal forum status required")
     return json.loads(encoded(value))
 
 

@@ -23,7 +23,7 @@ def plane_forum_commit(origin, tenant, forum, key):
         body = json.dumps(dict(
             version=1, forum_id=forum, principal=update["principal"], assignment_id=update["assignmentId"],
             session_id=update["sessionId"], task_id=update["taskId"], delivery_id=update["deliveryId"],
-            sequence=update["sequence"], digest=digest,
+            sequence=update["sequence"], status=update["status"], digest=digest,
         )).encode()
         conn = http.client.HTTPSConnection(parsed.hostname, parsed.port or 443, timeout=0.65)
         try:
@@ -38,6 +38,8 @@ def plane_forum_commit(origin, tenant, forum, key):
             result = response.read(1025)
             if len(result) > 1024 or json.loads(result) != {"version": 1, "digest": digest}:
                 raise HistoryConflict("Plane decision differs")
+        except (AdmissionRejected, HistoryConflict):
+            raise
         except (OSError, ValueError, http.client.HTTPException):
             raise HistoryConflict("Plane decision unavailable") from None
         finally:

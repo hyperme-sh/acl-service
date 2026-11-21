@@ -142,7 +142,7 @@ class StatementUnits(unittest.TestCase):
             'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
             'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
             'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
-            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture',
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed',
         }
         calls = 0
         paused = True
@@ -186,7 +186,7 @@ class StatementUnits(unittest.TestCase):
             'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
             'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
             'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
-            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture',
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed',
         }
         rows = [{'kind': 'object', 'record': {'object': update['statementId'], 'owner': 'owner'}}]
         prior = self.source.read('forum', 100)
