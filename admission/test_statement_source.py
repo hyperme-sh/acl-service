@@ -226,8 +226,9 @@ class StatementUnits(unittest.TestCase):
             self.assertNotIn(key, args[0])
             request = json.loads(kwargs['input'])
             self.assertEqual(kwargs['timeout'], 0.65)
-            self.assertEqual(request['host'], 'plane.example.test')
-            self.assertEqual(request['path'], f'/api/v1/hypermesh/bots/{bot}/forum/authorize-update')
+            self.assertEqual(args[0][-2:], ['https://plane.example.test', bot])
+            self.assertNotIn('host', request)
+            self.assertNotIn('path', request)
             self.assertEqual(request['headers']['X-Tenant-ID'], TENANT)
             self.assertEqual(request['headers']['Authorization'], 'Bearer ' + key)
             body = request['body']

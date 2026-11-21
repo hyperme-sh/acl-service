@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 
@@ -25,8 +26,6 @@ def plane_forum_commit(origin, tenant, forum, key):
         canonical = json.dumps(update, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         digest = hashlib.sha256(canonical).hexdigest()
         payload = {
-            "host": parsed.hostname, "port": parsed.port or 443,
-            "path": f'/api/v1/hypermesh/bots/{update["botId"]}/forum/authorize-update',
             "headers": {"Authorization": "Bearer " + key, "X-Tenant-ID": str(tenant),
                         "Content-Type": "application/json", "Accept-Encoding": "identity"},
             "body": dict(version=1, forum_id=forum, principal=update["principal"],
@@ -38,7 +37,7 @@ def plane_forum_commit(origin, tenant, forum, key):
         # Timeout kills and reaps the worker before the SQLite lock is released.
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "acl_service.infrastructure.forum_commit"],
+                [sys.executable, "-m", "acl_service.infrastructure.forum_commit", origin, update["botId"]],
                 input=json.dumps(payload).encode(), stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL, timeout=REQUEST_SECONDS, check=False,
             )
@@ -57,11 +56,16 @@ def plane_forum_commit(origin, tenant, forum, key):
     return decide
 
 
-def _request():
+def _request(origin, bot_id):
+    target = urlsplit(origin)
+    bot = UUID(bot_id)
+    if target.scheme != "https" or not target.hostname or not bot.int:
+        raise ValueError("invalid Plane target")
+    path = f"/api/v1/hypermesh/bots/{bot}/forum/authorize-update"
     payload = json.loads(sys.stdin.buffer.read(8193))
-    conn = http.client.HTTPSConnection(payload["host"], payload["port"], timeout=REQUEST_SECONDS)
+    conn = http.client.HTTPSConnection(target.hostname, target.port or 443, timeout=REQUEST_SECONDS)
     try:
-        conn.request("POST", payload["path"], body=json.dumps(payload["body"]).encode(), headers=payload["headers"])
+        conn.request("POST", path, body=json.dumps(payload["body"]).encode(), headers=payload["headers"])
         response = conn.getresponse()
         result = response.read(1025) if response.status == 200 else b""
         sys.stdout.buffer.write(str(response.status).encode() + b"\n" + result)
@@ -70,4 +74,4 @@ def _request():
 
 
 if __name__ == "__main__":
-    _request()
+    _request(*sys.argv[1:])
