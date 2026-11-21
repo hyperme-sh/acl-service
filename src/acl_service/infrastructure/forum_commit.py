@@ -1,77 +1,58 @@
 """Fixed-origin Plane decisions inside the checked statement transaction."""
+import asyncio
 import hashlib
-import http.client
 import json
 import re
-import subprocess
-import sys
 from urllib.parse import urlsplit
 from uuid import UUID
+
+import httpx
 
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 
 REQUEST_SECONDS = 0.65
 
 
-def plane_forum_commit(origin, tenant, forum, key):
+def plane_forum_commit(origin, tenant, forum, key, *, transport=None):
     parsed = urlsplit(origin)
     if (parsed.scheme != "https" or not parsed.hostname or parsed.username is not None
             or parsed.password is not None or parsed.path or parsed.query or parsed.fragment
             or parsed.geturl() != origin or not re.fullmatch(r"hm_fcm_[a-f0-9]{64}", key)):
         raise ValueError("invalid forum commit authority")
 
-    def decide(update):
+    async def decide(update):
         if update["tenant"] != str(tenant) or update["forumId"] != forum:
             raise AdmissionRejected("forum commit authority scope differs")
+        bot = UUID(update["botId"])
+        if not bot.int:
+            raise AdmissionRejected("forum commit bot differs")
         canonical = json.dumps(update, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         digest = hashlib.sha256(canonical).hexdigest()
-        payload = {
-            "headers": {"Authorization": "Bearer " + key, "X-Tenant-ID": str(tenant),
-                        "Content-Type": "application/json", "Accept-Encoding": "identity"},
-            "body": dict(version=1, forum_id=forum, principal=update["principal"],
-                         assignment_id=update["assignmentId"], session_id=update["sessionId"],
-                         task_id=update["taskId"], delivery_id=update["deliveryId"],
-                         sequence=update["sequence"], status=update["status"], digest=digest),
-        }
-        # The subprocess deadline bounds DNS, TLS, headers and body together.
-        # Timeout kills and reaps the worker before the SQLite lock is released.
+        body = dict(version=1, forum_id=forum, principal=update["principal"],
+                    assignment_id=update["assignmentId"], session_id=update["sessionId"],
+                    task_id=update["taskId"], delivery_id=update["deliveryId"],
+                    sequence=update["sequence"], status=update["status"], digest=digest)
+        target = f"{origin}/api/v1/hypermesh/bots/{bot}/forum/authorize-update"
+        headers = {"Authorization": "Bearer " + key, "X-Tenant-ID": str(tenant), "Accept-Encoding": "identity"}
         try:
-            result = subprocess.run(
-                [sys.executable, "-m", "acl_service.infrastructure.forum_commit", origin, update["botId"]],
-                input=json.dumps(payload).encode(), stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL, timeout=REQUEST_SECONDS, check=False,
-            )
-            if result.returncode or len(result.stdout) > 1030:
-                raise HistoryConflict("Plane decision unavailable")
-            status, _, body = result.stdout.partition(b"\n")
-            if status in (b"403", b"409"):
-                raise AdmissionRejected("Plane refused the forum delivery")
-            if status != b"200" or json.loads(body) != {"version": 1, "digest": digest}:
-                raise HistoryConflict("Plane decision differs")
+            async with asyncio.timeout(REQUEST_SECONDS):
+                async with httpx.AsyncClient(trust_env=False, follow_redirects=False,
+                                             transport=transport, timeout=REQUEST_SECONDS) as client:
+                    async with client.stream("POST", target, json=body, headers=headers) as response:
+                        if response.status_code in (403, 409):
+                            raise AdmissionRejected("Plane refused the forum delivery")
+                        if response.status_code != 200:
+                            raise HistoryConflict("Plane decision unavailable")
+                        data = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            if len(data) + len(chunk) > 1024:
+                                raise HistoryConflict("Plane decision differs")
+                            data.extend(chunk)
+                        if json.loads(data) != {"version": 1, "digest": digest}:
+                            raise HistoryConflict("Plane decision differs")
         except (AdmissionRejected, HistoryConflict):
             raise
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+        except (ValueError, TimeoutError, httpx.HTTPError):
             raise HistoryConflict("Plane decision unavailable") from None
 
     return decide
-
-
-def _request(origin, bot_id):
-    target = urlsplit(origin)
-    bot = UUID(bot_id)
-    if target.scheme != "https" or not target.hostname or not bot.int:
-        raise ValueError("invalid Plane target")
-    path = f"/api/v1/hypermesh/bots/{bot}/forum/authorize-update"
-    payload = json.loads(sys.stdin.buffer.read(8193))
-    conn = http.client.HTTPSConnection(target.hostname, target.port or 443, timeout=REQUEST_SECONDS)
-    try:
-        conn.request("POST", path, body=json.dumps(payload["body"]).encode(), headers=payload["headers"])
-        response = conn.getresponse()
-        result = response.read(1025) if response.status == 200 else b""
-        sys.stdout.buffer.write(str(response.status).encode() + b"\n" + result)
-    finally:
-        conn.close()
-
-
-if __name__ == "__main__":
-    _request(*sys.argv[1:])

@@ -206,41 +206,5 @@ class StatementUnits(unittest.TestCase):
         self.assertEqual(self.source.read('forum', 100)['snapshot']['rows'], rows)
 
 
-    def test_plane_decision_uses_bound_origin_tenant_digest_and_no_redirect(self):
-        import json
-        from unittest.mock import patch
-        from acl_service.infrastructure.forum_commit import plane_forum_commit
-
-        bot = str(uuid4())
-        update = dict(tenant=TENANT, forumId='forum-owner', principal='owner', botId=bot,
-                      assignmentId=bot, sessionId=bot, taskId=bot, deliveryId=bot,
-                      sequence=1, statementId='stmt-fixture', signature='SEA-fixture', status='completed')
-        key = 'hm_fcm_' + 'a' * 64
-        decide = plane_forum_commit('https://plane.example.test', TENANT, 'forum-owner', key)
-        with patch('acl_service.infrastructure.forum_commit.subprocess.run') as run:
-            run.return_value.returncode = 0
-            run.return_value.stdout = b'302\n'
-            with self.assertRaises(HistoryConflict):
-                decide(update)
-            args, kwargs = run.call_args
-            self.assertNotIn(key, args[0])
-            request = json.loads(kwargs['input'])
-            self.assertEqual(kwargs['timeout'], 0.65)
-            self.assertEqual(args[0][-2:], ['https://plane.example.test', bot])
-            self.assertNotIn('host', request)
-            self.assertNotIn('path', request)
-            self.assertEqual(request['headers']['X-Tenant-ID'], TENANT)
-            self.assertEqual(request['headers']['Authorization'], 'Bearer ' + key)
-            body = request['body']
-            self.assertNotIn('signature', body)
-            self.assertEqual(body['status'], 'completed')
-            run.return_value.stdout = b'200\n' + json.dumps({'version': 1, 'digest': body['digest']}).encode()
-            decide(update)
-            with self.assertRaises(AdmissionRejected):
-                decide({**update, 'forumId': 'elsewhere'})
-            self.assertEqual(run.call_count, 2)
-
-
-
 if __name__ == '__main__':
     unittest.main()

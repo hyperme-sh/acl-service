@@ -3,7 +3,7 @@ import asyncio
 import json
 import threading
 from dataclasses import dataclass
-from typing import Callable, Protocol
+from typing import Awaitable, Callable, Protocol
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
+from acl_service.infrastructure.forum_commit import REQUEST_SECONDS
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
 
 router = APIRouter(prefix="/acl/sociacl/statements", tags=["SociACL"])
@@ -26,7 +27,7 @@ class Source(Protocol):
 class StatementBinding:
     scope: str
     source: Source
-    forum_commit: Callable[[dict], None] | None = None
+    forum_commit: Callable[[dict], Awaitable[None]] | None = None
 
 NATIVE_VAULT_SCOPE = "s3rch-native-vault"
 NATIVE_VAULT_READ = "acl:vault:statements:read"
@@ -83,9 +84,21 @@ async def graph_operation(scope, operation, request, tenant, user, *, namespace,
                 work = asyncio.create_task(asyncio.to_thread(binding.source.read, scope, body["evaluatedAt"], guard))
                 result = await asyncio.shield(work)
             elif forum_update:
+                loop = asyncio.get_running_loop()
+
+                def authorize_commit(update):
+                    # Bound the synchronous transaction even if the event loop or
+                    # resolver is busy. Cancellation stops the asynchronous I/O.
+                    future = asyncio.run_coroutine_threadsafe(binding.forum_commit(update), loop)
+                    try:
+                        future.result(timeout=REQUEST_SECONDS)
+                    except TimeoutError:
+                        future.cancel()
+                        raise HistoryConflict("Plane decision unavailable") from None
+
                 work = asyncio.create_task(asyncio.to_thread(binding.source.append_forum_update,
                     scope, body["evaluatedAt"], body["fence"], body["rows"], body["update"],
-                    authorize_commit=binding.forum_commit, cancel=guard))
+                    authorize_commit=authorize_commit, cancel=guard))
                 result = {"ok": await asyncio.shield(work)}
             else:
                 work = asyncio.create_task(asyncio.to_thread(binding.source.append, scope, body["evaluatedAt"], body["fence"], body["rows"], guard))
