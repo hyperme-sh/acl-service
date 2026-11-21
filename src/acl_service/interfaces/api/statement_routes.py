@@ -3,7 +3,7 @@ import asyncio
 import json
 import threading
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Awaitable, Callable, Protocol
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
+from acl_service.infrastructure.forum_commit import REQUEST_SECONDS
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
 
 router = APIRouter(prefix="/acl/sociacl/statements", tags=["SociACL"])
@@ -20,11 +21,13 @@ class Source(Protocol):
     production_ready: bool
     def read(self, scope, at, cancel): ...
     def append(self, scope, at, fence, rows, cancel): ...
+    def append_forum_update(self, scope, at, fence, rows, update, *, authorize_commit, cancel): ...
 
 @dataclass(frozen=True)
 class StatementBinding:
     scope: str
     source: Source
+    forum_commit: Callable[[dict], Awaitable[None]] | None = None
 
 NATIVE_VAULT_SCOPE = "s3rch-native-vault"
 NATIVE_VAULT_READ = "acl:vault:statements:read"
@@ -43,7 +46,10 @@ async def graph_operation(scope, operation, request, tenant, user, *, namespace,
     if binding is None or binding.scope != scope or binding.source.tenant != str(tenant):
         raise HTTPException(403, "No statement source binding")
     if not binding.source.production_ready: raise HTTPException(503, "Statement source unavailable")
-    if operation not in ("snapshot", "append"): raise HTTPException(404, "Unknown operation")
+    forum_update = namespace == "statement" and operation == "forum-update"
+    if forum_update and binding.forum_commit is None:
+        raise HTTPException(503, "Forum commit authority unavailable")
+    if operation not in ("snapshot", "append") and not forum_update: raise HTTPException(404, "Unknown operation")
     permission = permission_prefix + ("read" if operation == "snapshot" else "write")
     vault_reader = (namespace == "statement" and scope == NATIVE_VAULT_SCOPE
                     and operation == "snapshot" and NATIVE_VAULT_READ in user.scopes)
@@ -63,11 +69,13 @@ async def graph_operation(scope, operation, request, tenant, user, *, namespace,
                 raise HTTPException(415, "Expected uncompressed JSON")
             data = bytearray()
             async for chunk in request.stream():
-                if len(data) + len(chunk) > 70000: raise HTTPException(413, "Request too large")
+                if len(data) + len(chunk) > (104000 if forum_update else 70000): raise HTTPException(413, "Request too large")
                 data.extend(chunk)
             try:
                 body = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_fields, parse_constant=_invalid_constant)
                 keys = {"evaluatedAt"} if operation == "snapshot" else {"evaluatedAt", "fence", "rows"}
+                if forum_update:
+                    keys.add("update")
                 if not isinstance(body, dict) or set(body) != keys or type(body["evaluatedAt"]) is not int:
                     raise ValueError()
                 json.dumps(body, allow_nan=False)
@@ -75,6 +83,23 @@ async def graph_operation(scope, operation, request, tenant, user, *, namespace,
             if operation == "snapshot":
                 work = asyncio.create_task(asyncio.to_thread(binding.source.read, scope, body["evaluatedAt"], guard))
                 result = await asyncio.shield(work)
+            elif forum_update:
+                loop = asyncio.get_running_loop()
+
+                def authorize_commit(update):
+                    # Bound the synchronous transaction even if the event loop or
+                    # resolver is busy. Cancellation stops the asynchronous I/O.
+                    future = asyncio.run_coroutine_threadsafe(binding.forum_commit(update), loop)
+                    try:
+                        future.result(timeout=REQUEST_SECONDS)
+                    except TimeoutError:
+                        future.cancel()
+                        raise HistoryConflict("Plane decision unavailable") from None
+
+                work = asyncio.create_task(asyncio.to_thread(binding.source.append_forum_update,
+                    scope, body["evaluatedAt"], body["fence"], body["rows"], body["update"],
+                    authorize_commit=authorize_commit, cancel=guard))
+                result = {"ok": await asyncio.shield(work)}
             else:
                 work = asyncio.create_task(asyncio.to_thread(binding.source.append, scope, body["evaluatedAt"], body["fence"], body["rows"], guard))
                 result = {"ok": await asyncio.shield(work)}

@@ -21,6 +21,7 @@ class BindingSettings:
     scope: str
     history: Path
     freshness: Path
+    forum_commit: tuple[str, str, Path] | None = None
 
 
 def _unique(pairs):
@@ -49,7 +50,8 @@ def parse_settings(data: bytes) -> tuple[BindingSettings, ...]:
         raise ValueError('invalid configuration')
     result, keys, stores = [], set(), {}
     for row in value['bindings']:
-        if not isinstance(row, dict) or set(row) != {'tenant', 'subject', 'scope', 'historyFile', 'freshnessFile'}:
+        required = {'tenant', 'subject', 'scope', 'historyFile', 'freshnessFile'}
+        if not isinstance(row, dict) or set(row) not in (required, required | {'forumCommit'}):
             raise ValueError('invalid binding')
         if not isinstance(row['tenant'], str):
             raise ValueError('canonical tenant required')
@@ -70,7 +72,15 @@ def parse_settings(data: bytes) -> tuple[BindingSettings, ...]:
                 raise ValueError('store has conflicting tenant or checkpoint')
             stores[path] = pair
         keys.add(key)
-        result.append(BindingSettings(tenant, subject, scope, history, freshness))
+        commit = None
+        if 'forumCommit' in row:
+            data = row['forumCommit']
+            if (not isinstance(data, dict) or set(data) != {'origin', 'forumId', 'credentialFile'}
+                    or not isinstance(data['origin'], str) or not 1 <= len(data['origin']) <= 256
+                    or not isinstance(data['forumId'], str) or not re.fullmatch(r'[!-~]{1,256}', data['forumId'])):
+                raise ValueError('invalid forum commit binding')
+            commit = (data['origin'], data['forumId'], _path(data['credentialFile']))
+        result.append(BindingSettings(tenant, subject, scope, history, freshness, commit))
     return tuple(result)
 
 
@@ -147,6 +157,7 @@ def load_statement_bindings(environ=None, *, source_factory=None):
         for binding in settings:
             _provisioned(binding)
         from acl_service.interfaces.api.statement_routes import StatementBinding
+        from acl_service.infrastructure.forum_commit import plane_forum_commit
         sources, result = {}, {}
         for binding in settings:
             key = (binding.tenant, binding.history, binding.freshness)
@@ -155,7 +166,14 @@ def load_statement_bindings(environ=None, *, source_factory=None):
             source = sources[key]
             if not source.production_ready or source.tenant != str(binding.tenant):
                 raise ValueError('protected source required')
-            result[(binding.tenant, binding.subject, binding.scope)] = StatementBinding(binding.scope, source)
+            forum_commit = None
+            if binding.forum_commit is not None:
+                origin, forum, path = binding.forum_commit
+                with _private_file(path) as stream:
+                    secret = stream.read(128).decode('ascii').strip()
+                forum_commit = plane_forum_commit(origin, binding.tenant, forum, secret)
+            result[(binding.tenant, binding.subject, binding.scope)] = StatementBinding(
+                binding.scope, source, forum_commit=forum_commit)
         return result
     except Exception:
         # Do not print private subjects, paths, file contents or verifier inputs.

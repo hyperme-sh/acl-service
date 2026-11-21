@@ -18,4 +18,11 @@ const roomRows = [ownership(room), ...['see','post'].map(kind => {
   record.sig = sign((kind === 'see' ? seeGrantBytes : postGrantBytes)(record));
   return {kind, soul:(kind === 'see' ? grantSoul : postSoul)(owner,room,owner), record};
 })];
-console.log(JSON.stringify({room, roomRows, quotaRows, maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));
+const fixtureId = '01234567-89ab-cdef-0123-456789abcdef';
+const forumUpdate = {tenant:fixtureId, forumId:forum, principal:owner, botId:fixtureId,
+  assignmentId:fixtureId, sessionId:fixtureId, taskId:fixtureId, deliveryId:fixtureId,
+  sequence:1, statementId:object, status:'completed', signature:'SEA-fixture'};
+forumUpdate.attestation = sign(Buffer.from(JSON.stringify(['s3rch-forum-update-v1',
+  forumUpdate.tenant, forum, owner, fixtureId, fixtureId, fixtureId, fixtureId, fixtureId,
+  1, object, forumUpdate.status, forumUpdate.signature])));
+console.log(JSON.stringify({forumUpdate, room, roomRows, quotaRows, maxHistory:MAX_RESOLUTION_INPUT, forum, initial:ownership(forum), rows:[ownership(object), {kind:'see', soul:grantSoul(owner,object,owner), record:grant}]}));

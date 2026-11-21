@@ -19,6 +19,30 @@ def encoded(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
+def forum_update(value):
+    keys = {"tenant", "forumId", "principal", "botId", "assignmentId", "sessionId",
+            "taskId", "deliveryId", "sequence", "statementId", "signature", "status", "attestation"}
+    if not isinstance(value, dict) or set(value) != keys:
+        raise AdmissionRejected("invalid forum update fields")
+    for field in ("botId", "assignmentId", "sessionId", "taskId", "deliveryId", "tenant"):
+        value_id = value[field]
+        try:
+            if not isinstance(value_id, str) or str(UUID(value_id)) != value_id or UUID(value_id).int == 0:
+                raise ValueError()
+        except ValueError:
+            raise AdmissionRejected("invalid forum update binding") from None
+    for field, maximum in (("forumId", 256), ("principal", 128), ("statementId", 256), ("signature", 32768)):
+        if not isinstance(value[field], str) or not 0 < len(value[field]) <= maximum:
+            raise AdmissionRejected("invalid signed forum update")
+    if not value["signature"].startswith("SEA") or type(value["sequence"]) is not int or not 0 < value["sequence"] <= 2**53 - 1:
+        raise AdmissionRejected("invalid forum update sequence or signature")
+    if not isinstance(value["attestation"], str) or not re.fullmatch(r"[A-Za-z0-9_-]{86}", value["attestation"]):
+        raise AdmissionRejected("forum update attestation required")
+    if value["status"] not in ("completed", "failed"):
+        raise AdmissionRejected("terminal forum status required")
+    return json.loads(encoded(value))
+
+
 class StatementSource:
     """Provision only for a new graph admitted exclusively by this source.
 
@@ -60,7 +84,7 @@ class StatementSource:
             raise AdmissionRejected("identity capacity")
         return accounts
 
-    def _verify(self, accounts, doc, at, candidates, statement_only):
+    def _verify(self, accounts, doc, at, candidates, statement_only, update=None):
         principal = next(iter(accounts))
         account = accounts[principal]
         verifier = HistoryAdmission(self.store, grant_for=lambda _: None,
@@ -68,7 +92,7 @@ class StatementSource:
         return json.loads(verifier._run_verifier(principal, at, genesis=_record(account.genesis),
             entries=[_record(row) for row in account.entries], peers=_peer_inputs(principal, accounts),
             graph={"forum": doc["forum"], "rows": doc["rows"], "candidates": candidates,
-                   "statementOnly": statement_only}))
+                   "statementOnly": statement_only, **({"forumUpdate": update} if update is not None else {})}))
 
     @staticmethod
     def _digest(revision, nonce, document):
@@ -139,25 +163,84 @@ class StatementSource:
             return {"snapshot": result["snapshot"], "fence": self._fence(db, scope, row, at)}
 
     def append(self, scope, at, fence, rows, cancel=lambda: None, *, statement_only=True):
+        return self._append(scope, at, fence, rows, cancel, statement_only=statement_only)
+
+    def append_forum_update(self, scope, at, fence, rows, update, *, hold_delivery=None,
+                            authorize_commit=None, cancel=lambda: None):
+        """Trusted coordinator only. Hold Plane's serialization through SQLite COMMIT.
+
+        A local coordinator may hold a delivery guard over the transaction.
+        The service coordinator instead obtains an exact durable Plane decision
+        while the SQLite write lock excludes changes to the checked ACL.
+        """
+        bound = forum_update(update)
+        if bound["tenant"] != self.tenant:
+            raise AdmissionRejected("forum update tenant differs")
         self._guard(at, cancel)
-        if not isinstance(fence, str) or not re.fullmatch(r"[0-9a-f]{64}", fence) or not isinstance(rows, list) or not 1 <= len(rows) <= 65 or len(encoded(rows)) > 65536:
+        if (hold_delivery is None) == (authorize_commit is None):
+            raise AdmissionRejected("exactly one Plane commit authority required")
+        if authorize_commit is not None:
+            return self._append(scope, at, fence, rows, cancel, statement_only=True,
+                                update=bound, authorize_commit=authorize_commit)
+        with hold_delivery(json.loads(encoded(bound))) as current:
+            def guard():
+                cancel()
+                current()
+            return self._append(scope, at, fence, rows, guard, statement_only=True, update=bound)
+
+    def _append(self, scope, at, fence, rows, cancel, *, statement_only, update=None, authorize_commit=None):
+        self._guard(at, cancel)
+        minimum = 0 if update is not None else 1
+        if not isinstance(fence, str) or not re.fullmatch(r"[0-9a-f]{64}", fence) or not isinstance(rows, list) or not minimum <= len(rows) <= 65 or len(encoded(rows)) > 65536:
             raise AdmissionRejected("invalid append")
         # Detach caller-owned input before verification or mutation.
         rows = json.loads(encoded(rows))
-        with self.store._transaction(write=True, before_commit=lambda: self._guard(at, cancel)) as db:
+
+        def before_commit():
+            self._guard(at, cancel)
+            if authorize_commit is not None:
+                authorize_commit(json.loads(encoded(update)))
+                self._guard(at, cancel)
+
+        with self.store._transaction(write=True, before_commit=before_commit) as db:
             held, doc = self._load(db, scope, at)
             if not hmac.compare_digest(fence, self._fence(db, scope, held, at)):
                 raise HistoryConflict("statement source changed")
-            result = self.verifier(self._accounts(db), doc, at, rows, statement_only)
+            updates = doc.get("forumUpdates", {})
+            if update is not None:
+                if update["forumId"] != doc["forum"]:
+                    raise AdmissionRejected("forum differs")
+                key = f'{update["deliveryId"]}:{update["sequence"]}'
+                previous = updates.get(key)
+                if previous is not None:
+                    if previous != update or rows:
+                        raise HistoryConflict("forum update already retained")
+                else:
+                    if len(updates) >= 256 or any(prior["statementId"] == update["statementId"] for prior in updates.values()):
+                        raise AdmissionRejected("forum update ID unavailable")
+                    if not any(isinstance(row, dict) and row.get("kind") == "object"
+                               and isinstance(row.get("record"), dict)
+                               and row["record"].get("object") == update["statementId"]
+                               and row["record"].get("owner") == update["principal"] for row in rows):
+                        raise AdmissionRejected("new signed statement object required")
+                    updates[key] = update
+                    doc["forumUpdates"] = updates
+            extra = (update,) if update is not None else ()
+            result = self.verifier(self._accounts(db), doc, at, rows, statement_only, *extra)
             snapshot = result["snapshot"]
             if len(snapshot["rows"]) > 1024 or len(encoded(snapshot)) > MAX_BYTES:
                 raise AdmissionRejected("statement capacity")
             for principal, head in result["heads"].items():
                 self.store._observe_floor(db, principal, head)
             if doc["rows"] == snapshot["rows"]:
+                if update is not None and previous is None:
+                    raise AdmissionRejected("forum statement object already retained")
                 return True
             doc["rows"] = snapshot["rows"]
-            next_row = (held[0] + 1, held[1], encoded(doc))
+            document = encoded(doc)
+            if updates and len(document) > MAX_BYTES:
+                raise AdmissionRejected("forum update source capacity")
+            next_row = (held[0] + 1, held[1], document)
             db.execute("UPDATE statement_scopes SET revision=?,nonce=?,document=? WHERE scope=?", (*next_row, scope))
             self._checkpoint(db, scope, next_row, write=True)
         return True

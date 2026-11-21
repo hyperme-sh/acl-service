@@ -94,3 +94,25 @@ covers all identity and parent authority checks. Consumers must check current
 parent see/post as well as current room rights on every message read/write; a
 child grant never bypasses revoked parent membership. This extension does not
 make rooms public or add a room discovery endpoint.
+
+## Guarded forum update retention
+
+The internal `append_forum_update` entry point stores a verified signed
+statement and its reader rows in the same checkpointed document transaction.
+It requires a trusted caller to hold the current Plane delivery authority
+through commit. The callback bound to that delivery runs before the append
+and again immediately before commit. The source rejects a reused delivery
+sequence with changed content and accepts an identical retry with no new
+rows. This entry point needs a coordinator that can hold Plane's authority
+through the statement transaction. The existing HTTP append remains an
+ACL-only operation.
+
+For a service deployment, add `forumCommit` to the existing statement binding
+entry. The object contains the fixed HTTPS Plane `origin`, `forumId` and an
+absolute owner-only `credentialFile` with the matching `hm_fcm_` credential.
+This enables the scoped `forum-update` operation for that statement subject.
+The route verifies the fenced ACL write before requesting Plane's durable
+decision inside the SQLite write transaction. Authority changes on the ACL
+side serialize through that transaction. Plane orders its decision with pause
+and assignment revocation under the bot row lock. A lost or unavailable
+decision rolls back the ACL write.

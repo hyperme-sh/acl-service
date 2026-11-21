@@ -1,7 +1,9 @@
 """Transaction units; the cryptographic subprocess is stubbed."""
+from contextlib import contextmanager
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import uuid4
 from statement_source import StatementSource
 from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
@@ -13,7 +15,7 @@ class StatementUnits(unittest.TestCase):
         self.store = SqliteHistoryStore(Path(self.tmp.name) / 'history.db')
         self.store.enroll('owner', b'{}'); self.now = 100
         self.hook = lambda: None
-        def verify(accounts, doc, at, rows, only):
+        def verify(accounts, doc, at, rows, only, update=None):
             self.hook()
             return {'heads': {'owner': 0}, 'snapshot': {'completeThrough': at,
                 'history': {'completeThrough': at, 'accounts': [], 'links': []}, 'rows': doc['rows'] + rows}}
@@ -133,4 +135,76 @@ class StatementUnits(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['graph']['candidates'], [])
         self.assertFalse(run.call_args.kwargs['graph']['statementOnly'])
 
-if __name__ == '__main__': unittest.main()
+
+    def test_forum_update_commit_rechecks_delivery_and_deduplicates_exact_retry(self):
+        statement = {'kind': 'object', 'record': {'object': 'stmt-fixture', 'owner': 'owner'}}
+        update = {
+            'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
+            'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
+            'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed', 'attestation': 'a' * 86,
+        }
+        calls = 0
+        paused = True
+
+        @contextmanager
+        def hold(received):
+            self.assertEqual(received['taskId'], update['taskId'])
+
+            def current():
+                nonlocal calls
+                calls += 1
+                if paused and calls > 1:
+                    raise HistoryConflict('Plane paused at commit')
+            yield current
+
+        before = self.source.read('forum', 100)
+        with self.assertRaises(HistoryConflict):
+            self.source.append_forum_update('forum', 100, before['fence'], [statement], update,
+                                            hold_delivery=hold)
+        self.assertEqual(self.source.read('forum', 100), before)
+
+        paused = False
+        self.assertTrue(self.source.append_forum_update('forum', 100, before['fence'], [statement],
+                                                       update, hold_delivery=hold))
+        after = self.source.read('forum', 100)
+        self.assertEqual(after['snapshot']['rows'], [statement])
+        self.assertTrue(self.source.append_forum_update('forum', 100, after['fence'], [],
+                                                       update, hold_delivery=hold))
+        self.assertEqual(self.source.read('forum', 100), after)
+        for changed in ({**update, 'signature': 'SEA-other'}, {**update, 'sequence': 2}):
+            with self.assertRaises((HistoryConflict, AdmissionRejected)):
+                self.source.append_forum_update('forum', 100, after['fence'], [], changed,
+                                                hold_delivery=hold)
+        with self.assertRaises(HistoryConflict):
+            self.source.append_forum_update('forum', 100, after['fence'], [statement], update,
+                                            hold_delivery=hold)
+
+
+    def test_remote_decision_runs_at_commit_and_failure_rolls_back(self):
+        update = {
+            'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
+            'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
+            'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture', 'status': 'completed', 'attestation': 'a' * 86,
+        }
+        rows = [{'kind': 'object', 'record': {'object': update['statementId'], 'owner': 'owner'}}]
+        prior = self.source.read('forum', 100)
+        ordering = []
+        self.hook = lambda: ordering.append('acl')
+        def refuse(proof):
+            self.assertEqual(proof, update)
+            ordering.append('plane')
+            raise AdmissionRejected('paused before decision')
+        with self.assertRaises(AdmissionRejected):
+            self.source.append_forum_update('forum', 100, prior['fence'], rows, update,
+                                            authorize_commit=refuse)
+        self.assertEqual(ordering, ['acl', 'plane'])
+        self.assertEqual(self.source.read('forum', 100), prior)
+        self.source.append_forum_update('forum', 100, prior['fence'], rows, update,
+                                        authorize_commit=lambda _: ordering.append('accepted'))
+        self.assertEqual(self.source.read('forum', 100)['snapshot']['rows'], rows)
+
+
+if __name__ == '__main__':
+    unittest.main()

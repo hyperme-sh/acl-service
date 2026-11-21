@@ -70,6 +70,22 @@ class GraphContracts(unittest.TestCase):
         with self.assertRaises(AdmissionRejected):
             self.source.append('test', at, current['fence'], forged)
 
+    def test_forum_commit_only_accepts_the_current_signers_exact_attestation(self):
+        at = self.f['now']
+        original = self.source.read('test', at)
+        update = self.rows['forumUpdate']
+        accepted = []
+        for change in ({'status': 'failed'}, {'assignmentId': '01234567-89ab-cdef-0123-456789abcdea'},
+                       {'signature': 'SEA-changed'}):
+            with self.assertRaises(AdmissionRejected):
+                self.source.append_forum_update('test', at, original['fence'], self.rows['rows'],
+                                                {**update, **change}, authorize_commit=accepted.append)
+        self.assertEqual(accepted, [])
+        self.assertEqual(self.source.read('test', at), original)
+        self.assertTrue(self.source.append_forum_update('test', at, original['fence'], self.rows['rows'],
+                                                       update, authorize_commit=accepted.append))
+        self.assertEqual(accepted, [update])
+
     def test_signed_statement_roundtrip(self):
         held = self.source.read('test', self.f['now'])
         self.source.append('test', self.f['now'], held['fence'], self.rows['rows'])
