@@ -94,3 +94,15 @@ covers all identity and parent authority checks. Consumers must check current
 parent see/post as well as current room rights on every message read/write; a
 child grant never bypasses revoked parent membership. This extension does not
 make rooms public or add a room discovery endpoint.
+
+## Guarded forum update retention
+
+The internal `append_forum_update` entry point stores a verified signed
+statement and its reader rows in the same checkpointed document transaction.
+It requires a trusted caller to hold the current Plane delivery authority
+through commit. The callback bound to that delivery runs before the append
+and again immediately before commit. The source rejects a reused delivery
+sequence with changed content and accepts an identical retry with no new
+rows. This entry point needs a coordinator that can hold Plane's authority
+through the statement transaction. The existing HTTP append remains an
+ACL-only operation.

@@ -1,7 +1,9 @@
 """Transaction units; the cryptographic subprocess is stubbed."""
+from contextlib import contextmanager
 import tempfile
 import unittest
 from pathlib import Path
+from uuid import uuid4
 from statement_source import StatementSource
 from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
@@ -133,4 +135,51 @@ class StatementUnits(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs['graph']['candidates'], [])
         self.assertFalse(run.call_args.kwargs['graph']['statementOnly'])
 
-if __name__ == '__main__': unittest.main()
+
+    def test_forum_update_commit_rechecks_delivery_and_deduplicates_exact_retry(self):
+        statement = {'kind': 'object', 'record': {'object': 'stmt-fixture', 'owner': 'owner'}}
+        update = {
+            'tenant': TENANT, 'forumId': 'forum-owner', 'principal': 'owner',
+            'botId': str(uuid4()), 'assignmentId': str(uuid4()), 'sessionId': str(uuid4()),
+            'taskId': str(uuid4()), 'deliveryId': str(uuid4()), 'sequence': 1,
+            'statementId': 'stmt-fixture', 'signature': 'SEA-fixture',
+        }
+        calls = 0
+        paused = True
+
+        @contextmanager
+        def hold(received):
+            self.assertEqual(received['taskId'], update['taskId'])
+
+            def current():
+                nonlocal calls
+                calls += 1
+                if paused and calls > 1:
+                    raise HistoryConflict('Plane paused at commit')
+            yield current
+
+        before = self.source.read('forum', 100)
+        with self.assertRaises(HistoryConflict):
+            self.source.append_forum_update('forum', 100, before['fence'], [statement], update,
+                                            hold_delivery=hold)
+        self.assertEqual(self.source.read('forum', 100), before)
+
+        paused = False
+        self.assertTrue(self.source.append_forum_update('forum', 100, before['fence'], [statement],
+                                                       update, hold_delivery=hold))
+        after = self.source.read('forum', 100)
+        self.assertEqual(after['snapshot']['rows'], [statement])
+        self.assertTrue(self.source.append_forum_update('forum', 100, after['fence'], [],
+                                                       update, hold_delivery=hold))
+        self.assertEqual(self.source.read('forum', 100), after)
+        for changed in ({**update, 'signature': 'SEA-other'}, {**update, 'sequence': 2}):
+            with self.assertRaises((HistoryConflict, AdmissionRejected)):
+                self.source.append_forum_update('forum', 100, after['fence'], [], changed,
+                                                hold_delivery=hold)
+        with self.assertRaises(HistoryConflict):
+            self.source.append_forum_update('forum', 100, after['fence'], [statement], update,
+                                            hold_delivery=hold)
+
+
+if __name__ == '__main__':
+    unittest.main()
