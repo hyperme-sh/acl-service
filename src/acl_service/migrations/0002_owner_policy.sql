@@ -68,23 +68,22 @@ CREATE TABLE acl_service.sociacl_checkpoint_requests (
     CONSTRAINT ck_checkpoint_consumed_at CHECK (consumed_at BETWEEN 0 AND 9007199254740991)
 );
 
-DO $policies$
-DECLARE
-    relation text;
-BEGIN
-    FOREACH relation IN ARRAY ARRAY['acl_casbin_rules', 'sociacl_share_links', 'sociacl_recovery_sessions'] LOOP
-        EXECUTE format('ALTER TABLE acl_service.%I ENABLE ROW LEVEL SECURITY', relation);
-        EXECUTE format(
-            'CREATE POLICY tenant_isolation ON acl_service.%I
-             USING (tenant_id = nullif(current_setting(''app.current_tenant_id'', true), '''')::uuid)
-             WITH CHECK (tenant_id = nullif(current_setting(''app.current_tenant_id'', true), '''')::uuid)',
-            relation
-        );
-    END LOOP;
-END
-$policies$;
+ALTER TABLE acl_service.acl_casbin_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE acl_service.acl_casbin_rules FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON acl_service.acl_casbin_rules
+    USING (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid);
+
+ALTER TABLE acl_service.sociacl_share_links ENABLE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON acl_service.sociacl_share_links
+    USING (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid);
+
+ALTER TABLE acl_service.sociacl_recovery_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE acl_service.sociacl_recovery_sessions FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_isolation ON acl_service.sociacl_recovery_sessions
+    USING (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid)
+    WITH CHECK (tenant_id = nullif(current_setting('app.current_tenant_id', true), '')::uuid);
 
 -- Only the migration owner bypasses RLS on this table. The runtime can resolve
 -- an exact capability hash through this function and receives only row IDs.
