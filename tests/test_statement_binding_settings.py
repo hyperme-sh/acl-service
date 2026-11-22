@@ -53,8 +53,13 @@ class BindingSettingsTests(unittest.TestCase):
         postgres = dict(tenant=TENANT, subject='s3rch-service', scope='forum',
                         postgresFile='/private/forum-postgres.json')
         source = Mock(tenant=TENANT, production_ready=True)
-        with patch('acl_service.infrastructure.statement_bindings._private_file',
-                   side_effect=lambda path: io.BytesIO(encode([postgres]))):
+        modules = {
+            'acl_service.interfaces.api.statement_routes': SimpleNamespace(
+                StatementBinding=lambda _scope, value, **kwargs: SimpleNamespace(source=value)),
+            'acl_service.infrastructure.forum_commit': SimpleNamespace(plane_forum_commit=Mock()),
+        }
+        with patch.dict(sys.modules, modules), patch('acl_service.infrastructure.statement_bindings._private_file',
+                                                     side_effect=lambda path: io.BytesIO(encode([postgres]))):
             binding = load_statement_bindings({CONFIG_NAME: '/private/config.json'}, source_factory=lambda row: source)
             self.assertIs(binding[(UUID(TENANT), 's3rch-service', 'forum')].source, source)
             source.check_scope.assert_called_once_with('forum', forum=None)
