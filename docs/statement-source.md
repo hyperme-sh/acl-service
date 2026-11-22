@@ -2,9 +2,15 @@
 
 `admission.statement_source.StatementSource` implements the source required by
 s3r.ch #279/#389. It colocates graph rows and policy with ACL's exclusively
-admitted identity history in one tenant's SQLite database. This is a single-host
-owner adapter, not a replica-local cache. Every identity writer must use the
-same HistoryStore. Imported peer histories cannot establish completeness.
+admitted identity history in a tenant-owned database. SQLite is a single-host
+owner adapter. Every identity writer must use the same HistoryStore. Imported
+peer histories cannot establish completeness.
+
+The PostgreSQL backend uses the existing ACL database with separate protected
+history and checkpoint schemas. It locks the source markers and commits both
+schemas in one transaction. Restoring either schema alone leaves a mismatch
+and refuses reads and writes. Keep checkpoint restores independent from history
+restores.
 
 An operator provisions a new empty graph with a fixed forum, independently
 trusted witness policy, policy expiry and an explicit exclusive-from-creation
@@ -23,7 +29,7 @@ service-selected policy. Valid forks, expired policy and incomplete history
 refuse the operation. The response is the s3r.ch `ForumAuthoritySnapshot` plus
 an opaque fence. The fence binds tenant, graph, evaluation second, policy/graph
 revision and complete identity authority digest, including monotonic floors.
-A write checks it under the same SQLite write lock, verifies the new signatures
+A write checks it under the same source write lock, verifies the new signatures
 and current direct forum access, and checks the evaluation second immediately
 before commit. Identity, cancellation, policy or graph changes invalidate it.
 
@@ -33,6 +39,18 @@ in `statement_checkpoints` in the independent freshness database, updated in the
 same attached transaction. Ledger-only graph rollback is rejected. Restoring both
 stores together remains outside the independent-checkpoint guarantee. Missing
 checkpoints are not automatically repaired from the ledger.
+
+For PostgreSQL, provision the empty schemas through
+`provision_empty_statement_source` before enrolling the signed roster and
+provisioning the graph. It refuses existing schema names. Runtime bindings
+use the existing `SOCIACL_STATEMENT_BINDINGS_FILE` and the same `tenant`,
+`subject`, `scope` and optional `forumCommit` fields. Select the source with
+`postgresFile` in place of `historyFile` and `freshnessFile`. The referenced
+private file uses version 1 of the existing PostgreSQL source format with
+`tenant`, `source`, `databaseUrl`, `historySchema` and `checkpointSchema`.
+Startup verifies the source markers, graph and checkpoint without provisioning
+or rewriting data. Give the serving SQL role only access to its two schemas
+and the statements it needs.
 
 ## Authenticated transport
 
@@ -112,7 +130,7 @@ entry. The object contains the fixed HTTPS Plane `origin`, `forumId` and an
 absolute owner-only `credentialFile` with the matching `hm_fcm_` credential.
 This enables the scoped `forum-update` operation for that statement subject.
 The route verifies the fenced ACL write before requesting Plane's durable
-decision inside the SQLite write transaction. Authority changes on the ACL
+decision inside the source write transaction. Authority changes on the ACL
 side serialize through that transaction. Plane orders its decision with pause
 and assignment revocation under the bot row lock. A lost or unavailable
 decision rolls back the ACL write.

@@ -49,10 +49,13 @@ class PostgresHistoryStore(RelationalHistoryStore):
     require_authority_checkpoint = True
     has_freshness = True
     provisioned_media = True
+    provisioned_statements = True
 
     def __init__(self, url, *, history_schema, checkpoint_schema, tenant, source, active_media_index=False,
-                 read_snapshot=False):
+                 read_snapshot=False, statements=False):
         if type(active_media_index) is not bool:raise ValueError('invalid media index mode')
+        if type(statements) is not bool or (statements and active_media_index):
+            raise ValueError('invalid statement source mode')
         self.active_media_index=active_media_index
         self.history_schema = scope_name(history_schema)
         self.checkpoint_schema = scope_name(checkpoint_schema)
@@ -67,8 +70,10 @@ class PostgresHistoryStore(RelationalHistoryStore):
             raise ValueError('PostgreSQL required')
         try:
             with self._transaction(write=False, read_snapshot=read_snapshot) as db:
-                for table in ('history_ciphertext', 'statement_tenant', 'media_sources', 'media_allocations',
-                              'freshness.ciphertext_heads', 'freshness.media_checkpoints', 'freshness.media_allocations'):
+                common = ('history_ciphertext', 'statement_tenant', 'freshness.ciphertext_heads')
+                protected = (('statement_scopes', 'freshness.statement_checkpoints') if statements else
+                             ('media_sources', 'media_allocations', 'freshness.media_checkpoints', 'freshness.media_allocations'))
+                for table in common + protected:
                     db.execute(f'SELECT 1 FROM {table} LIMIT 1')
                 if self.active_media_index:db.execute('SELECT 1 FROM freshness.media_active LIMIT 1')
                 if db.execute('SELECT tenant FROM statement_tenant WHERE id=1').fetchone() != (tenant,):

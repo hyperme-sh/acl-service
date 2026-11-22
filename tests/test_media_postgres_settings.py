@@ -39,7 +39,7 @@ def test_explicit_source_and_private_address(config, monkeypatch):
     spec.open()
     factory.assert_called_once_with(c.value['databaseUrl'],history_schema='acl_s3rch_history',
         checkpoint_schema='acl_s3rch_checkpoint',tenant=TENANT,source=SOURCE,active_media_index=False,
-        read_snapshot=False)
+        read_snapshot=False,statements=False)
     row=c.binding()
     assert row.history is None and row.freshness is None
     assert bindings._same_source(row,SimpleNamespace(binding_spec=spec))

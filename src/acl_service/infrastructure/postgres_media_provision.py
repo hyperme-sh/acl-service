@@ -16,6 +16,26 @@ def provision_empty_media_source(url, *, history_schema, checkpoint_schema, tena
     An optional operator guard runs before DDL and immediately before commit;
     any refusal rolls back both schemas and their markers together.
     """
+    tables = (
+        'CREATE TABLE media_sources (object TEXT PRIMARY KEY, revision BIGINT NOT NULL CHECK(revision>=0), nonce BYTEA NOT NULL, document BYTEA NOT NULL)',
+        'CREATE TABLE media_allocations (allocation TEXT PRIMARY KEY, object TEXT UNIQUE NOT NULL, digest BYTEA NOT NULL)',
+        'CREATE TABLE freshness.media_checkpoints (object TEXT PRIMARY KEY, digest BYTEA NOT NULL)',
+        'CREATE TABLE freshness.media_allocations (allocation TEXT PRIMARY KEY, object TEXT UNIQUE NOT NULL, digest BYTEA NOT NULL)',
+    )
+    _provision_empty_source(url, history_schema, checkpoint_schema, tenant, source, tables, before_commit)
+
+
+def provision_empty_statement_source(url, *, history_schema, checkpoint_schema, tenant, source,
+                                     before_commit=None):
+    """Create the empty history and checkpoint schemas for exclusive forum admission."""
+    tables = (
+        'CREATE TABLE statement_scopes (scope TEXT PRIMARY KEY, revision BIGINT NOT NULL CHECK(revision>=0), nonce BYTEA NOT NULL, document BYTEA NOT NULL)',
+        'CREATE TABLE freshness.statement_checkpoints (scope TEXT PRIMARY KEY, digest BYTEA NOT NULL)',
+    )
+    _provision_empty_source(url, history_schema, checkpoint_schema, tenant, source, tables, before_commit)
+
+
+def _provision_empty_source(url, history_schema, checkpoint_schema, tenant, source, tables, before_commit):
     history, checkpoint = scope_name(history_schema), scope_name(checkpoint_schema)
     if history == checkpoint:
         raise ValueError('independent schemas required')
@@ -47,12 +67,9 @@ def provision_empty_media_source(url, *, history_schema, checkpoint_schema, tena
                 'CREATE TABLE history_head_floors (principal TEXT PRIMARY KEY REFERENCES history_accounts(principal), head BIGINT NOT NULL CHECK(head>=0))',
                 "CREATE TABLE history_ciphertext (principal TEXT NOT NULL REFERENCES history_accounts(principal), kind TEXT NOT NULL CHECK(kind IN ('recovery','wraps')), generation BIGINT NOT NULL CHECK(generation>0), payload BYTEA NOT NULL, PRIMARY KEY(principal,kind))",
                 'CREATE TABLE statement_tenant (id INTEGER PRIMARY KEY CHECK(id=1), tenant TEXT NOT NULL)',
-                'CREATE TABLE media_sources (object TEXT PRIMARY KEY, revision BIGINT NOT NULL CHECK(revision>=0), nonce BYTEA NOT NULL, document BYTEA NOT NULL)',
-                'CREATE TABLE media_allocations (allocation TEXT PRIMARY KEY, object TEXT UNIQUE NOT NULL, digest BYTEA NOT NULL)',
                 'CREATE TABLE freshness.authority_checkpoint (id INTEGER PRIMARY KEY CHECK(id=1), digest BYTEA NOT NULL)',
                 "CREATE TABLE freshness.ciphertext_heads (principal TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('recovery','wraps')), generation BIGINT NOT NULL CHECK(generation>=0), digest BYTEA NOT NULL, PRIMARY KEY(principal,kind))",
-                'CREATE TABLE freshness.media_checkpoints (object TEXT PRIMARY KEY, digest BYTEA NOT NULL)',
-                'CREATE TABLE freshness.media_allocations (allocation TEXT PRIMARY KEY, object TEXT UNIQUE NOT NULL, digest BYTEA NOT NULL)',
+                *tables,
             ):
                 db.execute(sql)
             db.execute('INSERT INTO statement_tenant VALUES(1,?)', (tenant,))

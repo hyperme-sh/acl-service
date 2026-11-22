@@ -38,6 +38,37 @@ class BindingSettingsTests(unittest.TestCase):
         self.assertEqual(settings[0].history, Path('/private/history.db'))
         self.assertEqual(len(settings), 2)
 
+    def test_postgres_binding_requires_one_private_source_and_keeps_tenants_separate(self):
+        postgres = dict(tenant=TENANT, subject='s3rch-service', scope='forum',
+                        postgresFile='/private/forum-postgres.json')
+        [binding] = parse_settings(encode([postgres]))
+        self.assertEqual(binding.postgres_file, Path(postgres['postgresFile']))
+        self.assertIsNone(binding.history)
+        with self.assertRaises(ValueError):
+            parse_settings(encode([dict(postgres, historyFile='/private/history.db')]))
+        with self.assertRaises(ValueError):
+            parse_settings(encode([postgres, dict(postgres, tenant='b5ed86d0-cb50-4404-a5ac-410aab086a82')]))
+
+    def test_postgres_binding_validates_checkpoint_and_closes_store_on_refusal(self):
+        postgres = dict(tenant=TENANT, subject='s3rch-service', scope='forum',
+                        postgresFile='/private/forum-postgres.json')
+        source = Mock(tenant=TENANT, production_ready=True)
+        modules = {
+            'acl_service.interfaces.api.statement_routes': SimpleNamespace(
+                StatementBinding=lambda _scope, value, **kwargs: SimpleNamespace(source=value)),
+            'acl_service.infrastructure.forum_commit': SimpleNamespace(plane_forum_commit=Mock()),
+        }
+        with patch.dict(sys.modules, modules), patch('acl_service.infrastructure.statement_bindings._private_file',
+                                                     side_effect=lambda path: io.BytesIO(encode([postgres]))):
+            binding = load_statement_bindings({CONFIG_NAME: '/private/config.json'}, source_factory=lambda row: source)
+            self.assertIs(binding[(UUID(TENANT), 's3rch-service', 'forum')].source, source)
+            source.check_scope.assert_called_once_with('forum', forum=None)
+            source.store.close.assert_not_called()
+            source.check_scope.side_effect = ValueError('private checkpoint detail')
+            with self.assertRaisesRegex(RuntimeError, '^Invalid statement source binding configuration$'):
+                load_statement_bindings({CONFIG_NAME: '/private/config.json'}, source_factory=lambda row: source)
+            source.store.close.assert_called_once()
+
     def test_reject_invalid_envelopes_and_duplicate_json_fields(self):
         for data in [b'{}', b'[]', b'null', b'\xff', b'{',
                      b'{"version":1,"version":1,"bindings":[]}',
@@ -126,6 +157,32 @@ class BindingSettingsTests(unittest.TestCase):
             sys.modules.pop('history_admission', None)
             with self.assertRaisesRegex(RuntimeError, 'broken verifier'): _source(binding)
             self.assertNotIn('history_admission', sys.modules)
+
+    def test_image_owned_statement_source_opens_and_cleans_up_postgres(self):
+        binding = BindingSettings(UUID(TENANT), 'service', 'forum', None, None,
+                                  postgres_file=Path('/private/forum-postgres.json'))
+        settings = Mock()
+        source_factory = Mock()
+        read = Mock(return_value=settings)
+        modules = {
+            'history_admission': SimpleNamespace(__file__='/opt/acl-admission/history_admission.py'),
+            'statement_source': SimpleNamespace(__file__='/opt/acl-admission/statement_source.py',
+                                                 StatementSource=source_factory),
+            'delegation_source': SimpleNamespace(__file__='/opt/acl-admission/delegation_source.py',
+                                                 DelegationSource=Mock()),
+            'acl_service.infrastructure.media_postgres_settings': SimpleNamespace(read_postgres_settings=read),
+        }
+        with patch.dict(sys.modules, modules):
+            self.assertIs(_source(binding), source_factory.return_value)
+            read.assert_called_once_with(binding.postgres_file, binding.tenant)
+            settings.open.assert_called_once_with(read_snapshot=True, statements=True)
+            source_factory.assert_called_once_with(settings.open.return_value, TENANT)
+            with self.assertRaisesRegex(ValueError, 'restricted to statements'):
+                _source(binding, delegations=True)
+            source_factory.side_effect = ValueError('refused source')
+            with self.assertRaisesRegex(ValueError, 'refused source'):
+                _source(binding)
+            settings.open.return_value.close.assert_called_once()
 
 
 if __name__ == '__main__': unittest.main()
