@@ -40,7 +40,7 @@ jobs:
         if: inputs.patch_api_check
         with:
           repository: hyperme-sh/spanopticon
-          ref: 8f29b476305b23fd210026175d4bc1039c1ca9d0
+          ref: e7809f68030438dd794533adcd039a29170b7d57
           path: owner-patch-policy
           persist-credentials: false
       - name: Promote the qualified owner image
