@@ -213,11 +213,15 @@ async def sociacl_evaluate(
             link = lookup_share_by_token_hash(store_bound, th)
             if link is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Share not found')
-            from acl_service.infrastructure.membership_reader import PostgresMembershipReader
+            from acl_service.infrastructure.membership_reader import MembershipOwnerUnavailable, PostgresMembershipReader
             reader = request.app.state.membership_reader
             if isinstance(reader, PostgresMembershipReader):
                 reader = PostgresMembershipReader(tx.connection)
-            decision = evaluate_share_access(reader, link.tenant_id, link, body.context, authenticated_sub=me.sub if me is not None and me.tenant_id == link.tenant_id else None)
+            subject = me.sub if me is not None and me.tenant_id == link.tenant_id else None
+            try:
+                decision = evaluate_share_access(reader, link.tenant_id, link, body.context, authenticated_sub=subject)
+            except MembershipOwnerUnavailable:
+                raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Membership owner unavailable") from None
             if decision.decision in (SociACLDecisionKind.allow, SociACLDecisionKind.notify_owner):
                 reserved = decrement_uses(store_bound, link.tenant_id, link.id)
                 if not reserved:
