@@ -32,6 +32,7 @@ COPY scripts/prepare_node_notices.mjs /tmp/prepare_node_notices.mjs
 COPY notices/npm /tmp/npm-notices
 RUN node /tmp/prepare_node_notices.mjs node_modules npm-notices.json /tmp/npm-notices
 COPY admission/rotation_publish_source.py admission/rotation_witness_source.py admission/rotation-witness.mjs admission/signed_store_source.py admission/credential_source.py admission/credential-graph.mjs admission/device_transfer_source.py admission/device-transfer.mjs admission/history_admission.py admission/contact_source.py admission/contact-document.mjs admission/first_media_owner.py admission/verify.mjs admission/group-authority.mjs admission/store-operation.mjs admission/statement_source.py admission/statement-graph.mjs admission/app-object-policy.mjs admission/statement-quota.mjs admission/delegation_source.py admission/delegation-graph.mjs admission/media_source.py admission/group_source.py admission/group_membership.py admission/group_key_source.py admission/group_wrap_source.py admission/group_item_source.py admission/group_owner_wrap_source.py admission/group_item_grants.py ./
+COPY admission/vault_fixture_owner.py ./
 
 FROM python:3.13-slim-bookworm AS media-contract
 RUN pip install --no-cache-dir cryptography==50.0.2
@@ -77,6 +78,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 RUN useradd --uid 10001 --create-home acl \
     && python -I -c "import acl_service.app; from pathlib import Path; import acl_service; assert str(Path(acl_service.__file__).resolve()).startswith('/opt/venv/')" \
+    && python -I -c "import sys; sys.path.insert(0, '/opt/acl-admission'); from vault_fixture_owner import enroll_test_vault_owner; assert callable(enroll_test_vault_owner)" \
     && python -I -c "from acl_service.infrastructure.epoch_verifier import EpochStatusVerifier; assert not EpochStatusVerifier().matches_status(b'{}', b'{}', now_ms=0, skew_ms=0, policy_max_age_ms=0)" \
     && python -I -c "from acl_service.infrastructure.epoch_verifier import EpochManifestVerifier; assert not EpochManifestVerifier().matches_manifest(b'{}', b'{}')" \
     && python -I -c "from acl_service.infrastructure.epoch_verifier import SettledEpochVerifier; assert not SettledEpochVerifier().matches_settled(b'{}')" \
