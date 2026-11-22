@@ -598,5 +598,29 @@
     "start": 29,
     "end": 29,
     "reason": "SHA256 of installed Auth runtime file in license provenance inventory"
+  },
+  {
+    "file": "6596e13c3ea2d2faf1ae6067519ad571b271eefd.txt",
+    "sha256": "4a7f48fb3ec194e84ddad50f86356be7084f6c3784472675a8c6b5949159d9c4",
+    "rule": "generic-api-key",
+    "start": 45,
+    "end": 45,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "6596e13c3ea2d2faf1ae6067519ad571b271eefd.txt",
+    "sha256": "4a7f48fb3ec194e84ddad50f86356be7084f6c3784472675a8c6b5949159d9c4",
+    "rule": "generic-api-key",
+    "start": 96,
+    "end": 96,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
+  },
+  {
+    "file": "6596e13c3ea2d2faf1ae6067519ad571b271eefd.txt",
+    "sha256": "4a7f48fb3ec194e84ddad50f86356be7084f6c3784472675a8c6b5949159d9c4",
+    "rule": "generic-api-key",
+    "start": 113,
+    "end": 113,
+    "reason": "Public SHA-256 of a file in the approved patch distribution contract"
   }
 ]

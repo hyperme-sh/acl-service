@@ -3,13 +3,13 @@
   "line": "0.1",
   "components": {
     "acl-service": {
-      "version": "0.1.0",
+      "version": "0.1.1",
       "contract": "contract.json",
-      "contract_sha256": "6b64c18a005db54b5043ec8ba962a3fbbc024c238c04885dee54606bb4828fd8",
+      "contract_sha256": "4a7f48fb3ec194e84ddad50f86356be7084f6c3784472675a8c6b5949159d9c4",
       "artifact": {
         "kind": "package",
-        "sha256": "7dd5abc7810a9253d1a0047c8926f70f9d194d901f3a7691e527f5f5d5b17545",
-        "uri": "urn:sha256:7dd5abc7810a9253d1a0047c8926f70f9d194d901f3a7691e527f5f5d5b17545"
+        "sha256": "64b5f72fffda63d8539932636e866b0019a8a1d40a8789909e43300263271e91",
+        "uri": "urn:sha256:64b5f72fffda63d8539932636e866b0019a8a1d40a8789909e43300263271e91"
       }
     }
   }
