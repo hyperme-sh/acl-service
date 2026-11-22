@@ -18,8 +18,13 @@ def check(root):
         if not file or file.startswith(('evidence/', 'releases/')): continue
         path=root/file
         if path.name=='uv.lock':
+            project = path.with_name('pyproject.toml')
+            version = policy['versions'].get(project.relative_to(root).as_posix())
+            name = tomllib.loads(project.read_text())['project']['name'] if version else None
             for package in tomllib.loads(path.read_text()).get('package',[]):
                 expected=policy.get('owned_dependency_versions',{}).get(package['name'])
+                if package['name'] == name and package.get('source') == {'editable': '.'}:
+                    expected = version
                 if expected and package['version'] != expected:
                     raise ValueError(f"{file}: {package['name']} {package['version']} differs from authorized {expected}")
     return policy
