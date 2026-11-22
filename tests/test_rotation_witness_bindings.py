@@ -116,7 +116,7 @@ async def test_startup_owns_sources_and_cleans_up_on_configuration_refusal(monke
     monkeypatch.setattr(app_module,'configure_logging',Mock())
     monkeypatch.setattr(app_module,'load_publication',lambda:None)
     monkeypatch.setattr(app_module,'build_user_created_consumer',lambda *_:consumer)
-    for name in ('PostgresContactLaneStore','PostgresFirstContactStore','PostgresPolicyStore','PostgresRecoveryStore','PostgresMembershipReader','PostgresShareStore','PostgresWitnessPolicyReader'):
+    for name in ('PostgresContactLaneStore','PostgresFirstContactStore','PostgresPolicyStore','PostgresRecoveryStore','configured_membership_reader','PostgresShareStore','PostgresWitnessPolicyReader'):
         monkeypatch.setattr(app_module,name,Mock())
     policy=object();monkeypatch.setattr(policy_repo,'PostgresWitnessSigningPolicyReader',lambda engine:policy)
     source=SimpleNamespace(store=Mock())

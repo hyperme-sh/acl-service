@@ -28,7 +28,7 @@ from acl_service.infrastructure.witness_policy_repo import PostgresWitnessPolicy
 from acl_service.infrastructure.db_url import sync_database_url
 from acl_service.infrastructure.policy_repo import PostgresPolicyStore
 from acl_service.infrastructure.recovery_repo import PostgresRecoveryStore
-from acl_service.infrastructure.membership_reader import PostgresMembershipReader
+from acl_service.infrastructure.membership_reader import configured_membership_reader
 from acl_service.infrastructure.share_repo import PostgresShareStore
 from acl_service.infrastructure.user_created_consumer import build_user_created_consumer
 from acl_service.interfaces.api.routes import router as acl_router
@@ -125,7 +125,7 @@ def create_app(
         app.state.first_contact_store = PostgresFirstContactStore(sync_eng)
         app.state.policy_store = PostgresPolicyStore(sync_eng)
         app.state.recovery_store = PostgresRecoveryStore(sync_eng)
-        app.state.membership_reader = PostgresMembershipReader(sync_eng)
+        app.state.membership_reader = configured_membership_reader(sync_eng)
         app.state.share_store = PostgresShareStore(sync_eng)
         app.state.witness_policy_reader = PostgresWitnessPolicyReader(sync_eng)
         app.state.rate_limiter = TenantUserRateLimiter(
