@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "versions": {
-    "pyproject.toml": "0.1.0"
+    "pyproject.toml": "0.1.1"
   },
   "restorations": [
     {
