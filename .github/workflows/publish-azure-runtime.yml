@@ -22,7 +22,7 @@ concurrency:
 jobs:
   publish:
     if: github.ref == 'refs/heads/main'
-    environment: acl-isolated-azure-release
+    environment: acl-azure-release
     runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted", "linux", "x64", "debrunner"]') || 'ubuntu-24.04' }}
     timeout-minutes: 20
     permissions:
