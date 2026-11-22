@@ -1515,3 +1515,12 @@ It does not install the archived dependency-wheel fixtures. CI uses this same
 installer before running the external-wheel contracts. Container/source consumers
 retain the recorded `uv.lock` and explicit project overrides. Running TEST
 services continue to follow the moving GHCR channel.
+
+### Dedicated ACL database
+
+The isolated `acl` database uses the provisioned `acl_service` schema. Run the
+packaged migrator as `acl_migration` with `--owner-schema` and an explicit
+`--tenant-id` for each admitted tenant. The migration grants the dedicated
+`acl_runtime` role access to the owner tables and scoped capability lookup.
+Configure `ACL_MEMBERSHIP_BACKEND=user-owner` for this deployment. User remains
+the authority for group membership.
