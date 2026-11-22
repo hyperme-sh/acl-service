@@ -38,6 +38,32 @@ class BindingSettingsTests(unittest.TestCase):
         self.assertEqual(settings[0].history, Path('/private/history.db'))
         self.assertEqual(len(settings), 2)
 
+    def test_postgres_binding_requires_one_private_source_and_keeps_tenants_separate(self):
+        postgres = dict(tenant=TENANT, subject='s3rch-service', scope='forum',
+                        postgresFile='/private/forum-postgres.json')
+        [binding] = parse_settings(encode([postgres]))
+        self.assertEqual(binding.postgres_file, Path(postgres['postgresFile']))
+        self.assertIsNone(binding.history)
+        with self.assertRaises(ValueError):
+            parse_settings(encode([dict(postgres, historyFile='/private/history.db')]))
+        with self.assertRaises(ValueError):
+            parse_settings(encode([postgres, dict(postgres, tenant='b5ed86d0-cb50-4404-a5ac-410aab086a82')]))
+
+    def test_postgres_binding_validates_checkpoint_and_closes_store_on_refusal(self):
+        postgres = dict(tenant=TENANT, subject='s3rch-service', scope='forum',
+                        postgresFile='/private/forum-postgres.json')
+        source = Mock(tenant=TENANT, production_ready=True)
+        with patch('acl_service.infrastructure.statement_bindings._private_file',
+                   side_effect=lambda path: io.BytesIO(encode([postgres]))):
+            binding = load_statement_bindings({CONFIG_NAME: '/private/config.json'}, source_factory=lambda row: source)
+            self.assertIs(binding[(UUID(TENANT), 's3rch-service', 'forum')].source, source)
+            source.check_scope.assert_called_once_with('forum', forum=None)
+            source.store.close.assert_not_called()
+            source.check_scope.side_effect = ValueError('private checkpoint detail')
+            with self.assertRaisesRegex(RuntimeError, '^Invalid statement source binding configuration$'):
+                load_statement_bindings({CONFIG_NAME: '/private/config.json'}, source_factory=lambda row: source)
+            source.store.close.assert_called_once()
+
     def test_reject_invalid_envelopes_and_duplicate_json_fields(self):
         for data in [b'{}', b'[]', b'null', b'\xff', b'{',
                      b'{"version":1,"version":1,"bindings":[]}',

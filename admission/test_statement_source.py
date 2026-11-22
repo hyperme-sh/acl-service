@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import uuid4
 from statement_source import StatementSource
 from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
@@ -29,6 +30,19 @@ class StatementUnits(unittest.TestCase):
         with self.assertRaises(HistoryConflict): self.source.append('forum', 100, first['fence'], [{}])
         reopened = StatementSource(self.store, TENANT, clock=lambda: self.now, verifier=self.verify)
         self.assertEqual(reopened.read('forum', 100)['snapshot']['rows'], [{'signed': 'one'}])
+
+    def test_statement_scope_startup_is_read_only_and_checks_the_bound_forum(self):
+        self.source.check_scope('forum', forum='forum-owner')
+        with self.assertRaisesRegex(AdmissionRejected, 'forum differs'):
+            self.source.check_scope('forum', forum='another-forum')
+        with self.assertRaisesRegex(AdmissionRejected, 'source not provisioned'):
+            self.source.check_scope('missing')
+        already_provisioned = Mock(tenant=TENANT, require_authority_checkpoint=True, provisioned_statements=True)
+        source = StatementSource(already_provisioned, TENANT)
+        already_provisioned._transaction.assert_not_called()
+        self.assertTrue(source.production_ready)
+        with self.assertRaisesRegex(AdmissionRejected, 'another tenant'):
+            StatementSource(already_provisioned, str(uuid4()))
 
     def test_identity_change_invalidates_fence(self):
         fence = self.source.read('forum', 100)['fence']

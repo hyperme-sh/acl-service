@@ -55,6 +55,10 @@ class StatementSource:
         self.tenant = str(UUID(tenant))
         self.production_ready = store.require_authority_checkpoint and verifier is None
         self.verifier = verifier or self._verify
+        if getattr(store, "provisioned_statements", False):
+            if store.tenant != self.tenant:
+                raise AdmissionRejected("database belongs to another tenant")
+            return
         with self.store._transaction(write=True) as db:
             db.execute("CREATE TABLE IF NOT EXISTS statement_tenant (id INTEGER PRIMARY KEY CHECK(id=1), tenant TEXT NOT NULL)")
             db.execute("INSERT OR IGNORE INTO statement_tenant VALUES(1,?)", (self.tenant,))
@@ -118,6 +122,14 @@ class StatementSource:
             raise AdmissionRejected("statement policy expired")
         return row, doc
 
+    def check_scope(self, scope, *, forum=None):
+        """Check an existing scope and its independent checkpoint without writes."""
+        arguments = {"read_snapshot": True} if getattr(self.store, "provisioned_statements", False) else {}
+        with self.store._transaction(write=False, **arguments) as db:
+            _, doc = self._load(db, scope, int(self.clock()))
+            if forum is not None and doc["forum"] != forum:
+                raise AdmissionRejected("forum differs")
+
     def _fence(self, db, scope, row, at):
         message = encoded([self.tenant, scope, at, row[0], hashlib.sha256(row[2]).hexdigest(),
                            authority_digest(db).hex()])
@@ -147,7 +159,8 @@ class StatementSource:
                 raise HistoryConflict("scope already provisioned")
             db.execute("INSERT INTO statement_scopes VALUES(?,?,?,?)", (scope, *row))
             if self.store.require_authority_checkpoint:
-                db.execute("CREATE TABLE IF NOT EXISTS freshness.statement_checkpoints (scope TEXT PRIMARY KEY, digest BLOB NOT NULL)")
+                if not getattr(self.store, "provisioned_statements", False):
+                    db.execute("CREATE TABLE IF NOT EXISTS freshness.statement_checkpoints (scope TEXT PRIMARY KEY, digest BLOB NOT NULL)")
                 if db.execute("SELECT 1 FROM freshness.statement_checkpoints WHERE scope=?", (scope,)).fetchone():
                     raise AdmissionRejected("scope checkpoint already exists")
                 self._checkpoint(db, scope, row, write=True)
@@ -167,11 +180,11 @@ class StatementSource:
 
     def append_forum_update(self, scope, at, fence, rows, update, *, hold_delivery=None,
                             authorize_commit=None, cancel=lambda: None):
-        """Trusted coordinator only. Hold Plane's serialization through SQLite COMMIT.
+        """Trusted coordinator only. Hold Plane's serialization through commit.
 
         A local coordinator may hold a delivery guard over the transaction.
         The service coordinator instead obtains an exact durable Plane decision
-        while the SQLite write lock excludes changes to the checked ACL.
+        while the source write lock excludes changes to the checked ACL.
         """
         bound = forum_update(update)
         if bound["tenant"] != self.tenant:

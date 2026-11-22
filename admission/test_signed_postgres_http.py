@@ -18,13 +18,68 @@ from sqlalchemy.exc import ProgrammingError
 
 from acl_service import deps
 from acl_service.app import create_app
+from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.infrastructure.postgres_history_store import PostgresHistoryStore
-from acl_service.infrastructure.postgres_media_provision import provision_empty_media_source
+from acl_service.infrastructure.postgres_media_provision import provision_empty_media_source, provision_empty_statement_source
 from acl_service.infrastructure.signed_store_bindings import load_signed_store_bindings
 from api.core import config as api_config
 from auth_service.schemas import AuthMeResponse
 from history_admission import EnrollmentGrant, HistoryAdmission
 from signed_store_source import SignedStoreSource
+from statement_source import StatementSource
+
+
+def test_postgres_forum_commit_and_checkpoint(migrated_sync_url):
+    suffix = uuid4().hex
+    spec = dict(history_schema='acl_h_' + suffix, checkpoint_schema='acl_c_' + suffix,
+                tenant=str(uuid4()), source=str(uuid4()))
+    provision_empty_statement_source(migrated_sync_url, **spec)
+    store = PostgresHistoryStore(migrated_sync_url, **spec, statements=True)
+    engine = create_engine(migrated_sync_url)
+
+    def verify(_accounts, doc, at, candidates, _statement_only, _update=None):
+        return {'heads': {'owner': 0}, 'snapshot': {'rows': doc['rows'] + candidates}}
+
+    source = StatementSource(store, spec['tenant'], clock=lambda: 100, verifier=verify)
+    try:
+        store.enroll('owner', b'fixture')
+        source.provision('forum', 'fixture-forum', {}, 200, exclusive_grant=lambda *args: True)
+        source.check_scope('forum', forum='fixture-forum')
+        with pytest.raises(AdmissionRejected, match='forum differs'):
+            source.check_scope('forum', forum='different-forum')
+
+        with store._transaction(write=False, read_snapshot=True) as db:
+            before = tuple(db.execute('SELECT revision,nonce,document FROM statement_scopes WHERE scope=?',
+                                      ('forum',)).fetchone())
+        update = {name: str(uuid4()) for name in ('botId', 'assignmentId', 'sessionId', 'taskId', 'deliveryId')}
+        update.update(tenant=spec['tenant'], forumId='fixture-forum', principal='owner', sequence=1,
+                      statementId='fixture-update', signature='SEA.fixture', status='completed', attestation='a' * 86)
+        rows = [{'kind': 'object', 'record': {'object': 'fixture-update', 'owner': 'owner'}}]
+        initial = source.read('forum', 100)['fence']
+
+        def paused(_update):
+            raise HistoryConflict('forum paused')
+
+        with pytest.raises(HistoryConflict, match='forum paused'):
+            source.append_forum_update('forum', 100, initial, rows, update, authorize_commit=paused)
+        assert source.read('forum', 100)['snapshot']['rows'] == []
+        source.append_forum_update('forum', 100, initial, rows, update, authorize_commit=lambda _: None)
+
+        retained = source.read('forum', 100)
+        source.append_forum_update('forum', 100, retained['fence'], [], update, authorize_commit=lambda _: None)
+        assert source.read('forum', 100)['snapshot']['rows'] == rows
+        with engine.begin() as conn:
+            conn.execute(text(f'UPDATE "{spec["history_schema"]}".statement_scopes '
+                              'SET revision=:revision, nonce=:nonce, document=:document WHERE scope=\'forum\''),
+                         dict(zip(('revision', 'nonce', 'document'), before, strict=True)))
+        with pytest.raises(AdmissionRejected, match='statement checkpoint mismatch'):
+            source.check_scope('forum')
+    finally:
+        store.close()
+        with engine.begin() as conn:
+            for field in ('history_schema', 'checkpoint_schema'):
+                conn.execute(text(f'DROP SCHEMA IF EXISTS "{spec[field]}" CASCADE'))
+        engine.dispose()
 
 
 @pytest.mark.asyncio

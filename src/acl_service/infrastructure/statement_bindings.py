@@ -19,9 +19,10 @@ class BindingSettings:
     tenant: UUID
     subject: str
     scope: str
-    history: Path
-    freshness: Path
+    history: Path | None
+    freshness: Path | None
     forum_commit: tuple[str, str, Path] | None = None
+    postgres_file: Path | None = None
 
 
 def _unique(pairs):
@@ -50,8 +51,11 @@ def parse_settings(data: bytes) -> tuple[BindingSettings, ...]:
         raise ValueError('invalid configuration')
     result, keys, stores = [], set(), {}
     for row in value['bindings']:
-        required = {'tenant', 'subject', 'scope', 'historyFile', 'freshnessFile'}
-        if not isinstance(row, dict) or set(row) not in (required, required | {'forumCommit'}):
+        required = {'tenant', 'subject', 'scope'}
+        if not isinstance(row, dict):
+            raise ValueError('invalid binding')
+        storage = set(row) - required - {'forumCommit'}
+        if not required <= row.keys() or storage not in ({'historyFile', 'freshnessFile'}, {'postgresFile'}):
             raise ValueError('invalid binding')
         if not isinstance(row['tenant'], str):
             raise ValueError('canonical tenant required')
@@ -62,12 +66,14 @@ def parse_settings(data: bytes) -> tuple[BindingSettings, ...]:
         if (not isinstance(subject, str) or not re.fullmatch(r'[\x21-\x7e]{1,256}', subject)
                 or not isinstance(scope, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', scope)):
             raise ValueError('invalid binding identity')
-        history, freshness = _path(row['historyFile']), _path(row['freshnessFile'])
+        postgres_file = _path(row['postgresFile']) if 'postgresFile' in row else None
+        history = _path(row['historyFile']) if postgres_file is None else None
+        freshness = _path(row['freshnessFile']) if postgres_file is None else None
         key = (tenant, subject, scope)
-        if key in keys or history == freshness:
+        if key in keys or (postgres_file is None and history == freshness):
             raise ValueError('duplicate binding or store')
-        pair = (tenant, history, freshness)
-        for path in (history, freshness):
+        pair = (tenant, history, freshness, postgres_file)
+        for path in (postgres_file,) if postgres_file is not None else (history, freshness):
             if path in stores and stores[path] != pair:
                 raise ValueError('store has conflicting tenant or checkpoint')
             stores[path] = pair
@@ -80,7 +86,7 @@ def parse_settings(data: bytes) -> tuple[BindingSettings, ...]:
                     or not isinstance(data['forumId'], str) or not re.fullmatch(r'[!-~]{1,256}', data['forumId'])):
                 raise ValueError('invalid forum commit binding')
             commit = (data['origin'], data['forumId'], _path(data['credentialFile']))
-        result.append(BindingSettings(tenant, subject, scope, history, freshness, commit))
+        result.append(BindingSettings(tenant, subject, scope, history, freshness, commit, postgres_file))
     return tuple(result)
 
 
@@ -103,6 +109,8 @@ def _private_file(path: Path):
 
 
 def _provisioned(binding):
+    if binding.history is None or binding.freshness is None:
+        raise ValueError('provisioned SQLite history and freshness required')
     for path in (binding.history, binding.freshness):
         with _private_file(path):
             pass
@@ -138,10 +146,21 @@ def _source(binding, *, delegations=False):
         except BaseException:
             sys.modules.pop(name, None)
             raise
-    from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
-    store = SqliteHistoryStore(binding.history, freshness_path=binding.freshness, require_authority_checkpoint=True)
     source_type = sys.modules['delegation_source'].DelegationSource if delegations else sys.modules['statement_source'].StatementSource
-    return source_type(store, str(binding.tenant))
+    if binding.postgres_file is None:
+        from acl_service.infrastructure.sqlite_history_store import SqliteHistoryStore
+        store = SqliteHistoryStore(binding.history, freshness_path=binding.freshness, require_authority_checkpoint=True)
+        return source_type(store, str(binding.tenant))
+    if delegations:
+        raise ValueError('PostgreSQL binding is restricted to statements')
+    from acl_service.infrastructure.media_postgres_settings import read_postgres_settings
+    settings = read_postgres_settings(binding.postgres_file, binding.tenant)
+    store = settings.open(read_snapshot=True, statements=True)
+    try:
+        return source_type(store, str(binding.tenant))
+    except BaseException:
+        store.close()
+        raise
 
 
 def load_statement_bindings(environ=None, *, source_factory=None):
@@ -149,23 +168,28 @@ def load_statement_bindings(environ=None, *, source_factory=None):
     configured = env.get(CONFIG_NAME)
     if configured is None:
         return None
+    sources = {}
     try:
         with _private_file(_path(configured)) as stream:
             settings = parse_settings(stream.read(MAX_CONFIG_BYTES + 1))
         # Validate every existing store before constructing any source. This path
         # never creates a database, enrolls an identity or provisions a graph.
         for binding in settings:
-            _provisioned(binding)
+            if binding.postgres_file is None:
+                _provisioned(binding)
         from acl_service.interfaces.api.statement_routes import StatementBinding
         from acl_service.infrastructure.forum_commit import plane_forum_commit
-        sources, result = {}, {}
+        result = {}
         for binding in settings:
-            key = (binding.tenant, binding.history, binding.freshness)
+            key = (binding.tenant, binding.history, binding.freshness, binding.postgres_file)
             if key not in sources:
                 sources[key] = (source_factory or _source)(binding)
             source = sources[key]
             if not source.production_ready or source.tenant != str(binding.tenant):
                 raise ValueError('protected source required')
+            if binding.postgres_file is not None:
+                forum = binding.forum_commit[1] if binding.forum_commit is not None else None
+                source.check_scope(binding.scope, forum=forum)
             forum_commit = None
             if binding.forum_commit is not None:
                 origin, forum, path = binding.forum_commit
@@ -176,5 +200,8 @@ def load_statement_bindings(environ=None, *, source_factory=None):
                 binding.scope, source, forum_commit=forum_commit)
         return result
     except Exception:
+        for key, source in sources.items():
+            if key[-1] is not None:
+                source.store.close()
         # Do not print private subjects, paths, file contents or verifier inputs.
         raise RuntimeError('Invalid statement source binding configuration') from None
