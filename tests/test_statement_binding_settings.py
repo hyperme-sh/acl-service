@@ -158,5 +158,31 @@ class BindingSettingsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'broken verifier'): _source(binding)
             self.assertNotIn('history_admission', sys.modules)
 
+    def test_image_owned_statement_source_opens_and_cleans_up_postgres(self):
+        binding = BindingSettings(UUID(TENANT), 'service', 'forum', None, None,
+                                  postgres_file=Path('/private/forum-postgres.json'))
+        settings = Mock()
+        source_factory = Mock()
+        read = Mock(return_value=settings)
+        modules = {
+            'history_admission': SimpleNamespace(__file__='/opt/acl-admission/history_admission.py'),
+            'statement_source': SimpleNamespace(__file__='/opt/acl-admission/statement_source.py',
+                                                 StatementSource=source_factory),
+            'delegation_source': SimpleNamespace(__file__='/opt/acl-admission/delegation_source.py',
+                                                 DelegationSource=Mock()),
+            'acl_service.infrastructure.media_postgres_settings': SimpleNamespace(read_postgres_settings=read),
+        }
+        with patch.dict(sys.modules, modules):
+            self.assertIs(_source(binding), source_factory.return_value)
+            read.assert_called_once_with(binding.postgres_file, binding.tenant)
+            settings.open.assert_called_once_with(read_snapshot=True, statements=True)
+            source_factory.assert_called_once_with(settings.open.return_value, TENANT)
+            with self.assertRaisesRegex(ValueError, 'restricted to statements'):
+                _source(binding, delegations=True)
+            source_factory.side_effect = ValueError('refused source')
+            with self.assertRaisesRegex(ValueError, 'refused source'):
+                _source(binding)
+            settings.open.return_value.close.assert_called_once()
+
 
 if __name__ == '__main__': unittest.main()
