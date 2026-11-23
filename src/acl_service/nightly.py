@@ -8,6 +8,11 @@ from controlplane_identity.nightly import current_binding, require_original_run,
 from controlplane_identity.nightly_http import Authority, RunMiddleware
 
 PATH = '/api/v1/acl/sociacl/device-transfer/'
+MEDIA = '/api/v1/acl/sociacl/media/'
+MEDIA_PATHS = {('POST', MEDIA + action) for action in (
+    'allocate', 'read-wrap', 'owner/catalog', 'owner/view', 'owner/mutate',
+    'owner/publish-wrap', 'owner/registration', 'owner/delete-view', 'owner/delete', 'owner/cleanup',
+)}
 CONTROL = '/api/v1/acl/internal/nightly-run'
 
 
@@ -30,7 +35,7 @@ def install(app):
     require(len(raw.encode()) <= 65536)
     authority = Authority(json.loads(raw), 'acl')
     app.add_middleware(RunMiddleware, authority=authority,
-        paths={('POST', PATH + action) for action in ('state', 'current')}, control_path=CONTROL)
+        paths={('POST', PATH + action) for action in ('state', 'current')} | MEDIA_PATHS, control_path=CONTROL)
 
 
 def check_scope(tenant, subject, scope=None):
@@ -42,3 +47,14 @@ def check_scope(tenant, subject, scope=None):
     if scope is not None:
         require(scope['tenant'] == admitted['tenant'])
         require(all(scope[key] in admitted['origins'] for key in ('sourceOrigin', 'destinationOrigin')))
+
+
+def check_media_scope(tenant, subject):
+    binding = current_binding()
+    if binding is None:
+        return
+    try:
+        require(binding['scope']['suite'] == 'portal-device-transfer')
+        check_scope(tenant, subject)
+    except (ValueError, InvalidTokenError):
+        raise HTTPException(403, 'Media run authority refused') from None

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
+from acl_service.nightly import check_media_scope
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.interfaces.api.private_wrap_routes import PRIVATE, capacity, refused
 from acl_service.interfaces.api.signed_store_routes import _unique_fields, _invalid_constant
@@ -32,6 +33,7 @@ async def connected_allocate(request, binding, record):
 @router.post('/allocate')
 async def allocate(request: Request, tenant: UUID=Depends(require_matched_tenant),
                    user: AuthMeResponse=Depends(get_current_user)):
+    check_media_scope(tenant, user.sub)
     bindings=request.app.state.media_allocation_bindings
     if bindings is None:raise refused(503,'Media allocation unavailable')
     binding=bindings.get((tenant,user.sub))
