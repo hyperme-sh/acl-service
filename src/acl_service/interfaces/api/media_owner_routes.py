@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
+from acl_service.nightly import check_media_scope
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.private_wrap_publication import publish_private_wrap, WrapPublicationRejected
 from acl_service.interfaces.api.private_wrap_routes import PRIVATE, capacity, refused
@@ -21,6 +22,7 @@ router = APIRouter(prefix='/acl/sociacl/media/owner', tags=['SociACL'])
 async def owner_operation(action: str, request: Request,
                           tenant: UUID = Depends(require_matched_tenant),
                           user: AuthMeResponse = Depends(get_current_user)):
+    check_media_scope(tenant, user.sub)
     if action not in ('catalog', 'cleanup-catalog', 'view', 'group-view', 'group-authority-view', 'group-check', 'group-policy-view', 'epoch-view', 'status-view', 'share-view', 'unshare-view', 'cancel-view', 'mutate', 'group-append', 'group-policy-append', 'publish-wrap', 'upload-state', 'share-state', 'share-check', 'delete-view', 'delete', 'cleanup', 'registration'):
         raise refused(404, 'Unknown media operation')
     bindings = request.app.state.private_wrap_bindings

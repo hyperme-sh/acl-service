@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from auth_service.schemas import AuthMeResponse
 from acl_service.deps import get_current_user, require_matched_tenant
+from acl_service.nightly import check_media_scope
 from acl_service.domain.history_store import AdmissionRejected, HistoryConflict
 from acl_service.domain.private_wrap_delivery import (
     WrapAuthority, WrapDeliveryRejected, deliver_private_wrap_context,
@@ -82,6 +83,7 @@ async def group_consent_append(request: Request, tenant: UUID = Depends(require_
 
 async def _private_operation(action,request,tenant,user):
     # The authenticated subject is mapped by the owner, never by request JSON.
+    check_media_scope(tenant, user.sub)
     bindings = request.app.state.private_wrap_bindings
     if bindings is None:
         raise refused(503, 'Private wrap source unavailable')

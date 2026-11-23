@@ -71,3 +71,35 @@ async def test_direct_optional_auth_refuses_introspected_original_run(monkeypatc
     with pytest.raises(HTTPException) as caught:
         await optional_authenticated_user(Request({'type':'http','headers':[(b'authorization',b'Bearer native-token')]}))
     assert caught.value.status_code==403
+
+
+def test_media_run_is_limited_to_portal_and_exact_principal():
+    from fastapi import HTTPException
+    from acl_service.nightly import check_media_scope
+
+    check_media_scope(TENANT, SUB)  # Existing non-nightly authentication is unchanged.
+    with nightly.admitted_run(BINDING):
+        check_media_scope(TENANT, SUB)
+        for tenant, subject in [(UUID(int=4), SUB), (TENANT, 'other')]:
+            with pytest.raises(HTTPException) as refused:
+                check_media_scope(tenant, subject)
+            assert refused.value.status_code == 403
+    with nightly.admitted_run(BINDING | {'run': '123-1-s3rch-device-transfer', 'scope': SCOPE | {'suite': 's3rch-device-transfer'}}):
+        with pytest.raises(HTTPException):
+            check_media_scope(TENANT, SUB)
+
+
+def test_installed_nightly_media_routes_are_explicit(monkeypatch):
+    from fastapi import FastAPI
+    from acl_service import nightly as acl_nightly
+
+    monkeypatch.setenv('ACL_NIGHTLY_RUN_CONFIG', json.dumps(CONFIG))
+    monkeypatch.setattr(nightly, '_subjects', frozenset())
+    app = FastAPI()
+    acl_nightly.install(app)
+    paths = app.user_middleware[0].kwargs['paths']
+    assert ('POST', acl_nightly.MEDIA + 'allocate') in paths
+    assert ('POST', acl_nightly.MEDIA + 'read-wrap') in paths
+    for action in ('catalog', 'view', 'mutate', 'publish-wrap', 'registration', 'delete-view', 'delete', 'cleanup'):
+        assert ('POST', acl_nightly.MEDIA + 'owner/' + action) in paths
+    assert ('POST', acl_nightly.MEDIA + 'owner/group-append') not in paths
