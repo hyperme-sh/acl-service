@@ -108,3 +108,51 @@ def test_statement_runtime_checks_its_own_tables_without_ddl(monkeypatch):
     assert 'SELECT 1 FROM statement_scopes LIMIT 1' in sql
     assert 'SELECT 1 FROM freshness.statement_checkpoints LIMIT 1' in sql
     assert all(query.startswith('SELECT ') and 'media_' not in query for query in sql)
+
+
+@pytest.mark.parametrize('case, accepted', [
+    ('owner-only', True), ('contacts', True), ('missing-journal', False),
+    ('extra-peer', False), ('changed-genesis', False),
+])
+def test_first_media_owner_exact_retry_with_contacts(case, accepted):
+    from acl_service.domain.history_store import HistoryConflict
+    from acl_service.infrastructure.postgres_history_store import PostgresHistoryStore
+
+    principal = 'owner'
+    contacts = 'a' * 43 + '.' + 'b' * 43
+    genesis = b'original-genesis'
+    db = Mock()
+    guard = Mock()
+
+    def execute(statement, parameters=()):
+        result = Mock()
+        if statement.startswith('SELECT genesis'):
+            result.fetchone.return_value = (genesis if case != 'changed-genesis' else b'changed',)
+        elif statement.startswith('SELECT principal'):
+            assert parameters == (principal,)
+            result.fetchall.return_value = {
+                'owner-only': [], 'extra-peer': [(contacts,), ('another',)],
+            }.get(case, [(contacts,)])
+        elif statement.startswith('SELECT to_regclass'):
+            result.fetchone.return_value = (case != 'missing-journal',)
+        elif statement == 'SELECT 1 FROM history_accounts LIMIT 1':
+            result.fetchone.return_value = (1,)
+        else:
+            raise AssertionError(statement)
+        return result
+
+    db.execute.side_effect = execute
+
+    @contextmanager
+    def transaction(**options):
+        assert options == {'write': True, 'before_commit': guard}
+        yield db
+
+    store = object.__new__(PostgresHistoryStore)
+    store._transaction = transaction
+    options = dict(before_commit=guard, allow_exact_retry=True, contacts_principal=contacts)
+    if accepted:
+        assert store.enroll_first_media_owner(principal, genesis, **options) is False
+    else:
+        with pytest.raises(HistoryConflict, match='first owner requires empty source'):
+            store.enroll_first_media_owner(principal, genesis, **options)
