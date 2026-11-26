@@ -25,6 +25,7 @@
 !admission/delegation-graph.mjs
 !admission/delegation_source.py
 !admission/first_media_owner.py
+!admission/vault_fixture_owner.py
 !admission/group_item_source.py
 !admission/group_key_source.py
 !admission/group_membership.py
