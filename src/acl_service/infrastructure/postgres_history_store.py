@@ -85,19 +85,34 @@ class PostgresHistoryStore(RelationalHistoryStore):
     def close(self):
         self.engine.dispose()
 
-    def enroll_first_media_owner(self, principal, genesis, *, before_commit, allow_exact_retry=False):
+    def enroll_first_media_owner(self, principal, genesis, *, before_commit, allow_exact_retry=False,
+                                 contacts_principal=None):
         """Bootstrap an empty source, with optional idempotence for an exact prior genesis."""
         if not principal or type(genesis) is not bytes or not genesis or not callable(before_commit):
             raise ValueError('verified first owner required')
+        if contacts_principal is not None and (
+                not allow_exact_retry or contacts_principal == principal
+                or not isinstance(contacts_principal, str)
+                or not re.fullmatch(r"[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}", contacts_principal)):
+            raise ValueError('exact Contacts retry principal required')
         with self._transaction(write=True,before_commit=before_commit) as db:
             before_commit()
             if allow_exact_retry:
                 held = db.execute('SELECT genesis FROM history_accounts WHERE principal=?', (principal,)).fetchone()
-                if (held == (genesis,) and db.execute(
-                        'SELECT 1 FROM history_accounts WHERE principal<>? LIMIT 1',
+                if held == (genesis,):
+                    peers = db.execute(
+                        'SELECT principal FROM history_accounts WHERE principal<>? LIMIT 2',
                         (principal,),
-                ).fetchone() is None):
-                    return False
+                    ).fetchall()
+                    if not peers:
+                        return False
+                    if contacts_principal is not None and peers == [(contacts_principal,)]:
+                        journal = db.execute(
+                            "SELECT to_regclass('main.contact_documents') IS NOT NULL "
+                            "AND to_regclass('freshness.contact_checkpoints') IS NOT NULL"
+                        ).fetchone()
+                        if journal == (True,):
+                            return False
             for table in ('history_accounts','history_entries','history_head_floors','history_ciphertext',
                           'media_sources','media_allocations','freshness.ciphertext_heads',
                           'freshness.media_checkpoints','freshness.media_allocations'):

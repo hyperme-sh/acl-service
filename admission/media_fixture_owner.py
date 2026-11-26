@@ -9,6 +9,9 @@ from history_admission import HistoryAdmission, _record
 
 TENANT = 'afee9b29-1706-5590-bbbf-e58df8945ac0'
 SOURCE = '98f35fce-a5c1-59e6-b874-dd6410b5b531'
+# Public key of the synthetic startup-nightly Contacts fixture in Infra.
+CONTACTS_PRINCIPAL = ('nkEr_c-bs6Ajd8-qBskS_YzwIMI5qmWe7xJO0TYuXMs.'
+                      'Xthq9PzemRt9cZWEMIrKf-0SUAopz8T_nHDAYIulH84')
 SEA_KEY = re.compile(r'[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}')
 
 
@@ -70,5 +73,5 @@ def admit_test_media_owner(store, grant, genesis, signature, *, resolve, trust_a
     current()
     if grant.initial:
         return store.enroll_first_media_owner(grant.principal, genesis, before_commit=current,
-                                             allow_exact_retry=True)
+                                             allow_exact_retry=True, contacts_principal=CONTACTS_PRINCIPAL)
     return store.enroll_media_fixture(operator, grant.principal, genesis, before_commit=current)
